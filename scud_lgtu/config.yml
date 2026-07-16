@@ -70,8 +70,8 @@ config:
     w2_beep: {pin: 11, inverted: false}
     od1: {pin: 12, inverted: false}
     od2: {pin: 13, inverted: false}
-    rel1: {pin: 14, inverted: false}
-    rel2: {pin: 15, inverted: false}
+    rel1: {pin: 14, inverted: true}
+    rel2: {pin: 15, inverted: true}
 
 # ── Параметры доступа ──
 # STATIC_KEY — уникален для точки доступа (16 байт в hex).
