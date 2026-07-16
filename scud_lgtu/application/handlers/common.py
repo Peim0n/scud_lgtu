@@ -52,9 +52,10 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         logger.error(f"Считыватель не найден в конфиге: {reader_id}")
         return
 
-    # Получаем индикаторы и бипер из конфига
+    # Получаем индикаторы, бипер и направление из конфига
     indicator_success = reader_config.get("indicator_success", "w1_green")
     indicator_fail = reader_config.get("indicator_fail", "w1_red")
+    direction = reader_config.get("direction", "entry")
 
     # Проверка доступа
     decision = access_policy.check(event.credential)
@@ -68,9 +69,11 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         passage_tracker.track(session)
 
         # Открытие турникета через background task (таймер запускается сразу)
-        # Направление определяется датчиками прохода, не считывателем
-        asyncio.create_task(turnstile.open_entry_async(event_bus, start_timer=True))
-        logger.debug("Открытие турникета через async task (direction=in)")
+        if direction == "entry":
+            asyncio.create_task(turnstile.open_entry_async(event_bus, start_timer=True))
+        else:
+            asyncio.create_task(turnstile.open_exit_async(event_bus, start_timer=True))
+        logger.debug(f"Открытие турникета через async task (direction={direction})")
 
         # Включить зеленый индикатор на configured duration
         asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_success, True, turnstile._indicator_duration))
