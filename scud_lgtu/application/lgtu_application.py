@@ -156,9 +156,14 @@ class LGTUApplication:
             states = scud_event.payload.get("states", {})
             events = []
             for input_name, state in states.items():
+                # Кнопки - low active (0 = нажатие), alarm - high active (1 = тревога)
+                if input_name == "alarm":
+                    state_bool = state == 1  # 1 = тревога
+                else:
+                    state_bool = state == 0  # 0 = активный для кнопок и сенсоров
                 event = MuxInputChanged(
                     input_name=input_name,
-                    state=state == 0  # 0 = активный (low active)
+                    state=state_bool
                 )
                 logger.info(f"Mux Input Changed event: {event}")
                 events.append(event)
@@ -283,9 +288,6 @@ class LGTUApplication:
                                 logger.info(f"Sent to shift register: {output_states}")
                         except Exception as e:
                             logger.error(f"Error sending to shift register: {e}")
-                else:
-                    # Debug: log tick without commands
-                    logger.debug(f"Tick: no commands, state={self._turnstile.current_state}, open_since={self._turnstile._open_since}")
                 
                 # Tick sync service
                 self._sync_service.tick(now)
