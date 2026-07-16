@@ -98,7 +98,10 @@ class TurnstileState:
         if not self.can_open(DirectionEnum.OUT):
             return []
         
-        self._current_state = TurnstileStateEnum.EXIT_OPEN
+        # В режиме тревоги не меняем состояние, просто открываем реле
+        if self._current_state != TurnstileStateEnum.ALARM:
+            self._current_state = TurnstileStateEnum.EXIT_OPEN
+        
         if start_timer:
             self._open_since = time()
         else:
