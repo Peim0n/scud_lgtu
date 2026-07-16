@@ -26,8 +26,8 @@ def handle_card_read(event: CardRead, turnstile, access_policy, passage_tracker,
         # Отслеживание прохода
         passage_tracker.track(session)
         
-        # Открытие турникета
-        commands = turnstile.open_entry()
+        # Открытие турникета (таймер запускается сразу для карт)
+        commands = turnstile.open_entry(start_timer=True)
         logger.info(f"Команды открытия турникета: {commands}")
         if commands:
             from scud_lgtu.domain.events import OutputCommandsGenerated

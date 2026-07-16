@@ -26,8 +26,8 @@ def handle_qr_read(event: QrRead, turnstile, access_policy, passage_tracker, eve
         # Отслеживание прохода
         passage_tracker.track(session)
         
-        # Открытие турникета
-        commands = turnstile.open_entry()
+        # Открытие турникета (таймер запускается сразу для QR-кодов)
+        commands = turnstile.open_entry(start_timer=True)
         logger.info(f"Команды открытия турникета: {commands}")
         if commands:
             from scud_lgtu.domain.events import OutputCommandsGenerated

@@ -56,14 +56,21 @@ class TurnstileState:
             return True
         return False
     
-    def open_entry(self) -> List[OutputCommand]:
-        """Открыть турникет для входа."""
+    def open_entry(self, start_timer: bool = False) -> List[OutputCommand]:
+        """Открыть турникет для входа.
+        
+        Args:
+            start_timer: Если True, запустить таймер закрытия сразу (для карт).
+                        Если False, таймер запускается отдельно (для кнопок).
+        """
         if not self.can_open(DirectionEnum.IN):
             return []
         
         self._current_state = TurnstileStateEnum.ENTRY_OPEN
-        # Таймер запускается отдельно при отжатии кнопки
-        self._open_since = None
+        if start_timer:
+            self._open_since = time()
+        else:
+            self._open_since = None  # Таймер запускается отдельно при отжатии кнопки
         self._beep_since = time()  # Start beep timer
         self._output_commands = [
             OutputCommand(name="rel1", state=True),
@@ -73,14 +80,21 @@ class TurnstileState:
         ]
         return self._output_commands
     
-    def open_exit(self) -> List[OutputCommand]:
-        """Открыть турникет для выхода."""
+    def open_exit(self, start_timer: bool = False) -> List[OutputCommand]:
+        """Открыть турникет для выхода.
+        
+        Args:
+            start_timer: Если True, запустить таймер закрытия сразу (для карт).
+                        Если False, таймер запускается отдельно (для кнопок).
+        """
         if not self.can_open(DirectionEnum.OUT):
             return []
         
         self._current_state = TurnstileStateEnum.EXIT_OPEN
-        # Таймер запускается отдельно при отжатии кнопки
-        self._open_since = None
+        if start_timer:
+            self._open_since = time()
+        else:
+            self._open_since = None  # Таймер запускается отдельно при отжатии кнопки
         self._beep_since = time()  # Start beep timer
         self._output_commands = [
             OutputCommand(name="rel2", state=True),
@@ -226,10 +240,10 @@ class TurnstileState:
             # Переход к следующему писку
             if elapsed >= (self._deny_beep_count + 1) * cycle_duration:
                 self._deny_beep_count += 1
-                logger.debug(f"deny_beep: advanced to count={self._deny_beep_count}")
+                self._deny_beep_state = False  # Сбросить состояние для следующего писка
+                logger.debug(f"deny_beep: advanced to count={self._deny_beep_count}, state reset")
                 if self._deny_beep_count >= self._deny_beep_total:
                     self._deny_beep_since = None
-                    self._deny_beep_state = False
                     logger.info(f"deny_beep: sequence completed")
         
         return commands
