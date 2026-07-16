@@ -29,6 +29,9 @@ class TurnstileState:
         self._output_commands: List[OutputCommand] = []
         self._beep_since: Optional[float] = None
         self._beep_duration = 0.1  # 100ms beep duration
+        self._alarm_beep_since: Optional[float] = None
+        self._alarm_beep_on = False
+        self._alarm_beep_cycle = 0.5  # 0.5 сек on, 0.5 сек off
     
     def can_open(self, direction: DirectionEnum) -> bool:
         """Проверить, можно ли открыть турникет в заданном направлении."""
@@ -105,11 +108,14 @@ class TurnstileState:
         
         self._current_state = TurnstileStateEnum.ALARM
         self._alarm_since = time()
+        self._alarm_beep_since = time()
+        self._alarm_beep_on = True
         self._output_commands = [
             OutputCommand(name="rel1", state=True),
             OutputCommand(name="rel2", state=True),
             OutputCommand(name="w1_red", state=True),
             OutputCommand(name="w2_red", state=True),
+            OutputCommand(name="buz", state=True),
         ]
         return self._output_commands
     
@@ -120,11 +126,14 @@ class TurnstileState:
         
         self._current_state = TurnstileStateEnum.IDLE
         self._alarm_since = None
+        self._alarm_beep_since = None
+        self._alarm_beep_on = False
         self._output_commands = [
             OutputCommand(name="rel1", state=False),
             OutputCommand(name="rel2", state=False),
             OutputCommand(name="w1_red", state=False),
             OutputCommand(name="w2_red", state=False),
+            OutputCommand(name="buz", state=False),
         ]
         return self._output_commands
     
@@ -166,6 +175,15 @@ class TurnstileState:
         if self._beep_since and (now - self._beep_since) > self._beep_duration:
             commands.append(OutputCommand(name="buz", state=False))
             self._beep_since = None
+        
+        # Периодический бипер при тревоге (0.5 сек on, 0.5 сек off)
+        if self._current_state == TurnstileStateEnum.ALARM and self._alarm_beep_since:
+            elapsed = now - self._alarm_beep_since
+            if elapsed > self._alarm_beep_cycle:
+                # Переключить состояние бипера
+                self._alarm_beep_on = not self._alarm_beep_on
+                self._alarm_beep_since = now
+                commands.append(OutputCommand(name="buz", state=self._alarm_beep_on))
         
         return commands
     
