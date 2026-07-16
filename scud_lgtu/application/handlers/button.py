@@ -1,4 +1,12 @@
-"""Обработчик событий кнопок."""
+"""
+Обработчик событий кнопок.
+
+Обрабатывает события нажатия кнопок управления турникетом.
+Кнопки работают на LOW: 1 = покой, 0 = нажатие.
+- button_1: открыть на вход
+- button_2: открыть на выход
+- button_3: закрыть турникет
+"""
 from scud_lgtu.domain.events import ButtonPressed, OutputCommandsGenerated
 from scud_lgtu.domain.enums import DirectionEnum
 import logging
@@ -7,13 +15,30 @@ logger = logging.getLogger(__name__)
 
 
 def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
-    """Обработать событие нажатия кнопки."""
+    """
+    Обработать событие нажатия кнопки.
+
+    Parameters
+    ----------
+    event : ButtonPressed
+        Событие нажатия кнопки
+    turnstile : TurnstileState
+        Состояние турникета для управления
+    event_bus : EventBus
+        Шина событий для публикации команд
+
+    Note
+    ----
+    Кнопки работают на LOW: 1 = покой, 0 = нажатие.
+    При нажатии (state=False) открываем турникет.
+    При отжатии (state=True) запускаем таймер закрытия.
+    """
     logger.info(f"handle_button_pressed: {event}")
-    
+
     # Кнопки работают на LOW: 1 = покой, 0 = нажатие
     # При нажатии (state=False) открываем турникет
     # При отжатии (state=True) запускаем таймер закрытия
-    
+
     if event.button_id == "button_1":
         if not event.state:
             # Нажатие - открыть для входа
@@ -27,7 +52,7 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
             # Отжатие - запустить таймер закрытия
             turnstile.start_open_timer()
             logger.info(f"button_1 released, started open timer")
-    
+
     elif event.button_id == "button_2":
         if not event.state:
             # Нажатие - открыть для выхода
@@ -41,7 +66,7 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
             # Отжатие - запустить таймер закрытия
             turnstile.start_open_timer()
             logger.info(f"button_2 released, started open timer")
-    
+
     elif event.button_id == "button_3":
         if not event.state:
             # Нажатие - закрыть турникет
@@ -51,7 +76,7 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
                 commands_event = OutputCommandsGenerated(commands=commands)
                 logger.info(f"Publishing OutputCommandsGenerated: {commands_event}")
                 event_bus.publish(commands_event)
-    
+
     else:
         # Неизвестная кнопка - закрыть турникет при нажатии
         if not event.state:

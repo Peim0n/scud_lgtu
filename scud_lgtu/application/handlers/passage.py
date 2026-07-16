@@ -1,4 +1,9 @@
-"""Обработчик событий прохода."""
+"""
+Обработчик событий прохода.
+
+Обрабатывает события обнаружения прохода по датчикам.
+Логирует проходы, управляет реле, отслеживает завершение проходов.
+"""
 from scud_lgtu.domain.events import PassageDetected
 from scud_lgtu.domain.events import OutputCommandsGenerated
 import logging
@@ -8,42 +13,65 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_passage_detected(event: PassageDetected, turnstile, passage_tracker, event_bus, event_log) -> None:
-    """Обработать событие обнаружения прохода."""
+    """
+    Обработать событие обнаружения прохода.
+
+    Parameters
+    ----------
+    event : PassageDetected
+        Событие обнаружения прохода
+    turnstile : TurnstileState
+        Состояние турникета для управления
+    passage_tracker : PassageTracker
+        Трекер проходов для отслеживания завершения
+    event_bus : EventBus
+        Шина событий для публикации команд
+    event_log : EventLogAdapter
+        Адаптер лога событий для записи проходов
+
+    Note
+    ----
+    Направления прохода:
+    - "in": нормальный вход
+    - "out": нормальный выход
+    - "turnback": разворот (человек прошел и вернулся)
+    - "blockage": заслон (оба датчика активны длительное время)
+    """
     direction = event.direction
     zone = event.zone
     duration = event.duration
-    
+
     logger.info(f"Проход: {zone}, направление={direction}, длительность={duration:.3f}s")
-    
+
     if direction == "blockage":
         # Заслон - держать реле открытым
         logger.warning(f"Заслон: {zone}, длительность={duration:.3f}s")
-        
+
         # Логировать заслон
         event_log.log_passage(zone, "blockage", duration, result="blockage")
-        
+
         # Держать реле открытым (не закрывать)
         # Реле уже открыто при проходе, просто не закрываем его
         return
-    
+
     if direction == "turnback":
         # Разворот - закрыть реле
         logger.info(f"Разворот: {zone}, длительность={duration:.3f}s")
-        
+
         # Логировать разворот
         event_log.log_passage(zone, "turnback", duration, result="turnback")
-        
+
         # Закрыть реле
         await turnstile.close_async(event_bus)
         return
-    
+
     # Нормальный проход (in/out)
     # Закрыть реле
     await turnstile.close_async(event_bus)
-    
+
     # Логировать проход
     event_log.log_passage(zone, direction, duration, result="pass")
-    
+
     # Отметить проход как завершённый в passage_tracker
     # Это позволит снова зайти с той же картой (но только если направление изменилось)
     if event.token:
