@@ -131,13 +131,15 @@ class LGTUApplication:
         elif scud_event.type == EventType.MUX_CHANGED:
             # Обработка изменений мультиплексора - payload содержит словарь states
             states = scud_event.payload.get("states", {})
+            events = []
             for input_name, state in states.items():
                 event = MuxInputChanged(
                     input_name=input_name,
                     state=state == 0  # 0 = активный (low active)
                 )
                 logger.info(f"Mux Input Changed event: {event}")
-                return event
+                events.append(event)
+            return events if events else None
         elif scud_event.type == EventType.SERIAL_DATA:
             # Обработка данных из serial порта (QR-код)
             data = scud_event.payload.get("data", "")
@@ -174,10 +176,15 @@ class LGTUApplication:
                 try:
                     scud_event = event_queue.get(timeout=0.1)
                     logger.debug(f"Received ScudEvent from engine: {scud_event}")
-                    domain_event = self._convert_scud_event_to_domain(scud_event)
+                    domain_events = self._convert_scud_event_to_domain(scud_event)
                     
-                    if domain_event:
-                        self._event_bus.publish(domain_event)
+                    # Обработка списка событий или одного события
+                    if domain_events:
+                        if isinstance(domain_events, list):
+                            for event in domain_events:
+                                self._event_bus.publish(event)
+                        else:
+                            self._event_bus.publish(domain_events)
                 except queue.Empty:
                     # Нормальное поведение - очередь пуста
                     pass
