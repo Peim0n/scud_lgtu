@@ -182,6 +182,19 @@ class LGTUApplication:
         logger.debug(f"Unknown event type: {scud_event.type}")
         return None
     
+    def _initialize_button_states(self) -> None:
+        """Initialize button states to avoid false edge detection."""
+        logger.info("Initializing button states")
+        try:
+            from scud_lgtu.application.handlers.mux import _button_states
+            # Initialize all buttons to None so first event is treated as initial state
+            button_names = ["button_1", "button_2", "button_3"]
+            for name in button_names:
+                _button_states[name] = None
+            logger.info(f"Initialized button states: {_button_states}")
+        except Exception as e:
+            logger.error(f"Error initializing button states: {e}")
+    
     def _initialize_outputs(self) -> None:
         """Initialize all outputs to safe state (relays closed)."""
         logger.info("Initializing outputs to safe state")
@@ -221,6 +234,9 @@ class LGTUApplication:
         
         # Initialize outputs to safe state (all relays closed)
         self._initialize_outputs()
+        
+        # Initialize button states to avoid false edge detection
+        self._initialize_button_states()
         
         # Debounce buttons - ignore initial button states for 2 seconds
         logger.info("Debouncing buttons for 2 seconds...")

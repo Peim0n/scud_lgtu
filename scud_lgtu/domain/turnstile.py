@@ -27,6 +27,8 @@ class TurnstileState:
         self._alarm_since: Optional[float] = None
         self._auth_timeout = auth_timeout
         self._output_commands: List[OutputCommand] = []
+        self._beep_since: Optional[float] = None
+        self._beep_duration = 0.1  # 100ms beep duration
     
     def can_open(self, direction: DirectionEnum) -> bool:
         """Проверить, можно ли открыть турникет в заданном направлении."""
@@ -49,10 +51,12 @@ class TurnstileState:
         
         self._current_state = TurnstileStateEnum.ENTRY_OPEN
         self._open_since = time()
+        self._beep_since = time()  # Start beep timer
         self._output_commands = [
             OutputCommand(name="rel1", state=True),
             OutputCommand(name="w1_green", state=True),
             OutputCommand(name="w1_red", state=False),
+            OutputCommand(name="w1_beep", state=True),
         ]
         return self._output_commands
     
@@ -63,10 +67,12 @@ class TurnstileState:
         
         self._current_state = TurnstileStateEnum.EXIT_OPEN
         self._open_since = time()
+        self._beep_since = time()  # Start beep timer
         self._output_commands = [
             OutputCommand(name="rel2", state=True),
             OutputCommand(name="w2_green", state=True),
             OutputCommand(name="w2_red", state=False),
+            OutputCommand(name="w2_beep", state=True),
         ]
         return self._output_commands
     
@@ -148,6 +154,14 @@ class TurnstileState:
         # Автоматическое закрытие после таймаута
         if self._open_since and (now - self._open_since) > self._auth_timeout:
             commands.extend(self.close())
+        
+        # Автоматическое выключение бипера после длительности
+        if self._beep_since and (now - self._beep_since) > self._beep_duration:
+            if self._current_state == TurnstileStateEnum.ENTRY_OPEN:
+                commands.append(OutputCommand(name="w1_beep", state=False))
+            elif self._current_state == TurnstileStateEnum.EXIT_OPEN:
+                commands.append(OutputCommand(name="w2_beep", state=False))
+            self._beep_since = None
         
         return commands
     
