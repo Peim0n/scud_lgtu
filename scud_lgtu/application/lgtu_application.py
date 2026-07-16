@@ -283,6 +283,9 @@ class LGTUApplication:
                                 logger.info(f"Sent to shift register: {output_states}")
                         except Exception as e:
                             logger.error(f"Error sending to shift register: {e}")
+                else:
+                    # Debug: log tick without commands
+                    logger.debug(f"Tick: no commands, state={self._turnstile.current_state}, open_since={self._turnstile._open_since}")
                 
                 # Tick sync service
                 self._sync_service.tick(now)
