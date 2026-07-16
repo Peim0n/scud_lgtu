@@ -37,3 +37,13 @@ class EventLogAdapter:
             )
             passages.append(passage)
         return passages
+    
+    def log_passage(self, zone: str, direction: str, duration: float, result: str = "pass") -> None:
+        """Log passage event directly."""
+        event = PassageEvent(
+            direction=direction,
+            result=result,
+            zone=zone,
+            duration=duration
+        )
+        self._store.append(event)

@@ -22,8 +22,10 @@ class CardRead:
 @dataclass
 class PassageDetected:
     """Событие обнаружения прохода."""
-    direction: DirectionEnum
+    direction: str  # "in", "out", "turnback", "blockage"
     zone: str
+    duration: float
+    token: Optional[str] = None  # Токен авторизации для связывания с сессией
 
 
 @dataclass

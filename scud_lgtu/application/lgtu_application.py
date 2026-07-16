@@ -21,9 +21,10 @@ from scud_lgtu.application.services.passage_service import PassageService
 from scud_lgtu.application.services.sync_service import SyncService
 from scud_lgtu.application.handlers.qr import handle_qr_read
 from scud_lgtu.application.handlers.card import handle_card_read
+from scud_lgtu.application.handlers.passage import handle_passage_detected
+from scud_lgtu.application.handlers.mux import handle_mux_input_changed
 from scud_lgtu.application.handlers.alarm import handle_alarm_changed
 from scud_lgtu.application.handlers.button import handle_button_pressed
-from scud_lgtu.application.handlers.mux import handle_mux_input_changed
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,9 @@ class LGTUApplication:
         ))
         self._event_bus.subscribe("CardRead", lambda e: handle_card_read(
             e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus
+        ))
+        self._event_bus.subscribe("PassageDetected", lambda e: handle_passage_detected(
+            e, self._turnstile, self._passage_tracker, self._event_bus, self._passage_service._event_log
         ))
         self._event_bus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(e, self._event_bus))
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile))
