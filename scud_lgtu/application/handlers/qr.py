@@ -7,6 +7,7 @@
 from scud_lgtu.domain.events import QrRead
 from scud_lgtu.domain.models import AuthSession
 from scud_lgtu.domain.enums import DirectionEnum, TokenTypeEnum, AccessResultEnum
+from scud_lgtu.application.handlers.common import handle_credential_common
 import logging
 import asyncio
 
@@ -30,33 +31,20 @@ async def handle_qr_read(event: QrRead, turnstile, access_policy, passage_tracke
     event_bus : EventBus
         Шина событий для публикации команд
     """
-    logger.info(f"Обработка события QR-кода: {event}")
+    # Создание сессии авторизации с префиксом maxid
+    session = AuthSession(
+        token=f"maxid:{event.credential.value}",
+        direction=DirectionEnum.IN,
+        user_id=None  # Будет заполнено в handle_credential_common
+    )
 
-    # Проверка доступа
-    decision = access_policy.check(event.credential)
-    logger.info(f"Результат проверки доступа: {decision}")
-
-    if decision.allowed:
-        # Создание сессии авторизации
-        session = AuthSession(
-            token=f"maxid:{event.credential.value}",
-            direction=DirectionEnum.IN,
-            user_id=decision.user_id
-        )
-
-        # Отслеживание прохода
-        passage_tracker.track(session)
-
-        # Открытие турникета через background task (таймер запускается сразу для QR-кодов)
-        asyncio.create_task(turnstile.open_entry_async(event_bus, start_timer=True))
-        logger.info(f"Открытие турникета через async task")
-
-        # Включить зеленый индикатор на configured duration
-        asyncio.create_task(turnstile.set_indicator_async(event_bus, "w1_green", True, turnstile._indicator_duration))
-    else:
-        # Отказ в доступе - последовательность писков через background task
-        asyncio.create_task(turnstile.deny_beep_sequence(event_bus))
-        logger.info(f"Отказ в доступе, запущена последовательность писков")
-
-        # Включить красный индикатор на configured duration
-        asyncio.create_task(turnstile.set_indicator_async(event_bus, "w1_red", True, turnstile._indicator_duration))
+    # Используем общий обработчик для карт и QR-кодов
+    await handle_credential_common(
+        event=event,
+        turnstile=turnstile,
+        access_policy=access_policy,
+        passage_tracker=passage_tracker,
+        event_bus=event_bus,
+        session=session,
+        reader="w1"
+    )
