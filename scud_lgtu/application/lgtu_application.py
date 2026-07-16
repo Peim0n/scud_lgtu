@@ -156,9 +156,12 @@ class LGTUApplication:
                 value=str(scud_event.payload.get("max_id", "")),
                 encrypted=False
             )
+            # Извлекаем label из reader (например, "serial_Serial-1" -> "Serial-1")
+            reader = scud_event.payload.get("reader", "unknown")
+            reader_label = reader.split("_", 1)[1] if "_" in reader else reader
             event = QrRead(
                 credential=credential,
-                reader_id=scud_event.payload.get("reader", "unknown")
+                reader_id=reader_label
             )
             logger.info(f"QR Read event: {event}")
             return event
@@ -168,9 +171,12 @@ class LGTUApplication:
                 value=str(scud_event.payload.get("card_data", "")),
                 encrypted=scud_event.payload.get("encrypted", False)
             )
+            # Извлекаем label из reader (например, "wiegand_Wiegand-1" -> "Wiegand-1")
+            reader = scud_event.payload.get("reader", "unknown")
+            reader_label = reader.split("_", 1)[1] if "_" in reader else reader
             event = CardRead(
                 credential=credential,
-                reader_id="wiegand"
+                reader_id=reader_label
             )
             logger.info(f"Card Read event: {event}")
             return event
