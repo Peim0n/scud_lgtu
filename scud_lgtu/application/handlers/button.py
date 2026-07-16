@@ -10,10 +10,10 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
     """Обработать событие нажатия кнопки."""
     logger.info(f"handle_button_pressed: {event}")
     
-    # Кнопки работают на HIGH: 0 = покой, 1 = нажатие
-    # Реагируем только на нажатие (state=True)
-    if not event.state:
-        logger.info(f"Button {event.button_id} released (state=False), ignoring")
+    # Кнопки работают на LOW: 1 = покой, 0 = нажатие
+    # Реагируем только на нажатие (state=False)
+    if event.state:
+        logger.info(f"Button {event.button_id} released (state=True), ignoring")
         return
     
     if event.button_id == "button_1":

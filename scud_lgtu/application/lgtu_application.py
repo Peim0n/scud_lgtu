@@ -158,7 +158,7 @@ class LGTUApplication:
             for input_name, state in states.items():
                 event = MuxInputChanged(
                     input_name=input_name,
-                    state=state == 1  # 1 = активный (high active)
+                    state=state == 0  # 0 = активный (low active)
                 )
                 logger.info(f"Mux Input Changed event: {event}")
                 events.append(event)
