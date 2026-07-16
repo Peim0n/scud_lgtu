@@ -334,9 +334,10 @@ class LGTUController:
         import threading
         relay = getattr(self, "_active_relay", "rel2")
         indicator = getattr(self, "_active_indicator", "w1_green")
-        self.button_release_timer = threading.Timer(2.0, self._close_turnstile_after_timer)
+        button_timer_duration = self.timings.get("button_timer_duration_s", 2.0)  # Длительность таймера кнопки из конфига
+        self.button_release_timer = threading.Timer(button_timer_duration, self._close_turnstile_after_timer)
         self.button_release_timer.start()
-        log_info("Timer started: will close turnstile in 2 seconds")
+        log_info(f"Timer started: will close turnstile in {button_timer_duration} seconds")
     
     def _close_turnstile_after_timer(self) -> None:
         """Закрыть турникет после таймера."""
