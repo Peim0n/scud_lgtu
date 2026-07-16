@@ -36,6 +36,8 @@ class TurnstileState:
         self._alarm_beep_since: Optional[float] = None
         self._alarm_beep_on = False
         self._alarm_beep_cycle = 0.5  # 0.5 сек on, 0.5 сек off
+        self._open_task: Optional[asyncio.Task] = None  # Активная задача открытия
+        self._deny_beep_task: Optional[asyncio.Task] = None  # Активная задача deny beep
     
     def can_open(self, direction: DirectionEnum) -> bool:
         """Проверить, можно ли открыть турникет в заданном направлении."""
@@ -123,25 +125,37 @@ class TurnstileState:
         """Асинхронная задача для выполнения 3 коротких писков."""
         from scud_lgtu.domain.events import OutputCommandsGenerated
         
-        for i in range(3):
-            # Включить бипер
-            commands = [OutputCommand(name="buz", state=True)]
-            event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.info(f"deny_beep: beep {i+1} ON")
-            
-            # Подождать 100ms
-            await asyncio.sleep(0.1)
-            
-            # Выключить бипер
-            commands = [OutputCommand(name="buz", state=False)]
-            event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.info(f"deny_beep: beep {i+1} OFF")
-            
-            # Подождать 100ms перед следующим писком
-            if i < 2:  # Не ждать после последнего писка
-                await asyncio.sleep(0.1)
+        # Отменить предыдущую задачу если есть
+        if self._deny_beep_task and not self._deny_beep_task.done():
+            self._deny_beep_task.cancel()
+            logger.info("deny_beep: cancelled previous task")
         
-        logger.info("deny_beep: sequence completed")
+        self._deny_beep_task = asyncio.current_task()
+        
+        try:
+            for i in range(3):
+                # Включить бипер
+                commands = [OutputCommand(name="buz", state=True)]
+                event_bus.publish(OutputCommandsGenerated(commands=commands))
+                logger.info(f"deny_beep: beep {i+1} ON")
+                
+                # Подождать 100ms
+                await asyncio.sleep(0.1)
+                
+                # Выключить бипер
+                commands = [OutputCommand(name="buz", state=False)]
+                event_bus.publish(OutputCommandsGenerated(commands=commands))
+                logger.info(f"deny_beep: beep {i+1} OFF")
+                
+                # Подождать 100ms перед следующим писком
+                if i < 2:  # Не ждать после последнего писка
+                    await asyncio.sleep(0.1)
+            
+            logger.info("deny_beep: sequence completed")
+        except asyncio.CancelledError:
+            logger.info("deny_beep: task cancelled")
+        finally:
+            self._deny_beep_task = None
     
     async def open_entry_async(self, event_bus, start_timer: bool = True) -> None:
         """Асинхронное открытие турникета для входа с автоматическим закрытием."""
@@ -150,27 +164,39 @@ class TurnstileState:
         if not self.can_open(DirectionEnum.IN):
             return
         
-        self._current_state = TurnstileStateEnum.ENTRY_OPEN
+        # Отменить предыдущую задачу открытия если есть
+        if self._open_task and not self._open_task.done():
+            self._open_task.cancel()
+            logger.info("open_entry: cancelled previous open task")
         
-        # Открыть реле, включить зеленый, выключить красный, включить бипер
-        commands = [
-            OutputCommand(name="rel1", state=True),
-            OutputCommand(name="w1_green", state=True),
-            OutputCommand(name="w1_red", state=False),
-            OutputCommand(name="buz", state=True),
-        ]
-        event_bus.publish(OutputCommandsGenerated(commands=commands))
-        logger.info(f"open_entry: opened entry")
+        self._open_task = asyncio.current_task()
         
-        # Выключить бипер через 100ms
-        await asyncio.sleep(0.1)
-        commands = [OutputCommand(name="buz", state=False)]
-        event_bus.publish(OutputCommandsGenerated(commands=commands))
-        logger.info(f"open_entry: beep off")
-        
-        # Запустить таймер закрытия если нужно
-        if start_timer:
-            asyncio.create_task(self._close_after_timeout(event_bus, self._auth_timeout))
+        try:
+            self._current_state = TurnstileStateEnum.ENTRY_OPEN
+            
+            # Открыть реле, включить зеленый, выключить красный, включить бипер
+            commands = [
+                OutputCommand(name="rel1", state=True),
+                OutputCommand(name="w1_green", state=True),
+                OutputCommand(name="w1_red", state=False),
+                OutputCommand(name="buz", state=True),
+            ]
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
+            logger.info(f"open_entry: opened entry")
+            
+            # Выключить бипер через 100ms
+            await asyncio.sleep(0.1)
+            commands = [OutputCommand(name="buz", state=False)]
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
+            logger.info(f"open_entry: beep off")
+            
+            # Запустить таймер закрытия если нужно
+            if start_timer:
+                asyncio.create_task(self._close_after_timeout(event_bus, self._auth_timeout))
+        except asyncio.CancelledError:
+            logger.info("open_entry: task cancelled")
+        finally:
+            self._open_task = None
     
     async def _close_after_timeout(self, event_bus, timeout: float) -> None:
         """Асинхронная задача для закрытия через таймаут."""
