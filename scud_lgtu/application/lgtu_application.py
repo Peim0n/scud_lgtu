@@ -208,9 +208,13 @@ class LGTUApplication:
                     value=str(data),
                     encrypted=False
                 )
+                # Используем мапинг reader_names из config
+                reader = scud_event.payload.get("reader", "unknown")
+                reader_names = self._devices.get("reader_names", {})
+                reader_id = reader_names.get(reader, reader)
                 event = QrRead(
                     credential=credential,
-                    reader_id=scud_event.payload.get("port", "serial")
+                    reader_id=reader_id
                 )
                 logger.info(f"Serial QR Read event: {event}")
                 return event
