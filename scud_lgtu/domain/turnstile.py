@@ -37,6 +37,7 @@ class TurnstileState:
         self._deny_beep_total = 3
         self._deny_beep_duration = 0.1  # 100ms on
         self._deny_beep_pause = 0.1  # 100ms off
+        self._deny_beep_state = False  # Текущее состояние бипера для deny beep
     
     def can_open(self, direction: DirectionEnum) -> bool:
         """Проверить, можно ли открыть турникет в заданном направлении."""
@@ -201,17 +202,25 @@ class TurnstileState:
             cycle_duration = self._deny_beep_duration + self._deny_beep_pause
             beep_start = self._deny_beep_count * cycle_duration
             
+            target_state = None
             if elapsed >= beep_start and elapsed < beep_start + self._deny_beep_duration:
                 # Включить бипер
-                commands.append(OutputCommand(name="buz", state=True))
+                target_state = True
             elif elapsed >= beep_start + self._deny_beep_duration and elapsed < (self._deny_beep_count + 1) * cycle_duration:
                 # Выключить бипер
-                commands.append(OutputCommand(name="buz", state=False))
-            elif elapsed >= (self._deny_beep_count + 1) * cycle_duration:
-                # Переход к следующему писку
+                target_state = False
+            
+            # Отправляем команду только если состояние изменилось
+            if target_state is not None and target_state != self._deny_beep_state:
+                self._deny_beep_state = target_state
+                commands.append(OutputCommand(name="buz", state=target_state))
+            
+            # Переход к следующему писку
+            if elapsed >= (self._deny_beep_count + 1) * cycle_duration:
                 self._deny_beep_count += 1
                 if self._deny_beep_count >= self._deny_beep_total:
                     self._deny_beep_since = None
+                    self._deny_beep_state = False
         
         return commands
     
