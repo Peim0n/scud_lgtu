@@ -64,7 +64,7 @@ def build_application(config_path: str = None) -> LGTUApplication:
     passage_tracker = PassageTracker()
     
     # Application services
-    event_bus = EventBus()
+    event_bus = EventBus(turnstile=turnstile)
     access_service = AccessService(cache)
     passage_service = PassageService(store)
     sync_service = SyncService(backend, store, sync_interval=timings.get("backend_sync_interval_s", 60.0))

@@ -56,7 +56,7 @@ class LGTUApplication:
         self._sound_player = SoundPlayer()
         
         # Application services
-        self._event_bus = EventBus()
+        self._event_bus = EventBus(turnstile=self._turnstile)
         self._access_service = AccessService(cache)
         self._passage_service = PassageService(store)
         self._sync_service = SyncService(backend, store, sync_interval=timings.get("backend_sync_interval_s", 60.0))

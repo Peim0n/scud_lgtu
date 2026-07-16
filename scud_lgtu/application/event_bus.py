@@ -8,11 +8,12 @@ from collections import defaultdict
 class EventBus:
     """Event bus for publishing and subscribing to events."""
     
-    def __init__(self):
+    def __init__(self, turnstile=None):
         """Initialize event bus."""
         self._subscribers: Dict[str, List[Callable]] = defaultdict(list)
         self._loop = None
         self._lock = threading.Lock()
+        self._turnstile = turnstile  # Для проверки состояния тревоги
     
     def subscribe(self, event_type: str, handler: Callable) -> None:
         """Subscribe to an event type."""
@@ -28,6 +29,11 @@ class EventBus:
     def publish(self, event: Any) -> None:
         """Publish an event to all subscribers."""
         event_type = type(event).__name__
+        
+        # Во время тревоги игнорировать все события кроме PassageDetected (датчики)
+        if self._turnstile and self._turnstile._current_state == "ALARM":
+            if event_type != "PassageDetected":
+                return  # Игнорировать все события кроме датчиков
         
         with self._lock:
             handlers = self._subscribers.get(event_type, []).copy()
