@@ -50,7 +50,8 @@ class TurnstileState:
             return []
         
         self._current_state = TurnstileStateEnum.ENTRY_OPEN
-        self._open_since = time()
+        # Таймер запускается отдельно при отжатии кнопки
+        self._open_since = None
         self._beep_since = time()  # Start beep timer
         self._output_commands = [
             OutputCommand(name="rel1", state=True),
@@ -66,7 +67,8 @@ class TurnstileState:
             return []
         
         self._current_state = TurnstileStateEnum.EXIT_OPEN
-        self._open_since = time()
+        # Таймер запускается отдельно при отжатии кнопки
+        self._open_since = None
         self._beep_since = time()  # Start beep timer
         self._output_commands = [
             OutputCommand(name="rel2", state=True),
@@ -90,6 +92,11 @@ class TurnstileState:
             OutputCommand(name="w2_green", state=False),
         ]
         return self._output_commands
+    
+    def start_open_timer(self) -> None:
+        """Запустить таймер закрытия (при отжатии кнопки)."""
+        if self._current_state in (TurnstileStateEnum.ENTRY_OPEN, TurnstileStateEnum.EXIT_OPEN):
+            self._open_since = time()
     
     def set_alarm(self) -> List[OutputCommand]:
         """Установить режим тревоги (пожарная тревога)."""
