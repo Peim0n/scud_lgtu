@@ -6,6 +6,7 @@ from time import time
 from scud_lgtu.domain.models import OutputCommand
 from scud_lgtu.domain.enums import DirectionEnum
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +36,6 @@ class TurnstileState:
         self._alarm_beep_since: Optional[float] = None
         self._alarm_beep_on = False
         self._alarm_beep_cycle = 0.5  # 0.5 сек on, 0.5 сек off
-        self._deny_beep_count = 0
-        self._deny_beep_since: Optional[float] = None
-        self._deny_beep_total = 3
-        self._deny_beep_duration = 0.1  # 100ms on
-        self._deny_beep_pause = 0.1  # 100ms off
-        self._deny_beep_state = False  # Текущее состояние бипера для deny beep
     
     def can_open(self, direction: DirectionEnum) -> bool:
         """Проверить, можно ли открыть турникет в заданном направлении."""
@@ -124,10 +119,76 @@ class TurnstileState:
         if self._current_state in (TurnstileStateEnum.ENTRY_OPEN, TurnstileStateEnum.EXIT_OPEN):
             self._open_since = time()
     
-    def start_deny_beep(self) -> None:
-        """Запустить последовательность из 3 коротких писков при отказе в доступе."""
-        self._deny_beep_count = 0
-        self._deny_beep_since = time()
+    async def deny_beep_sequence(self, event_bus) -> None:
+        """Асинхронная задача для выполнения 3 коротких писков."""
+        from scud_lgtu.domain.events import OutputCommandsGenerated
+        
+        for i in range(3):
+            # Включить бипер
+            commands = [OutputCommand(name="buz", state=True)]
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
+            logger.info(f"deny_beep: beep {i+1} ON")
+            
+            # Подождать 100ms
+            await asyncio.sleep(0.1)
+            
+            # Выключить бипер
+            commands = [OutputCommand(name="buz", state=False)]
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
+            logger.info(f"deny_beep: beep {i+1} OFF")
+            
+            # Подождать 100ms перед следующим писком
+            if i < 2:  # Не ждать после последнего писка
+                await asyncio.sleep(0.1)
+        
+        logger.info("deny_beep: sequence completed")
+    
+    async def open_entry_async(self, event_bus, start_timer: bool = True) -> None:
+        """Асинхронное открытие турникета для входа с автоматическим закрытием."""
+        from scud_lgtu.domain.events import OutputCommandsGenerated
+        
+        if not self.can_open(DirectionEnum.IN):
+            return
+        
+        self._current_state = TurnstileStateEnum.ENTRY_OPEN
+        
+        # Открыть реле, включить зеленый, выключить красный, включить бипер
+        commands = [
+            OutputCommand(name="rel1", state=True),
+            OutputCommand(name="w1_green", state=True),
+            OutputCommand(name="w1_red", state=False),
+            OutputCommand(name="buz", state=True),
+        ]
+        event_bus.publish(OutputCommandsGenerated(commands=commands))
+        logger.info(f"open_entry: opened entry")
+        
+        # Выключить бипер через 100ms
+        await asyncio.sleep(0.1)
+        commands = [OutputCommand(name="buz", state=False)]
+        event_bus.publish(OutputCommandsGenerated(commands=commands))
+        logger.info(f"open_entry: beep off")
+        
+        # Запустить таймер закрытия если нужно
+        if start_timer:
+            asyncio.create_task(self._close_after_timeout(event_bus, self._auth_timeout))
+    
+    async def _close_after_timeout(self, event_bus, timeout: float) -> None:
+        """Асинхронная задача для закрытия через таймаут."""
+        from scud_lgtu.domain.events import OutputCommandsGenerated
+        
+        await asyncio.sleep(timeout)
+        
+        # Закрыть только если всё еще открыто
+        if self._current_state in (TurnstileStateEnum.ENTRY_OPEN, TurnstileStateEnum.EXIT_OPEN):
+            commands = [
+                OutputCommand(name="rel1", state=False),
+                OutputCommand(name="rel2", state=False),
+                OutputCommand(name="w1_green", state=False),
+                OutputCommand(name="w2_green", state=False),
+            ]
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
+            self._current_state = TurnstileStateEnum.IDLE
+            logger.info(f"close_after_timeout: closed turnstile")
     
     def set_alarm(self) -> List[OutputCommand]:
         """Установить режим тревоги (пожарная тревога)."""
@@ -213,40 +274,6 @@ class TurnstileState:
                 self._alarm_beep_since = now
                 commands.append(OutputCommand(name="buz", state=self._alarm_beep_on))
         
-        # Последовательность из 3 коротких писков при отказе в доступе
-        if self._deny_beep_since and self._deny_beep_count < self._deny_beep_total:
-            elapsed = now - self._deny_beep_since
-            cycle_duration = self._deny_beep_duration + self._deny_beep_pause
-            beep_start = self._deny_beep_count * cycle_duration
-            
-            logger.debug(f"deny_beep: count={self._deny_beep_count}, elapsed={elapsed:.3f}, beep_start={beep_start:.3f}, current_state={self._deny_beep_state}")
-            
-            target_state = None
-            if elapsed >= beep_start and elapsed < beep_start + self._deny_beep_duration:
-                # Включить бипер
-                target_state = True
-                logger.debug(f"deny_beep: target_state=True (beep {self._deny_beep_count + 1} ON)")
-            elif elapsed >= beep_start + self._deny_beep_duration and elapsed < (self._deny_beep_count + 1) * cycle_duration:
-                # Выключить бипер
-                target_state = False
-                logger.debug(f"deny_beep: target_state=False (beep {self._deny_beep_count + 1} OFF)")
-            
-            # Отправляем команду только если состояние изменилось
-            if target_state is not None and target_state != self._deny_beep_state:
-                self._deny_beep_state = target_state
-                commands.append(OutputCommand(name="buz", state=target_state))
-                logger.info(f"deny_beep: sending buz={target_state} for beep {self._deny_beep_count + 1}")
-            
-            # Переход к следующему писку
-            if elapsed >= (self._deny_beep_count + 1) * cycle_duration:
-                self._deny_beep_count += 1
-                self._deny_beep_state = False  # Сбросить состояние для следующего писка
-                # Сдвигаем время начала, чтобы beep_start для следующего писка был корректным
-                self._deny_beep_since = now - self._deny_beep_count * cycle_duration
-                logger.debug(f"deny_beep: advanced to count={self._deny_beep_count}, state reset, time adjusted")
-                if self._deny_beep_count >= self._deny_beep_total:
-                    self._deny_beep_since = None
-                    logger.info(f"deny_beep: sequence completed")
         
         return commands
     

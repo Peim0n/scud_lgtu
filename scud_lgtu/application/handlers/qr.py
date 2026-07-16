@@ -3,11 +3,12 @@ from scud_lgtu.domain.events import QrRead
 from scud_lgtu.domain.models import AuthSession
 from scud_lgtu.domain.enums import DirectionEnum, TokenTypeEnum
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-def handle_qr_read(event: QrRead, turnstile, access_policy, passage_tracker, event_bus) -> None:
+async def handle_qr_read(event: QrRead, turnstile, access_policy, passage_tracker, event_bus) -> None:
     """Обработать событие считывания QR-кода."""
     logger.info(f"Обработка события QR-кода: {event}")
     
@@ -26,13 +27,10 @@ def handle_qr_read(event: QrRead, turnstile, access_policy, passage_tracker, eve
         # Отслеживание прохода
         passage_tracker.track(session)
         
-        # Открытие турникета (таймер запускается сразу для QR-кодов)
-        commands = turnstile.open_entry(start_timer=True)
-        logger.info(f"Команды открытия турникета: {commands}")
-        if commands:
-            from scud_lgtu.domain.events import OutputCommandsGenerated
-            event_bus.publish(OutputCommandsGenerated(commands=commands))
+        # Открытие турникета через background task (таймер запускается сразу для QR-кодов)
+        asyncio.create_task(turnstile.open_entry_async(event_bus, start_timer=True))
+        logger.info(f"Открытие турникета через async task")
     else:
-        # Отказ в доступе - 3 коротких писка
-        turnstile.start_deny_beep()
+        # Отказ в доступе - 3 коротких писка через background task
+        asyncio.create_task(turnstile.deny_beep_sequence(event_bus))
         logger.info(f"Отказ в доступе, запущена последовательность писков")
