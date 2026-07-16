@@ -156,19 +156,13 @@ class LGTUApplication:
                 value=str(scud_event.payload.get("max_id", "")),
                 encrypted=False
             )
-            # Извлекаем label из reader (например, "serial_Serial-1" -> "Serial-1")
+            # Используем мапинг reader_names из config
             reader = scud_event.payload.get("reader", "unknown")
-            if "_" in reader:
-                parts = reader.split("_", 1)
-                if parts[0] in ("wiegand", "serial"):
-                    reader_label = parts[1]
-                else:
-                    reader_label = reader
-            else:
-                reader_label = reader
+            reader_names = self._devices.get("reader_names", {})
+            reader_id = reader_names.get(reader, reader)
             event = QrRead(
                 credential=credential,
-                reader_id=reader_label
+                reader_id=reader_id
             )
             logger.info(f"QR Read event: {event}")
             return event
@@ -178,19 +172,13 @@ class LGTUApplication:
                 value=str(scud_event.payload.get("card_data", "")),
                 encrypted=scud_event.payload.get("encrypted", False)
             )
-            # Извлекаем label из reader (например, "wiegand_Wiegand-1" -> "Wiegand-1")
+            # Используем мапинг reader_names из config
             reader = scud_event.payload.get("reader", "unknown")
-            if "_" in reader:
-                parts = reader.split("_", 1)
-                if parts[0] in ("wiegand", "serial"):
-                    reader_label = parts[1]
-                else:
-                    reader_label = reader
-            else:
-                reader_label = reader
+            reader_names = self._devices.get("reader_names", {})
+            reader_id = reader_names.get(reader, reader)
             event = CardRead(
                 credential=credential,
-                reader_id=reader_label
+                reader_id=reader_id
             )
             logger.info(f"Card Read event: {event}")
             return event

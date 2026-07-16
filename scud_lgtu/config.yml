@@ -49,6 +49,13 @@ serial:
 # ── Устройства ──
 # Описание физических устройств и их ролей в системе
 devices:
+  # Мапинг полных имен reader из engine к логическим именам устройств
+  reader_names:
+    wiegand_Wiegand-1: entry_reader
+    wiegand_Wiegand-2: exit_reader
+    serial_Serial-1: qr_reader
+    serial_Serial-2: qr_reader_2
+
   # Считыватели (Wiegand и Serial/QR)
   readers:
     entry_reader:

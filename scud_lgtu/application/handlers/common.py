@@ -34,16 +34,12 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
     """
     logger.info(f"Обработка события учётных данных: {event}")
 
-    # Определяем считыватель по reader_id из события
+    # reader_id теперь логическое имя устройства (entry_reader, exit_reader, qr_reader)
     reader_id = event.reader_id
     readers = devices.get("readers", {})
 
-    # Находим конфигурацию считывателя по label
-    reader_config = None
-    for reader_name, reader_cfg in readers.items():
-        if reader_cfg.get("label") == reader_id:
-            reader_config = reader_cfg
-            break
+    # Находим конфигурацию считывателя по логическому имени
+    reader_config = readers.get(reader_id)
 
     if not reader_config:
         logger.error(f"Считыватель не найден в конфиге: {reader_id}")
