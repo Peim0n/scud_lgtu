@@ -1,4 +1,17 @@
-"""Доменные сервисы."""
+"""
+Доменные сервисы системы СКУД.
+
+Этот модуль определяет сервисы бизнес-логики для работы с доступом и проходами:
+- AccessPolicy: политика доступа для проверки учётных данных
+- PassageTracker: отслеживание проходов для предотвращения двойных проходов
+- CredentialHasher: хеширование учётных данных для сравнения
+
+Классы
+-------
+- AccessPolicy: проверяет учётные данные через кэш доступа и возвращает решение о доступе
+- PassageTracker: отслеживает сессии проходов для предотвращения повторного входа с тем же токеном
+- CredentialHasher: хеширует учётные данные с использованием статического и динамического ключей
+"""
 from typing import Tuple, Optional
 from scud_lgtu.domain.models import Credential, AccessDecision, AuthSession
 from scud_lgtu.domain.enums import TokenTypeEnum, DirectionEnum

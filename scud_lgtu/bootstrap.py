@@ -1,4 +1,15 @@
-"""Bootstrap - контейнер внедрения зависимостей."""
+"""
+Bootstrap - контейнер внедрения зависимостей системы СКУД.
+
+Этот модуль реализует функцию сборки приложения LGTU со всеми зависимостями.
+Функция загружает конфигурацию, создаёт инфраструктурные компоненты (ScudEngine, кэш, хранилище),
+доменные компоненты (TurnstileState, AccessPolicy, PassageTracker) и сервисы приложения,
+затем связывает их в готовое к работе приложение.
+
+Функции
+-------
+- build_application: собрать приложение LGTU со всеми зависимостями
+"""
 import os
 from scud_lgtu.infrastructure.engine import ScudEngine
 from scud_lgtu.infrastructure.cache.access_cache import LocalAccessCache

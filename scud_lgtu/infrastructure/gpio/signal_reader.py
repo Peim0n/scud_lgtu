@@ -1,33 +1,22 @@
 """
-Поток чтения GPIO-сигналов (InputSignalReader).
+Поток чтения GPIO-сигналов (InputSignalReader) системы СКУД.
 
-Полная замена оригинального ``signal_reader.InputSignalReader`` с переходом
-с ``multiprocessing.Process`` на ``threading.Thread``.
+Этот модуль реализует полную замену оригинального signal_reader.InputSignalReader
+с переходом с multiprocessing.Process на threading.Thread. Модуль ожидает
+нарастающий (RISING) и спадающий (FALLING) фронт на нескольких GPIO-линиях,
+измеряет длительность HIGH-импульсов и кладёт InputData в выходную очередь.
 
-Что делает этот модуль
-----------------------
-Ожидает нарастающий (RISING) и спадающий (FALLING) фронт на нескольких
-GPIO-линиях. Измеряет длительность HIGH-импульсов и кладёт ``InputData``
-в выходную очередь.
+Классы
+-------
+- InputData: результат измерения длительности импульса
+- InputSignalReader: поток чтения длительности импульсов на GPIO-линиях
 
-Использование
--------------
-::
-
-    from signal_reader import InputSignalReader, InputData
-
-    SENSORS = {0: 19, 1: 18}  # {logical_id: gpio_offset}
-    t, q, ev = InputSignalReader.start(SENSORS)
-
-    try:
-        while True:
-            data: InputData = q.get(timeout=0.1)  # Таймаут 100 мс для проверки running_event
-            print(f"Датчик {data.sensor_id}, длительность {data.duration:.3f}с")
-    except KeyboardInterrupt:
-        pass
-    finally:
-        ev.clear()
-        t.join(timeout=0.5)  # Таймаут 500 мс для завершения потока
+Методы InputSignalReader
+-------------------------
+- __init__: инициализировать маппинг датчиков и очередь результатов
+- start: запустить поток чтения сигналов
+- stop: остановить поток
+- run: главный цикл чтения сигналов
 """
 
 import threading

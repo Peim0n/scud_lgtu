@@ -1,14 +1,33 @@
 """
-Модели данных, события и хранилище событий (DataTypes).
+Модели данных, события и хранилище событий (DataTypes) системы СКУД.
 
-Объединяет events.py, event_store.py и models.py в один модуль.
+Этот модуль объединяет events.py, event_store.py и models.py в один модуль для
+централизованного управления событийной моделью ScudEngine. Содержит перечисления
+для событий и команд, классы событий и команд, перечисления бизнес-логики,
+модель события прохода и хранилище событий.
 
-Содержит:
-- EventType, EventSource, CommandTarget, CommandAction - перечисления для событий и команд
-- ScudEvent, ScudCommand - классы событий и команд
-- EventTypeEnum, DirectionEnum, TokenTypeEnum, ResultEnum, SeverityEnum - перечисления бизнес-логики
-- PassageEvent - модель события прохода
-- EventStore - хранилище событий
+Классы
+-------
+- EventType: типы событий от hardware-модулей
+- EventSource: источники событий
+- CommandTarget: цели команд от бизнес-логики
+- CommandAction: действия команд
+- ScudEvent: событие от hardware-модуля
+- ScudCommand: команда от бизнес-логики к hardware-модулю
+- EventTypeEnum: перечисление типов событий бизнес-логики
+- DirectionEnum: перечисление направлений прохода
+- TokenTypeEnum: перечисление типов токенов
+- ResultEnum: перечисление результатов прохода
+- SeverityEnum: перечисление уровней серьёзности
+- PassageEvent: модель события прохода
+- EventStore: хранилище событий
+
+Методы EventStore
+------------------
+- __init__: инициализировать хранилище событий
+- append: добавить событие в хранилище
+- flush: выгрузить все события из хранилища
+- clear: очистить хранилище
 """
 
 import threading

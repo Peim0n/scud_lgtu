@@ -1,16 +1,21 @@
 """
-Обработчик последовательного порта и выходных сигналов (SerialHandler).
+Обработчик последовательного порта и выходных сигналов (SerialHandler) системы СКУД.
 
-Объединяет BackgroundSerialReader и OutputSignalWriter в один модуль.
+Этот модуль объединяет BackgroundSerialReader и OutputSignalWriter в один модуль.
+BackgroundSerialReader читает строки из последовательного порта в фоновом потоке
+с переходом с multiprocessing.Process на threading.Thread. OutputSignalWriter
+управляет выходными GPIO-линиями с поддержкой автоматического выключения.
 
-BackgroundSerialReader:
-- Читает строки из последовательного порта в фоновом потоке
-- Переход с multiprocessing.Process на threading.Thread
+Классы
+-------
+- BackgroundSerialReader: читает строки из последовательного порта в фоновом потоке
 
-OutputSignalWriter:
-- Управляет выходными GPIO-линиями
-- Поддерживает автоматическое выключение через заданное время
-- Переход с multiprocessing.Process на threading.Thread
+Методы BackgroundSerialReader
+-----------------------------
+- __init__: инициализировать параметры Serial-порта
+- start: запустить поток чтения
+- stop: остановить поток
+- run: главный цикл чтения из порта
 """
 
 import threading
