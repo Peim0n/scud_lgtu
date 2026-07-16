@@ -46,7 +46,7 @@ class LGTUApplication:
         
         # Domain components
         timings = config.get("timings", {})
-        auth_timeout = timings.get("auth_timeout_s", 30.0)
+        auth_timeout = timings.get("auth_timeout_s", 5.0)
         self._turnstile = TurnstileState(auth_timeout=auth_timeout)
         self._access_policy = AccessPolicy(cache=cache)
         self._passage_tracker = PassageTracker()
