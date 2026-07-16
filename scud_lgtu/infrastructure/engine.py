@@ -105,12 +105,29 @@ class ScudEngine:
         engine.stop()
     """
 
-    def __init__(self, config_path: Optional[str] = None):
-        """Загрузить конфигурацию и подготовить очереди событий/команд."""
-        self._cfg = load_config() if config_path is None else load_config()
-        self._timings: dict[str, float] = self._cfg.get("timings", {})
-        self._event_queue: queue.Queue = queue.Queue(maxsize=timings.get("event_queue_maxsize", 1000))
-        self._cmd_queue: queue.Queue = queue.Queue(maxsize=timings.get("command_queue_maxsize", 100))
+    def __init__(self, config: dict = None, timings: dict = None):
+        """
+        Загрузить конфигурацию и подготовить очереди событий/команд.
+
+        Parameters
+        ----------
+        config : dict, optional
+            Конфигурация (если не передана, загружается из файла)
+        timings : dict, optional
+            Тайминги (если не переданы, берутся из конфига)
+        """
+        if config is None:
+            self._cfg = load_config()
+        else:
+            self._cfg = config
+
+        if timings is None:
+            self._timings: dict[str, float] = self._cfg.get("timings", {})
+        else:
+            self._timings = timings
+
+        self._event_queue: queue.Queue = queue.Queue(maxsize=self._timings.get("event_queue_maxsize", 1000))
+        self._cmd_queue: queue.Queue = queue.Queue(maxsize=self._timings.get("command_queue_maxsize", 100))
 
         self._stop_event = threading.Event()
         self._ctrl: Optional[GpiodPinController] = None

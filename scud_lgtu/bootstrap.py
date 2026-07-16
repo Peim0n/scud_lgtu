@@ -42,14 +42,14 @@ def build_application(config_path: str = None) -> LGTUApplication:
 
     config = load_config(config_path)
 
-    # Load timings
+    # Load timings (нужно до создания ScudEngine)
     timings = config.get("timings", {})
 
     # Load device mapping
     devices = config.get("devices", {})
 
     # Create infrastructure components
-    engine = ScudEngine(config)
+    engine = ScudEngine(config, timings=timings)
 
     # Cache
     cache_path = os.path.join(os.path.dirname(config_path), "local_access.json")
