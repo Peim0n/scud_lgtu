@@ -1,9 +1,13 @@
 """Обработчик событий мультиплексора."""
 from scud_lgtu.domain.events import MuxInputChanged, ButtonPressed, AlarmChanged
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
     """Обработать событие изменения входа мультиплексора."""
+    logger.info(f"handle_mux_input_changed: {event}")
     # Преобразование входа мультиплексора в события домена
     if event.input_name.startswith("button_"):
         # Событие кнопки
@@ -11,11 +15,13 @@ def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
             button_id=event.input_name,
             state=event.state
         )
+        logger.info(f"Publishing ButtonPressed: {button_event}")
         event_bus.publish(button_event)
     elif event.input_name == "alarm":
         # Событие тревоги
         alarm_event = AlarmChanged(
             active=event.state
         )
+        logger.info(f"Publishing AlarmChanged: {alarm_event}")
         event_bus.publish(alarm_event)
     # Другие входы мультиплексора могут обрабатываться аналогично
