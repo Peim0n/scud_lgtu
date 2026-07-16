@@ -54,16 +54,10 @@ class AccessController:
         self._relay_open_duration: float = self._timings.get("relay_open_duration_s", 5.0)
 
         # Состояние индикаторов/пищалок
-        self._indicator_mask: int = 0x0000
+        self._indicator_name: str = ""
+        self._beep_name: str = ""
         self._indicator_time: float = 0.0
         self._indicator_duration: float = self._timings.get("indicator_duration_s", 0.5)
-
-        self._beep_mask: int = 0x0000
-        self._beep_time: float = 0.0
-        self._beep_duration: float = self._timings.get("beep_signal_duration_s", 0.05)
-
-        # Текущее состояние сдвигового регистра
-        self._shift_state: int = 0x0000
 
         self._api: Optional[ApiServer] = None
         self._api_enabled = False
@@ -375,38 +369,16 @@ class AccessController:
     def _open_turnstile(self) -> None:
         """Отправить команду на открытие турникета через сдвиговый регистр."""
         logger.info("Открытие турникета")
-        # REL2 (bit15) для выхода - включить
-        from scud_lgtu.config import load as load_config
-        cfg = load_config()
-        shift_pins = cfg.get("config", {}).get("shift_pins", {})
-        rel2_pin = shift_pins.get("rel2", {}).get("pin", 15)
-        relay_mask = 1 << rel2_pin
-        self._shift_state |= relay_mask
-        self._engine.send_command(
-            ScudCommand(
-                target=CommandTarget.SHIFT,
-                action=CommandAction.WRITE_SHIFT,
-                payload={"value": self._shift_state},
-            )
-        )
+        # REL2 для выхода - включить
+        from scud_lgtu.application.basic_business_logic import set_shift_pins
+        set_shift_pins(self._engine, {"rel2": True})
         self._relay_open_time = time.time()
 
     def _close_turnstile(self) -> None:
         """Выключить реле турникета."""
         logger.info("Закрытие турникета")
-        from scud_lgtu.config import load as load_config
-        cfg = load_config()
-        shift_pins = cfg.get("config", {}).get("shift_pins", {})
-        rel2_pin = shift_pins.get("rel2", {}).get("pin", 15)
-        relay_mask = 1 << rel2_pin
-        self._shift_state &= ~relay_mask
-        self._engine.send_command(
-            ScudCommand(
-                target=CommandTarget.SHIFT,
-                action=CommandAction.WRITE_SHIFT,
-                payload={"value": self._shift_state},
-            )
-        )
+        from scud_lgtu.application.basic_business_logic import set_shift_pins
+        set_shift_pins(self._engine, {"rel2": False})
         self._relay_open_time = 0.0
 
     def _check_relay_timeout(self) -> None:
@@ -418,64 +390,41 @@ class AccessController:
             logger.info("Таймаут реле, выключение")
             self._close_turnstile()
 
-    def _set_indicator(self, indicator_mask: int, beep_mask: int = 0) -> None:
+    def _set_indicator(self, indicator_name: str, beep_name: str = None) -> None:
         """Включить индикатор/пищалку на короткое время."""
-        logger.info("Индикатор: ind=0x%04X, beep=0x%04X, current_state=0x%04X -> new_state=0x%04X",
-                    indicator_mask, beep_mask, self._shift_state, self._shift_state | indicator_mask | beep_mask)
-        self._shift_state |= indicator_mask | beep_mask
-        self._engine.send_command(
-            ScudCommand(
-                target=CommandTarget.SHIFT,
-                action=CommandAction.WRITE_SHIFT,
-                payload={"value": self._shift_state},
-            )
-        )
-        self._indicator_mask = indicator_mask
+        from scud_lgtu.application.basic_business_logic import set_shift_pins
+        pins = {indicator_name: True}
+        if beep_name:
+            pins[beep_name] = True
+        set_shift_pins(self._engine, pins)
+        self._indicator_name = indicator_name
+        self._beep_name = beep_name
         self._indicator_time = time.time()
-        # Пищалка управляется отдельным потоком для последовательности сигналов
         logger.info("Таймеры: ind_time=%.3f", self._indicator_time)
 
-    def _beep_sequence(self, beep_mask: int) -> None:
+    def _beep_sequence(self, beep_name: str = "buz") -> None:
         """
         Последовательность коротких сигналов пищалки при отказе в доступе.
 
         Количество сигналов и длительности берутся из конфигурации.
         """
-        from scud_lgtu.config import load as load_config
-        cfg = load_config()
-        shift_pins = cfg.get("config", {}).get("shift_pins", {})
-        buz_pin = shift_pins.get("buz", {}).get("pin", 8)
-        beep_mask = 1 << buz_pin
+        from scud_lgtu.application.basic_business_logic import set_shift_pins
 
         signal_duration = self._timings.get("deny_beep_duration_s", 0.1)
         signal_pause = self._timings.get("deny_beep_pause_s", 0.1)
         beep_count = self._timings.get("deny_beep_count", 3)
 
-        logger.info("Запуск последовательности пищалки: mask=0x%04X, count=%d", beep_mask, beep_count)
+        logger.info("Запуск последовательности пищалки: name=%s, count=%d", beep_name, beep_count)
 
         for i in range(beep_count):
             if not self._running.is_set():
                 break
             # Включить на signal_duration
-            self._shift_state |= beep_mask
-            self._engine.send_command(
-                ScudCommand(
-                    target=CommandTarget.SHIFT,
-                    action=CommandAction.WRITE_SHIFT,
-                    payload={"value": self._shift_state},
-                )
-            )
+            set_shift_pins(self._engine, {beep_name: True})
             logger.info("Пищалка #%d: включено", i + 1)
             time.sleep(signal_duration)
             # Выключить на signal_pause
-            self._shift_state &= ~beep_mask
-            self._engine.send_command(
-                ScudCommand(
-                    target=CommandTarget.SHIFT,
-                    action=CommandAction.WRITE_SHIFT,
-                    payload={"value": self._shift_state},
-                )
-            )
+            set_shift_pins(self._engine, {beep_name: False})
             logger.info("Пищалка #%d: выключено", i + 1)
             if i < beep_count - 1:  # Не ждать после последнего сигнала
                 time.sleep(signal_pause)
@@ -490,50 +439,31 @@ class AccessController:
         elapsed = time.time() - self._indicator_time
         if elapsed > self._indicator_duration:
             logger.info("Таймаут индикатора: %.3fs > %.3fs, выключение", elapsed, self._indicator_duration)
-            self._shift_state &= ~self._indicator_mask
-            self._engine.send_command(
-                ScudCommand(
-                    target=CommandTarget.SHIFT,
-                    action=CommandAction.WRITE_SHIFT,
-                    payload={"value": self._shift_state},
-                )
-            )
+            from scud_lgtu.application.basic_business_logic import set_shift_pins
+            pins = {self._indicator_name: False}
+            if self._beep_name:
+                pins[self._beep_name] = False
+            set_shift_pins(self._engine, pins)
             self._indicator_time = 0.0
 
     def _set_indicator_for_reader(self, reader: str, result: str, card_data: Optional[str] = None) -> None:
         """Включить индикатор/пищалку для конкретного считывателя."""
-        from scud_lgtu.config import load as load_config
-        cfg = load_config()
-        shift_pins = cfg.get("config", {}).get("shift_pins", {})
-
         if "Wiegand-1" in reader:
             if result == "pass":
-                w1_green_pin = shift_pins.get("w1_green", {}).get("pin", 1)
-                ind_mask = 1 << w1_green_pin
-                beep_mask = 0
+                self._set_indicator("w1_green")
             else:
-                w1_red_pin = shift_pins.get("w1_red", {}).get("pin", 2)
-                ind_mask = 1 << w1_red_pin
-                buz_pin = shift_pins.get("buz", {}).get("pin", 8)
-                beep_mask = 1 << buz_pin
+                self._set_indicator("w1_red", "buz")
         elif "Wiegand-2" in reader:
             if result == "pass":
-                w2_green_pin = shift_pins.get("w2_green", {}).get("pin", 9)
-                ind_mask = 1 << w2_green_pin
-                beep_mask = 0
+                self._set_indicator("w2_green")
             else:
-                w2_red_pin = shift_pins.get("w2_red", {}).get("pin", 10)
-                ind_mask = 1 << w2_red_pin
-                buz_pin = shift_pins.get("buz", {}).get("pin", 8)
-                beep_mask = 1 << buz_pin
+                self._set_indicator("w2_red", "buz")
         else:
             return
 
-        self._set_indicator(ind_mask, beep_mask)
-
-        # Если есть пищалка и это отказ - запустить последовательность синхронно
-        if beep_mask and result == "denied":
-            self._beep_sequence(beep_mask)
+        # Если это отказ - запустить последовательность пищалки синхронно
+        if result == "denied":
+            self._beep_sequence("buz")
 
     def _sync_loop(self) -> None:
         """Периодическая синхронизация с бэкендом."""
