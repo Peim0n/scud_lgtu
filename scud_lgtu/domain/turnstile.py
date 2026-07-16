@@ -20,7 +20,7 @@ class TurnstileStateEnum(str, Enum):
 class TurnstileState:
     """Конечный автомат турникета."""
     
-    def __init__(self, auth_timeout: float = 30.0):
+    def __init__(self, auth_timeout: float = 5.0):
         """Инициализировать состояние турникета."""
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since: Optional[float] = None
@@ -56,7 +56,7 @@ class TurnstileState:
             OutputCommand(name="rel1", state=True),
             OutputCommand(name="w1_green", state=True),
             OutputCommand(name="w1_red", state=False),
-            OutputCommand(name="w1_beep", state=True),
+            OutputCommand(name="buz", state=True),
         ]
         return self._output_commands
     
@@ -72,7 +72,7 @@ class TurnstileState:
             OutputCommand(name="rel2", state=True),
             OutputCommand(name="w2_green", state=True),
             OutputCommand(name="w2_red", state=False),
-            OutputCommand(name="w2_beep", state=True),
+            OutputCommand(name="buz", state=True),
         ]
         return self._output_commands
     
@@ -157,10 +157,7 @@ class TurnstileState:
         
         # Автоматическое выключение бипера после длительности
         if self._beep_since and (now - self._beep_since) > self._beep_duration:
-            if self._current_state == TurnstileStateEnum.ENTRY_OPEN:
-                commands.append(OutputCommand(name="w1_beep", state=False))
-            elif self._current_state == TurnstileStateEnum.EXIT_OPEN:
-                commands.append(OutputCommand(name="w2_beep", state=False))
+            commands.append(OutputCommand(name="buz", state=False))
             self._beep_since = None
         
         return commands

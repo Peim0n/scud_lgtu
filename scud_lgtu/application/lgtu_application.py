@@ -238,11 +238,6 @@ class LGTUApplication:
         # Initialize button states to avoid false edge detection
         self._initialize_button_states()
         
-        # Debounce buttons - ignore initial button states for 2 seconds
-        logger.info("Debouncing buttons for 2 seconds...")
-        time.sleep(2.0)
-        logger.info("Button debounce complete, starting event processing")
-        
         # Get event queue from engine
         event_queue = self._engine.get_event_queue()
         
