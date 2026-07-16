@@ -182,6 +182,35 @@ class LGTUApplication:
         logger.debug(f"Unknown event type: {scud_event.type}")
         return None
     
+    def _initialize_outputs(self) -> None:
+        """Initialize all outputs to safe state (relays closed)."""
+        logger.info("Initializing outputs to safe state")
+        try:
+            pct = self._engine._pct
+            if pct and pct._shift_worker:
+                # Set all relays to closed (False)
+                safe_states = {
+                    "rel1": False,
+                    "rel2": False,
+                    "w1_green": False,
+                    "w1_red": False,
+                    "w2_green": False,
+                    "w2_red": False,
+                    "w1_beep": False,
+                    "w2_beep": False,
+                    "buz": False,
+                    "pult_buzz": False,
+                    "pult_l1": False,
+                    "pult_l2": False,
+                    "pult_l3": False,
+                    "od1": False,
+                    "od2": False,
+                }
+                pct._shift_worker.set_mask(safe_states)
+                logger.info(f"Initialized outputs to safe state: {safe_states}")
+        except Exception as e:
+            logger.error(f"Error initializing outputs: {e}")
+    
     def run(self) -> None:
         """Run the main application loop."""
         logger.info("LGTUApplication: starting")
@@ -189,6 +218,14 @@ class LGTUApplication:
         
         # Start event loop for async operations
         self._start_event_loop()
+        
+        # Initialize outputs to safe state (all relays closed)
+        self._initialize_outputs()
+        
+        # Debounce buttons - ignore initial button states for 2 seconds
+        logger.info("Debouncing buttons for 2 seconds...")
+        time.sleep(2.0)
+        logger.info("Button debounce complete, starting event processing")
         
         # Get event queue from engine
         event_queue = self._engine.get_event_queue()
