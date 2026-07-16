@@ -1,12 +1,12 @@
 """Обработчик событий кнопок."""
-from scud_lgtu.domain.events import ButtonPressed
+from scud_lgtu.domain.events import ButtonPressed, OutputCommandsGenerated
 from scud_lgtu.domain.enums import DirectionEnum
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def handle_button_pressed(event: ButtonPressed, turnstile) -> None:
+def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
     """Обработать событие нажатия кнопки."""
     logger.info(f"handle_button_pressed: {event}")
     if event.button_id == "button_1":
@@ -26,4 +26,8 @@ def handle_button_pressed(event: ButtonPressed, turnstile) -> None:
         commands = turnstile.close()
         logger.info(f"unknown button close commands: {commands}")
     
-    # Применение команд через исполнительный механизм (для реализации)
+    # Публикуем событие с командами для применения
+    if commands:
+        commands_event = OutputCommandsGenerated(commands=commands)
+        logger.info(f"Publishing OutputCommandsGenerated: {commands_event}")
+        event_bus.publish(commands_event)

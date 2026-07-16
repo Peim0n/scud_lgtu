@@ -1,7 +1,7 @@
 """События домена."""
 from dataclasses import dataclass
-from typing import Optional
-from scud_lgtu.domain.models import Credential
+from typing import Optional, List
+from scud_lgtu.domain.models import Credential, OutputCommand
 from scud_lgtu.domain.enums import DirectionEnum
 
 
@@ -44,3 +44,9 @@ class MuxInputChanged:
     """Событие изменения входа мультиплексора."""
     input_name: str
     state: bool
+
+
+@dataclass
+class OutputCommandsGenerated:
+    """Событие генерации команд для выхода."""
+    commands: List[OutputCommand]

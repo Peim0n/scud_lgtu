@@ -78,7 +78,30 @@ class LGTUApplication:
         ))
         self._event_bus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(e, self._event_bus))
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile))
-        self._event_bus.subscribe("ButtonPressed", lambda e: handle_button_pressed(e, self._turnstile))
+        self._event_bus.subscribe("ButtonPressed", lambda e: handle_button_pressed(e, self._turnstile, self._event_bus))
+        self._event_bus.subscribe("OutputCommandsGenerated", lambda e: self._handle_output_commands(e))
+    
+    def _handle_output_commands(self, event) -> None:
+        """Обработать событие с командами для выхода."""
+        from scud_lgtu.domain.events import OutputCommandsGenerated
+        if isinstance(event, OutputCommandsGenerated):
+            logger.info(f"Handling OutputCommandsGenerated: {event.commands}")
+            # Собираем все команды в словарь состояний для сдвигового регистра
+            output_states = {}
+            for cmd in event.commands:
+                logger.info(f"Applying command: {cmd}")
+                output_states[cmd.name] = cmd.state
+            
+            # Отправляем состояния в сдвиговый регистр через PinControllerThread
+            if output_states:
+                try:
+                    # Получаем доступ к PinControllerThread через engine
+                    pct = self._engine._pct
+                    if pct and pct._shift_reg:
+                        pct._shift_reg.set_mask(output_states)
+                        logger.info(f"Sent to shift register: {output_states}")
+                except Exception as e:
+                    logger.error(f"Error sending to shift register: {e}")
     
     def _start_event_loop(self) -> None:
         """Start asyncio event loop in separate thread."""
