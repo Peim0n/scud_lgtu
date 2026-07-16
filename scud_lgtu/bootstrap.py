@@ -23,7 +23,7 @@ from scud_lgtu.config import load as load_config
 
 def build_application(config_path: str = None) -> LGTUApplication:
     """
-    Build LGTU application with all dependencies.
+    Собрать приложение LGTU со всеми зависимостями.
 
     Parameters
     ----------

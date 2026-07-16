@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 
 
 class LGTUApplication:
-    """Main LGTU application implementing clean architecture."""
-    
+    """Основное приложение LGTU, реализующее чистую архитектуру."""
+
     def __init__(
         self,
         engine: ScudEngine,
@@ -42,7 +42,7 @@ class LGTUApplication:
         devices: dict = None
     ):
         """
-        Initialize LGTU application.
+        Инициализировать приложение LGTU.
 
         Parameters
         ----------
