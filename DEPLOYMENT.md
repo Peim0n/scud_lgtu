@@ -4,7 +4,29 @@
 
 ## Настройка на Orange Pi
 
-### 1. Инициализация git репозитория
+### 1. Настройка алиаса sudovenv
+
+Добавьте алиас в `.bashrc` пользователя orangepi:
+
+```bash
+ssh orangepi@orangepi
+nano ~/.bashrc
+```
+
+Добавьте в конец файла:
+
+```bash
+# Алиас для запуска с venv и sudo (для GPIO)
+alias sudovenv='sudo .venv/bin/python3'
+```
+
+Примените изменения:
+
+```bash
+source ~/.bashrc
+```
+
+### 2. Инициализация git репозитория
 
 ```bash
 ssh root@orangepi
@@ -14,7 +36,7 @@ git add .
 git commit -m "Initial commit"
 ```
 
-### 2. Создание bare репозитория
+### 3. Создание bare репозитория
 
 Создайте bare репозиторий для приёма изменений:
 
@@ -23,7 +45,7 @@ cd /opt
 git clone --bare scud_lgtu scud_lgtu.git
 ```
 
-### 3. Настройка post-receive hook
+### 4. Настройка post-receive hook
 
 Создайте хук для автоматического обновления рабочего каталога:
 
@@ -43,6 +65,36 @@ git --git-dir=/opt/scud_lgtu/.git --work-tree=/opt/scud_lgtu checkout -f
 
 ```bash
 chmod +x /opt/scud_lgtu.git/hooks/post-receive
+```
+
+### 5. Настройка прав доступа
+
+Добавьте пользователя orangepi в группу sudo для работы с GPIO:
+
+```bash
+ssh root@orangepi
+usermod -aG sudo orangepi
+```
+
+Настройте sudo без пароля для Python с venv:
+
+```bash
+sudo visudo
+```
+
+Добавьте строку:
+
+```
+orangepi ALL=(ALL) NOPASSWD: /opt/scud_lgtu/.venv/bin/python3
+```
+
+### 6. Создание venv
+
+```bash
+cd /opt/scud_lgtu
+python3 -m venv .venv
+source .venv/bin/activate
+pip install gpiod pyserial pyyaml
 ```
 
 ## Настройка на компьютере разработчика

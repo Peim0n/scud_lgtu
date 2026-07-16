@@ -128,12 +128,15 @@ class LGTUApplication:
             logger.info(f"Card Read event: {event}")
             return event
         elif scud_event.type == EventType.MUX_CHANGED:
-            event = MuxInputChanged(
-                input_name=scud_event.payload.get("input_name", ""),
-                state=scud_event.payload.get("state", 0) == 0
-            )
-            logger.info(f"Mux Input Changed event: {event}")
-            return event
+            # Обработка изменений мультиплексора - payload содержит словарь states
+            states = scud_event.payload.get("states", {})
+            for input_name, state in states.items():
+                event = MuxInputChanged(
+                    input_name=input_name,
+                    state=state == 0  # 0 = активный (low active)
+                )
+                logger.info(f"Mux Input Changed event: {event}")
+                return event
         elif scud_event.type == EventType.SERIAL_DATA:
             # Обработка данных из serial порта (QR-код)
             data = scud_event.payload.get("data", "")
@@ -174,6 +177,9 @@ class LGTUApplication:
                     
                     if domain_event:
                         self._event_bus.publish(domain_event)
+                except queue.Empty:
+                    # Нормальное поведение - очередь пуста
+                    pass
                 except Exception as e:
                     logger.error(f"Error processing event: {e}")
                 
