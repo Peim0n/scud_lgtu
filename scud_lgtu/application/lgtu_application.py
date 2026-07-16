@@ -158,7 +158,7 @@ class LGTUApplication:
             for input_name, state in states.items():
                 event = MuxInputChanged(
                     input_name=input_name,
-                    state=state == 0  # 0 = активный (low active)
+                    state=state == 1  # 1 = активный (high active)
                 )
                 logger.info(f"Mux Input Changed event: {event}")
                 events.append(event)
@@ -267,8 +267,8 @@ class LGTUApplication:
                         try:
                             # Получаем доступ к PinControllerThread через engine
                             pct = self._engine._pct
-                            if pct and pct._shift_reg:
-                                pct._shift_reg.set_mask(output_states)
+                            if pct and pct._shift_worker:
+                                pct._shift_worker.set_mask(output_states)
                                 logger.info(f"Sent to shift register: {output_states}")
                         except Exception as e:
                             logger.error(f"Error sending to shift register: {e}")
