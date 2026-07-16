@@ -286,24 +286,54 @@ def is_alarm_active(event: ScudEvent) -> bool:
 
 # === Типовые сценарии доступа ===
 
-def grant_access(engine, reader: str = "w1", duration: float = 2.0) -> None:
-    """Разрешить доступ: зеленый индикатор + открытие турникета."""
+def grant_access(engine, reader: str = "w1", duration: float = 2.0, indicator_duration: float = 0.5) -> None:
+    """
+    Разрешить доступ: зеленый индикатор + открытие турникета.
+
+    Parameters
+    ----------
+    engine : ScudEngine
+        Движок для управления GPIO
+    reader : str, optional
+        Имя считывателя (по умолчанию "w1")
+    duration : float, optional
+        Общая длительность открытия реле в секундах (по умолчанию 2.0)
+    indicator_duration : float, optional
+        Длительность горения индикатора в секундах (по умолчанию 0.5)
+    """
     set_shift_pins(engine, {f"{reader}_green": True, "rel2": True})
-    time.sleep(0.5)  # Зеленый индикатор горит 0.5 секунды
+    time.sleep(indicator_duration)  # Зеленый индикатор горит indicator_duration секунд
     set_shift_pins(engine, {f"{reader}_green": False})  # Выключаем индикатор, реле остается
-    time.sleep(duration - 0.5)  # Реле остается открытым оставшееся время
+    time.sleep(duration - indicator_duration)  # Реле остается открытым оставшееся время
     set_shift_pins(engine, {"rel2": False})  # Выключаем реле
 
-def deny_access(engine, reader: str = "w1", beep_count: int = 3) -> None:
-    """Отказать в доступе: красный индикатор + 3 быстрых пика."""
+def deny_access(engine, reader: str = "w1", beep_count: int = 3, beep_duration: float = 0.05, beep_pause: float = 0.05, indicator_duration: float = 1.0) -> None:
+    """
+    Отказать в доступе: красный индикатор + быстрые пики.
+
+    Parameters
+    ----------
+    engine : ScudEngine
+        Движок для управления GPIO
+    reader : str, optional
+        Имя считывателя (по умолчанию "w1")
+    beep_count : int, optional
+        Количество писков (по умолчанию 3)
+    beep_duration : float, optional
+        Длительность одного писка в секундах (по умолчанию 0.05)
+    beep_pause : float, optional
+        Пауза между писками в секундах (по умолчанию 0.05)
+    indicator_duration : float, optional
+        Длительность горения индикатора в секундах (по умолчанию 1.0)
+    """
     set_shift_pins(engine, {f"{reader}_red": True})
-    # 3 быстрых пика
-    for _ in range(3):
+    # Быстрые пики
+    for _ in range(beep_count):
         set_shift_pins(engine, {"buz": True})
-        time.sleep(0.05)
+        time.sleep(beep_duration)
         set_shift_pins(engine, {"buz": False})
-        time.sleep(0.05)
-    time.sleep(1.0)
+        time.sleep(beep_pause)
+    time.sleep(indicator_duration)
     set_shift_pins(engine, {f"{reader}_red": False})
 
 
