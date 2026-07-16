@@ -113,35 +113,82 @@ def set_indicator_with_timeout(engine, reader: str = "w1", color: str = "green",
 
 # === Управление пищалкой ===
 
-def beep(engine) -> None:
-    """Короткий сигнал пищалки (BUZ)."""
+def beep(engine, duration: float = 0.05) -> None:
+    """
+    Короткий сигнал пищалки (BUZ).
+
+    Parameters
+    ----------
+    engine : ScudEngine
+        Движок для управления GPIO
+    duration : float, optional
+        Длительность сигнала в секундах (по умолчанию 0.05)
+    """
     set_shift_pins(engine, {"buz": True})
-    time.sleep(0.05)
+    time.sleep(duration)
     set_shift_pins(engine, {"buz": False})
 
-def w1_beep(engine) -> None:
-    """Короткий сигнал пищалки Wiegand 1."""
+def w1_beep(engine, duration: float = 0.05) -> None:
+    """
+    Короткий сигнал пищалки Wiegand 1.
+
+    Parameters
+    ----------
+    engine : ScudEngine
+        Движок для управления GPIO
+    duration : float, optional
+        Длительность сигнала в секундах (по умолчанию 0.05)
+    """
     set_shift_pins(engine, {"w1_beep": True})
-    time.sleep(0.05)
+    time.sleep(duration)
     set_shift_pins(engine, {"w1_beep": False})
 
-def w2_beep(engine) -> None:
-    """Короткий сигнал пищалки Wiegand 2."""
+def w2_beep(engine, duration: float = 0.05) -> None:
+    """
+    Короткий сигнал пищалки Wiegand 2.
+
+    Parameters
+    ----------
+    engine : ScudEngine
+        Движок для управления GPIO
+    duration : float, optional
+        Длительность сигнала в секундах (по умолчанию 0.05)
+    """
     set_shift_pins(engine, {"w2_beep": True})
-    time.sleep(0.05)
+    time.sleep(duration)
     set_shift_pins(engine, {"w2_beep": False})
 
-def pult_beep(engine) -> None:
-    """Короткий сигнал пищалки на пульте."""
+def pult_beep(engine, duration: float = 0.05) -> None:
+    """
+    Короткий сигнал пищалки на пульте.
+
+    Parameters
+    ----------
+    engine : ScudEngine
+        Движок для управления GPIO
+    duration : float, optional
+        Длительность сигнала в секундах (по умолчанию 0.05)
+    """
     set_shift_pins(engine, {"pult_buzz": True})
-    time.sleep(0.05)
+    time.sleep(duration)
     set_shift_pins(engine, {"pult_buzz": False})
 
-def beep_sequence(engine, count: int = 3) -> None:
-    """Последовательность сигналов пищалки (BUZ)."""
+def beep_sequence(engine, count: int = 3, pause: float = 0.1) -> None:
+    """
+    Последовательность сигналов пищалки (BUZ).
+
+    Parameters
+    ----------
+    engine : ScudEngine
+        Движок для управления GPIO
+    count : int, optional
+        Количество сигналов (по умолчанию 3)
+    pause : float, optional
+        Пауза между сигналами в секундах (по умолчанию 0.1)
+    """
     for _ in range(count):
         beep(engine)
-        time.sleep(0.1)
+        time.sleep(pause)
 
 def beep_custom(engine, buzzer: str = "buz", on_time: float = 0.05, off_time: float = 0.05) -> None:
     """Кастомный бип с настраиваемой длительностью."""

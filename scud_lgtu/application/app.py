@@ -432,17 +432,22 @@ class AccessController:
         logger.info("Таймеры: ind_time=%.3f", self._indicator_time)
 
     def _beep_sequence(self, beep_mask: int) -> None:
-        """Последовательность из трёх коротких сигналов пищалки."""
+        """
+        Последовательность коротких сигналов пищалки при отказе в доступе.
+
+        Количество сигналов и длительности берутся из конфигурации.
+        """
         from scud_lgtu.config import load as load_config
         cfg = load_config()
         beep_mask = cfg.get("shift_masks", {}).get("buz", 0x0100)
 
-        signal_duration = self._timings.get("beep_signal_duration_s", 0.05)
-        signal_pause = self._timings.get("beep_signal_pause_s", 0.1)
+        signal_duration = self._timings.get("deny_beep_duration_s", 0.1)
+        signal_pause = self._timings.get("deny_beep_pause_s", 0.1)
+        beep_count = self._timings.get("deny_beep_count", 3)
 
-        logger.info("Запуск последовательности пищалки: mask=0x%04X", beep_mask)
+        logger.info("Запуск последовательности пищалки: mask=0x%04X, count=%d", beep_mask, beep_count)
 
-        for i in range(3):
+        for i in range(beep_count):
             if not self._running.is_set():
                 break
             # Включить на signal_duration
@@ -466,7 +471,7 @@ class AccessController:
                 )
             )
             logger.info("Пищалка #%d: выключено", i + 1)
-            if i < 2:  # Не ждать после последнего сигнала
+            if i < beep_count - 1:  # Не ждать после последнего сигнала
                 time.sleep(signal_pause)
 
         logger.info("Последовательность пищалки завершена")
