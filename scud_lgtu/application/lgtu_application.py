@@ -1,6 +1,7 @@
 """LGTU application - основная логика приложения."""
 import asyncio
 import logging
+import queue
 import threading
 import time
 from typing import Optional
