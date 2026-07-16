@@ -36,6 +36,7 @@ class AccessController:
         cache: Optional[LocalAccessCache] = None,
         store: Optional[EventStore] = None,
         timings: Optional[dict] = None,
+        devices: Optional[dict] = None,
     ):
         """Инициализировать контроллер доступа с кэшем, бэкендом и таймингами."""
         self._engine = engine
@@ -44,6 +45,7 @@ class AccessController:
         self._store = store or EventStore()
         self._qr = QRDecoder()
         self._timings = timings or {}
+        self._devices = devices or {}
 
         # Последнее успешное разрешение прохода
         self._last_auth: Optional[dict] = None
@@ -369,16 +371,41 @@ class AccessController:
     def _open_turnstile(self) -> None:
         """Отправить команду на открытие турникета через сдвиговый регистр."""
         logger.info("Открытие турникета")
-        # REL2 для выхода - включить
+        # Используем конфиг устройств для определения реле
+        relays = self._devices.get("relays", {})
+        # Находим реле для выхода (direction: exit)
+        exit_relay = None
+        for relay_name, cfg in relays.items():
+            if cfg.get("direction") == "exit":
+                exit_relay = cfg.get("label")
+                break
+
+        if not exit_relay:
+            logger.error("Реле для выхода не найдено в конфиге")
+            return
+
         from scud_lgtu.application.basic_business_logic import set_shift_pins
-        set_shift_pins(self._engine, {"rel2": True})
+        set_shift_pins(self._engine, {exit_relay: True})
         self._relay_open_time = time.time()
 
     def _close_turnstile(self) -> None:
         """Выключить реле турникета."""
         logger.info("Закрытие турникета")
+        # Используем конфиг устройств для определения реле
+        relays = self._devices.get("relays", {})
+        # Находим реле для выхода (direction: exit)
+        exit_relay = None
+        for relay_name, cfg in relays.items():
+            if cfg.get("direction") == "exit":
+                exit_relay = cfg.get("label")
+                break
+
+        if not exit_relay:
+            logger.error("Реле для выхода не найдено в конфиге")
+            return
+
         from scud_lgtu.application.basic_business_logic import set_shift_pins
-        set_shift_pins(self._engine, {"rel2": False})
+        set_shift_pins(self._engine, {exit_relay: False})
         self._relay_open_time = 0.0
 
     def _check_relay_timeout(self) -> None:
@@ -448,22 +475,30 @@ class AccessController:
 
     def _set_indicator_for_reader(self, reader: str, result: str, card_data: Optional[str] = None) -> None:
         """Включить индикатор/пищалку для конкретного считывателя."""
-        if "Wiegand-1" in reader:
-            if result == "pass":
-                self._set_indicator("w1_green")
-            else:
-                self._set_indicator("w1_red", "buz")
-        elif "Wiegand-2" in reader:
-            if result == "pass":
-                self._set_indicator("w2_green")
-            else:
-                self._set_indicator("w2_red", "buz")
-        else:
+        # Используем конфиг устройств для определения индикаторов и биперов
+        readers = self._devices.get("readers", {})
+        reader_config = None
+        for reader_name, cfg in readers.items():
+            if cfg.get("label") == reader:
+                reader_config = cfg
+                break
+
+        if not reader_config:
+            logger.error(f"Считыватель не найден в конфиге: {reader}")
             return
 
-        # Если это отказ - запустить последовательность пищалки синхронно
-        if result == "denied":
-            self._beep_sequence("buz")
+        indicator_success = reader_config.get("indicator_success")
+        indicator_fail = reader_config.get("indicator_fail")
+        buzzer = reader_config.get("buzzer")
+
+        if result == "pass" and indicator_success:
+            self._set_indicator(indicator_success)
+        elif result == "denied" and indicator_fail:
+            self._set_indicator(indicator_fail, buzzer)
+
+        # Если это отказ и есть бипер - запустить последовательность пищалки синхронно
+        if result == "denied" and buzzer:
+            self._beep_sequence(buzzer)
 
     def _sync_loop(self) -> None:
         """Периодическая синхронизация с бэкендом."""
