@@ -187,7 +187,24 @@ class LGTUApplication:
                 # Tick turnstile state machine
                 now = time.time()
                 commands = self._turnstile.tick(now)
-                # Apply commands (to be implemented with actuator)
+                # Apply commands to shift register
+                if commands:
+                    # Собираем все команды в словарь состояний для сдвигового регистра
+                    output_states = {}
+                    for cmd in commands:
+                        logger.info(f"Applying command: {cmd}")
+                        output_states[cmd.name] = cmd.state
+                    
+                    # Отправляем состояния в сдвиговый регистр через PinControllerThread
+                    if output_states:
+                        try:
+                            # Получаем доступ к PinControllerThread через engine
+                            pct = self._engine._pct
+                            if pct and pct._shift_reg:
+                                pct._shift_reg.set_mask(output_states)
+                                logger.info(f"Sent to shift register: {output_states}")
+                        except Exception as e:
+                            logger.error(f"Error sending to shift register: {e}")
                 
                 # Tick sync service
                 self._sync_service.tick(now)
