@@ -34,16 +34,16 @@ class EventBus:
         
         for handler in handlers:
             try:
-                # Check if handler is async
-                if asyncio.iscoroutinefunction(handler):
-                    # If we have an event loop, schedule it
+                # Call the handler and check if result is a coroutine
+                result = handler(event)
+                
+                if asyncio.iscoroutine(result):
+                    # If result is a coroutine, schedule it as a task
                     if self._loop and self._loop.is_running():
                         self._loop.call_soon_threadsafe(
-                            lambda h=handler, e=event: asyncio.create_task(h(e))
+                            lambda c=result: asyncio.create_task(c)
                         )
-                else:
-                    # Sync handler - call directly
-                    handler(event)
+                # If result is not a coroutine, it was a sync handler that already executed
             except Exception as e:
                 # Log error but don't crash
                 print(f"Error in event handler: {e}")
