@@ -8,13 +8,16 @@
 import os
 import yaml
 
-# Путь к config.yml — ищем в родительской папке (рядом с корнем проекта)
-_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yml")
 
-
-def load() -> dict:
+def load(config_path: str = None) -> dict:
     """
     Загрузить и нормализовать конфигурацию из config.yml.
+
+    Parameters
+    ----------
+    config_path : str, optional
+        Путь к файлу конфигурации. Если не указан, используется
+        config.yml в директории модуля.
 
     Returns
     -------
@@ -23,7 +26,10 @@ def load() -> dict:
         преобразуется из ``{A0: val, A1: val, ...}`` в список значений,
         отсортированных по ключам, а метки сохраняются в ``addr_labels``.
     """
-    with open(_CONFIG_PATH, "r") as f:
+    if config_path is None:
+        config_path = os.path.join(os.path.dirname(__file__), "config.yml")
+
+    with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
 
     # Нормализуем addr_pins: dict -> list, отсортированный по ключу (A0 < A1 < A2 ...)
