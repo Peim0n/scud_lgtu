@@ -158,7 +158,14 @@ class LGTUApplication:
             )
             # Извлекаем label из reader (например, "serial_Serial-1" -> "Serial-1")
             reader = scud_event.payload.get("reader", "unknown")
-            reader_label = reader.split("_", 1)[1] if "_" in reader else reader
+            if "_" in reader:
+                parts = reader.split("_", 1)
+                if parts[0] in ("wiegand", "serial"):
+                    reader_label = parts[1]
+                else:
+                    reader_label = reader
+            else:
+                reader_label = reader
             event = QrRead(
                 credential=credential,
                 reader_id=reader_label
@@ -173,7 +180,14 @@ class LGTUApplication:
             )
             # Извлекаем label из reader (например, "wiegand_Wiegand-1" -> "Wiegand-1")
             reader = scud_event.payload.get("reader", "unknown")
-            reader_label = reader.split("_", 1)[1] if "_" in reader else reader
+            if "_" in reader:
+                parts = reader.split("_", 1)
+                if parts[0] in ("wiegand", "serial"):
+                    reader_label = parts[1]
+                else:
+                    reader_label = reader
+            else:
+                reader_label = reader
             event = CardRead(
                 credential=credential,
                 reader_id=reader_label

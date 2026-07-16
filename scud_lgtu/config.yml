@@ -67,6 +67,14 @@ devices:
       indicator_fail: "w2_red"       # Индикатор отказа (shift pin name)
       buzzer: "w2_beep"         # Бипер считывателя (shift pin name)
 
+    qr_reader:
+      label: "Serial-1"         # Ссылка на serial label
+      type: "serial"            # Тип: wiegand или serial
+      direction: "entry"        # Роль: entry (вход) или exit (выход)
+      indicator_success: "w1_green"  # Индикатор успеха (shift pin name)
+      indicator_fail: "w1_red"       # Индикатор отказа (shift pin name)
+      buzzer: "w1_beep"         # Бипер считывателя (shift pin name)
+
   # Датчики прохода
   sensors:
     entry_sensor:
