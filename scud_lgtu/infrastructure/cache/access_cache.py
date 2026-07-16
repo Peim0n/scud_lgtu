@@ -31,19 +31,12 @@ logger = logging.getLogger(__name__)
 
 
 class LocalAccessCache:
-    """
-    Локальный кэш разрешений.
-
-    Пока in-memory; в production — SQLite/LevelDB.
-    """
-
     def __init__(
         self,
         path: str | None = None,
         static_key: str | None = None,
         dynamic_key: str | None = None,
     ) -> None:
-        """Загрузить кэш из JSON, если указан путь."""
         self._allowed: dict[str, set[str]] = {}
         self._user_by_token: dict[str, int] = {}
         self._users: dict[int, dict[str, str]] = {}
@@ -54,7 +47,6 @@ class LocalAccessCache:
             self.load_json(path)
 
     def _hash(self, id_type: str, value: str) -> str:
-        """Хешировать идентификатор, если заданы ключи."""
         if self._static_key is None or self._dynamic_key is None:
             return value
         # В кэше бэкенда хранятся хеши вида *_h; raw типы хешируем здесь
@@ -63,7 +55,6 @@ class LocalAccessCache:
         return hash_identifier(value, self._static_key, self._dynamic_key)
 
     def update(self, data: dict[str, Any]) -> None:
-        """Обновить кэш из ответа бэкенда."""
         self._allowed.clear()
         self._user_by_token.clear()
         self._users.clear()
@@ -84,20 +75,12 @@ class LocalAccessCache:
         logger.info("LocalAccessCache обновлён: %s", {k: len(v) for k, v in self._allowed.items()})
 
     def is_allowed(self, id_type: str, token: str) -> Tuple[bool, Optional[int]]:
-        """
-        Проверить, разрешён ли идентификатор.
-
-        Returns
-        -------
-        (allowed, user_id)
-        """
         h = self._hash(id_type, normalize(token))
         allowed = h in self._allowed.get(id_type, set()) or h in self._allowed.get(id_type + "_h", set())
         user_id = self._user_by_token.get(h) if allowed else None
         return allowed, user_id
 
     def add(self, id_type: str, token: str, user_id: Optional[int] = None) -> None:
-        """Добавить идентификатор вручную."""
         h = self._hash(id_type, normalize(token))
         self._allowed.setdefault(id_type, set()).add(h)
         if user_id is not None:
@@ -108,7 +91,6 @@ class LocalAccessCache:
             self.save_json(self._path)
 
     def load_json(self, path: str) -> None:
-        """Загрузить кэш из JSON-файла."""
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         self._allowed.clear()
@@ -139,7 +121,6 @@ class LocalAccessCache:
         logger.info("LocalAccessCache загружен из %s: %s", path, {k: len(v) for k, v in self._allowed.items()})
 
     def save_json(self, path: str) -> None:
-        """Сохранить кэш в JSON-файл."""
         with open(path, "w", encoding="utf-8") as f:
             json.dump(
                 {"users": {str(k): v for k, v in self._users.items()},

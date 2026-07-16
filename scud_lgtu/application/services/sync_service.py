@@ -22,30 +22,25 @@ import time
 
 
 class SyncService:
-    """Сервис синхронизации с бэкендом."""
-    
     def __init__(self, backend: BackendGateway, event_log: EventLog, sync_interval: float = 60.0):
-        """Инициализировать сервис синхронизации."""
         self._backend = backend
         self._event_log = event_log
         self._sync_interval = sync_interval
         self._last_sync = 0.0
-    
+
     def tick(self, now: float) -> None:
-        """Периодический тик для синхронизации."""
         if now - self._last_sync >= self._sync_interval:
             self._sync()
             self._last_sync = now
-    
+
     def _sync(self) -> None:
-        """Выполнить синхронизацию."""
         # Выгрузка событий
         events = self._event_log.flush()
-        
+
         if events and self._backend.is_online():
             # Отправка событий на бэкенд
             self._backend.send_events(events)
-        
+
         # Обновление списка доступа если бэкенд доступен
         if self._backend.is_online():
             access_list = self._backend.get_access_list()
