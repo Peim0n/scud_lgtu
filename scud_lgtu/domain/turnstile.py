@@ -25,7 +25,16 @@ class TurnstileState:
     """Конечный автомат турникета."""
     
     def __init__(self, auth_timeout: float = 5.0, timings: dict = None):
-        """Инициализировать состояние турникета."""
+        """
+        Инициализировать состояние турникета.
+
+        Parameters
+        ----------
+        auth_timeout : float
+            Время действия авторизации в секундах (по умолчанию 5.0)
+        timings : dict, optional
+            Словарь таймингов из конфигурации. Если None, используются дефолтные значения.
+        """
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since: Optional[float] = None
         self._alarm_since: Optional[float] = None
@@ -36,13 +45,13 @@ class TurnstileState:
         # Тайминги из конфига или дефолтные значения
         if timings is None:
             timings = {}
-        self._beep_duration = timings.get("beep_signal_duration_s", 0.1)
-        self._alarm_beep_cycle = timings.get("alarm_beep_on_duration_s", 0.5) + timings.get("alarm_beep_off_duration_s", 0.5)
-        self._deny_beep_duration = timings.get("deny_beep_duration_s", 0.1)
-        self._deny_beep_pause = timings.get("deny_beep_pause_s", 0.1)
-        self._deny_beep_total = timings.get("deny_beep_count", 3)
-        self._open_beep_duration = timings.get("open_beep_duration_s", 0.1)
-        self._indicator_duration = timings.get("indicator_duration_s", 2.0)
+        self._beep_duration = timings.get("beep_signal_duration_s", 0.1)  # Длительность сигнала бипера
+        self._alarm_beep_cycle = timings.get("alarm_beep_on_duration_s", 0.5) + timings.get("alarm_beep_off_duration_s", 0.5)  # Полный цикл тревоги
+        self._deny_beep_duration = timings.get("deny_beep_duration_s", 0.1)  # Длительность писка при отказе
+        self._deny_beep_pause = timings.get("deny_beep_pause_s", 0.1)  # Пауза между писками при отказе
+        self._deny_beep_total = timings.get("deny_beep_count", 3)  # Количество писков при отказе
+        self._open_beep_duration = timings.get("open_beep_duration_s", 0.1)  # Длительность писка при открытии
+        self._indicator_duration = timings.get("indicator_duration_s", 2.0)  # Длительность индикатора
         
         self._alarm_beep_since: Optional[float] = None
         self._alarm_beep_on = False

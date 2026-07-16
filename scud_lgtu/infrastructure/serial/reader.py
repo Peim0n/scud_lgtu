@@ -54,7 +54,20 @@ class BackgroundSerialReader:
     """
 
     def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 115200, timeout: float = 0.05, retry_delay: float = 1.0):
-        """Инициализировать параметры Serial-порта."""
+        """
+        Инициализировать параметры Serial-порта.
+
+        Parameters
+        ----------
+        port : str
+            Путь к устройству (например, '/dev/ttyUSB0', '/dev/ttyS1')
+        baudrate : int
+            Скорость передачи данных (например, 9600, 115200)
+        timeout : float
+            Таймаут чтения одной строки в секундах
+        retry_delay : float
+            Задержка перед повторной попыткой при ошибке (секунды)
+        """
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout

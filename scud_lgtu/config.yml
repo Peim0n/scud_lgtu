@@ -1,46 +1,50 @@
 # ── Сдвиговый регистр ──
+# Управляет выходными сигналами: реле, индикаторы, биперы
 shift:
-  ser_data: PA6
-  ser_clk:  PA19
-  ser_latch: PA7
-  reg_len:  16       # разрядность (бит)
+  ser_data: PA6      # Пин данных (SER)
+  ser_clk:  PA19     # Пин тактового сигнала (SRCLK)
+  ser_latch: PA7     # Пин защелки (RCLK)
+  reg_len:  16       # Разрядность сдвигового регистра (бит)
 
 # ── Мультиплексор ──
+# Мультиплексирует входные сигналы: датчики, кнопки, тревога
 mux:
   addr_pins:
-    A0: PA6
-    A1: PA11
-    A2: PA12
-  input_pin: PL11     # пин чтения данных
+    A0: PA6          # Адресный пин 0
+    A1: PA11         # Адресный пин 1
+    A2: PA12         # Адресный пин 2
+  input_pin: PL11    # Пин чтения данных с мультиплексора
 
 # ── Wiegand-считыватели ──
+# Считыватели карт с протоколом Wiegand
 # Имена пинов в формате PA<N>, PG<N>, PL<N> единообразно со всем конфигом.
 # encrypted: true  — если считыватель передаёт зашифрованные данные.
 # decrypt_key: ... — ключ/секрет для расшифровки (алгоритм задаётся в коде).
 wiegand:
   - label: Wiegand-1
-    d0: PA10      # DATA0 (GPIO)
-    d1: PA2       # DATA1 (GPIO)
+    d0: PA10         # DATA0 (GPIO)
+    d1: PA2          # DATA1 (GPIO)
     type: era_mf_64_hash
     encrypted: false
     # decrypt_key: ""
 
   - label: Wiegand-2
-    d0: PA3       # DATA0 (GPIO)
-    d1: PA18      # DATA1 (GPIO)
+    d0: PA3          # DATA0 (GPIO)
+    d1: PA18         # DATA1 (GPIO)
     type: era_mf_64_hash
     encrypted: false
     # decrypt_key: ""
 
 # ── Серийные порты ──
+# Для QR-считывателей и других устройств с последовательным интерфейсом
 serial:
   - label: Serial-1
     port: /dev/ttyS1
-    baud: 115200
+    baud: 115200     # Скорость передачи (baud)
 
   - label: Serial-2
     port: /dev/ttyS2
-    baud: 115200
+    baud: 115200     # Скорость передачи (baud)
 
 # ── Мапинг входов мультиплексора и пинов сдвигового регистра ──
 # Бизнес-логика использует эти имена для работы с датчиками и выходами

@@ -21,13 +21,13 @@ GPIO-линиях. Измеряет длительность HIGH-импульс
 
     try:
         while True:
-            data: InputData = q.get(timeout=0.1)
+            data: InputData = q.get(timeout=0.1)  # Таймаут 100 мс для проверки running_event
             print(f"Датчик {data.sensor_id}, длительность {data.duration:.3f}с")
     except KeyboardInterrupt:
         pass
     finally:
         ev.clear()
-        t.join(timeout=0.5)
+        t.join(timeout=0.5)  # Таймаут 500 мс для завершения потока
 """
 
 import threading

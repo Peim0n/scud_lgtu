@@ -278,16 +278,23 @@ class LGTUController:
         self.alarm_thread.start()
     
     def _alarm_indication_loop(self) -> None:
-        """Цикл индикации пожарной тревоги."""
+        """
+        Цикл индикации пожарной тревоги.
+        
+        Мигает реле, индикаторами и бипером с периодом 1 секунда (0.5 сек ON, 0.5 сек OFF).
+        """
+        alarm_on_duration = 0.5  # Длительность включения (секунды)
+        alarm_off_duration = 0.5  # Длительность выключения (секунды)
+        
         while self.alarm_active:
             set_shift_pins(self.engine, {"rel2": True, "w1_red": True, "buz": True, "w1_beep": True, "w2_beep": True})
-            time.sleep(0.5)
+            time.sleep(alarm_on_duration)
             
             if not self.alarm_active:
                 break
                 
             set_shift_pins(self.engine, {"rel2": True, "w1_red": False, "buz": False, "w1_beep": False, "w2_beep": False})
-            time.sleep(0.5)
+            time.sleep(alarm_off_duration)
     
     def handle_button_1(self) -> None:
         """Обработка кнопки 1 - открыть на вход (rel1)."""
