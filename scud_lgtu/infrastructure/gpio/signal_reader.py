@@ -65,7 +65,7 @@ class InputSignalReader:
     ----------------
     * RISING (или LOW→HIGH): запомнить время начала в ``active_pulses[offset]``.
     * FALLING (или HIGH→LOW): вычислить длительность = end - start, отправить в очередь.
-    * Первые 500 мс после старта игнорируются (подавление дребезга при инициализации).
+    * Первые N мс после старта игнорируются (подавление дребезга при инициализации).
 
     Parameters
     ----------
@@ -76,6 +76,10 @@ class InputSignalReader:
     output_queue : queue.Queue
         Очередь для передачи ``InputData`` в главный поток.
     running_event : threading.Event, optional
+    debounce_time : float, optional
+        Время подавления дребезга при инициализации (с). По умолчанию 0.5 с.
+    event_timeout : float, optional
+        Таймаут ожидания событий (с). По умолчанию 0.1 с.
         Событие работы. Если None — создаётся и устанавливается автоматически.
     """
 
@@ -85,6 +89,8 @@ class InputSignalReader:
         sensor_offsets: Optional[Dict[int, int]] = None,
         output_queue: Optional[Queue] = None,
         running_event: Optional[threading.Event] = None,
+        debounce_time: float = 0.5,
+        event_timeout: float = 0.1,
     ):
         """Инициализировать маппинг датчиков и очередь результатов."""
         self.chip_path = chip_path
@@ -93,6 +99,8 @@ class InputSignalReader:
         self._gpio_to_id: Dict[int, int] = {v: k for k, v in self.sensor_offsets.items()}
         self.output_queue = output_queue
         self.running = running_event if running_event else threading.Event()
+        self._debounce_time = debounce_time
+        self._event_timeout = event_timeout
 
         # Текущие незакрытые импульсы: gpio_offset → time начала
         self._active_pulses: Dict[int, float] = {}
@@ -142,11 +150,11 @@ class InputSignalReader:
             startup_time = time.time()
 
             while self.running.is_set():
-                # Ждём события не дольше 100 мс, чтобы проверять running_event
-                if self._request.wait_edge_events(datetime.timedelta(seconds=0.1)):
+                # Ждём события не дольше configured timeout, чтобы проверять running_event
+                if self._request.wait_edge_events(datetime.timedelta(seconds=self._event_timeout)):
                     for event in self._request.read_edge_events():
-                        # Игнорируем события в первые 500 мс (шум при инициализации)
-                        if time.time() - startup_time < 0.5:
+                        # Игнорируем события в первые N мс (шум при инициализации)
+                        if time.time() - startup_time < self._debounce_time:
                             continue
 
                         # Время события в секундах (timestamp_ns — аппаратный таймер)

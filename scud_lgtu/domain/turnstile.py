@@ -24,7 +24,7 @@ class TurnstileStateEnum(str, Enum):
 class TurnstileState:
     """Конечный автомат турникета."""
     
-    def __init__(self, auth_timeout: float = 5.0):
+    def __init__(self, auth_timeout: float = 5.0, timings: dict = None):
         """Инициализировать состояние турникета."""
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since: Optional[float] = None
@@ -32,10 +32,19 @@ class TurnstileState:
         self._auth_timeout = auth_timeout
         self._output_commands: List[OutputCommand] = []
         self._beep_since: Optional[float] = None
-        self._beep_duration = 0.1  # 100ms beep duration
+        
+        # Тайминги из конфига или дефолтные значения
+        if timings is None:
+            timings = {}
+        self._beep_duration = timings.get("beep_signal_duration_s", 0.1)
+        self._alarm_beep_cycle = timings.get("alarm_beep_on_duration_s", 0.5) + timings.get("alarm_beep_off_duration_s", 0.5)
+        self._deny_beep_duration = timings.get("deny_beep_duration_s", 0.1)
+        self._deny_beep_pause = timings.get("deny_beep_pause_s", 0.1)
+        self._deny_beep_total = timings.get("deny_beep_count", 3)
+        self._open_beep_duration = timings.get("open_beep_duration_s", 0.1)
+        
         self._alarm_beep_since: Optional[float] = None
         self._alarm_beep_on = False
-        self._alarm_beep_cycle = 0.5  # 0.5 сек on, 0.5 сек off
         self._open_task: Optional[asyncio.Task] = None  # Активная задача открытия
         self._deny_beep_task: Optional[asyncio.Task] = None  # Активная задача deny beep
     
@@ -133,23 +142,23 @@ class TurnstileState:
         self._deny_beep_task = asyncio.current_task()
         
         try:
-            for i in range(3):
+            for i in range(self._deny_beep_total):
                 # Включить бипер
                 commands = [OutputCommand(name="buz", state=True)]
                 event_bus.publish(OutputCommandsGenerated(commands=commands))
                 logger.info(f"deny_beep: beep {i+1} ON")
                 
-                # Подождать 100ms
-                await asyncio.sleep(0.1)
+                # Подождать configured duration
+                await asyncio.sleep(self._deny_beep_duration)
                 
                 # Выключить бипер
                 commands = [OutputCommand(name="buz", state=False)]
                 event_bus.publish(OutputCommandsGenerated(commands=commands))
                 logger.info(f"deny_beep: beep {i+1} OFF")
                 
-                # Подождать 100ms перед следующим писком
-                if i < 2:  # Не ждать после последнего писка
-                    await asyncio.sleep(0.1)
+                # Подождать configured pause перед следующим писком
+                if i < self._deny_beep_total - 1:  # Не ждать после последнего писка
+                    await asyncio.sleep(self._deny_beep_pause)
             
             logger.info("deny_beep: sequence completed")
         except asyncio.CancelledError:
@@ -184,8 +193,8 @@ class TurnstileState:
             event_bus.publish(OutputCommandsGenerated(commands=commands))
             logger.info(f"open_entry: opened entry")
             
-            # Выключить бипер через 100ms
-            await asyncio.sleep(0.1)
+            # Выключить бипер через configured duration
+            await asyncio.sleep(self._open_beep_duration)
             commands = [OutputCommand(name="buz", state=False)]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
             logger.info(f"open_entry: beep off")
