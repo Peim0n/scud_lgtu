@@ -97,8 +97,8 @@ class LGTUApplication:
                 try:
                     # Получаем доступ к PinControllerThread через engine
                     pct = self._engine._pct
-                    if pct and pct._shift_reg:
-                        pct._shift_reg.set_mask(output_states)
+                    if pct and pct._shift_worker:
+                        pct._shift_worker.set_mask(output_states)
                         logger.info(f"Sent to shift register: {output_states}")
                 except Exception as e:
                     logger.error(f"Error sending to shift register: {e}")
