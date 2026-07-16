@@ -5,6 +5,9 @@ from typing import List, Optional
 from time import time
 from scud_lgtu.domain.models import OutputCommand
 from scud_lgtu.domain.enums import DirectionEnum
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TurnstileStateEnum(str, Enum):
@@ -202,25 +205,32 @@ class TurnstileState:
             cycle_duration = self._deny_beep_duration + self._deny_beep_pause
             beep_start = self._deny_beep_count * cycle_duration
             
+            logger.debug(f"deny_beep: count={self._deny_beep_count}, elapsed={elapsed:.3f}, beep_start={beep_start:.3f}, current_state={self._deny_beep_state}")
+            
             target_state = None
             if elapsed >= beep_start and elapsed < beep_start + self._deny_beep_duration:
                 # Включить бипер
                 target_state = True
+                logger.debug(f"deny_beep: target_state=True (beep {self._deny_beep_count + 1} ON)")
             elif elapsed >= beep_start + self._deny_beep_duration and elapsed < (self._deny_beep_count + 1) * cycle_duration:
                 # Выключить бипер
                 target_state = False
+                logger.debug(f"deny_beep: target_state=False (beep {self._deny_beep_count + 1} OFF)")
             
             # Отправляем команду только если состояние изменилось
             if target_state is not None and target_state != self._deny_beep_state:
                 self._deny_beep_state = target_state
                 commands.append(OutputCommand(name="buz", state=target_state))
+                logger.info(f"deny_beep: sending buz={target_state} for beep {self._deny_beep_count + 1}")
             
             # Переход к следующему писку
             if elapsed >= (self._deny_beep_count + 1) * cycle_duration:
                 self._deny_beep_count += 1
+                logger.debug(f"deny_beep: advanced to count={self._deny_beep_count}")
                 if self._deny_beep_count >= self._deny_beep_total:
                     self._deny_beep_since = None
                     self._deny_beep_state = False
+                    logger.info(f"deny_beep: sequence completed")
         
         return commands
     
