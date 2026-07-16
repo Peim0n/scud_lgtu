@@ -241,7 +241,9 @@ class TurnstileState:
             if elapsed >= (self._deny_beep_count + 1) * cycle_duration:
                 self._deny_beep_count += 1
                 self._deny_beep_state = False  # Сбросить состояние для следующего писка
-                logger.debug(f"deny_beep: advanced to count={self._deny_beep_count}, state reset")
+                # Сдвигаем время начала, чтобы beep_start для следующего писка был корректным
+                self._deny_beep_since = now - self._deny_beep_count * cycle_duration
+                logger.debug(f"deny_beep: advanced to count={self._deny_beep_count}, state reset, time adjusted")
                 if self._deny_beep_count >= self._deny_beep_total:
                     self._deny_beep_since = None
                     logger.info(f"deny_beep: sequence completed")
