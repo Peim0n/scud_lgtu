@@ -38,33 +38,52 @@ class LGTUApplication:
         cache: LocalAccessCache,
         store: EventStore,
         backend: BackendClient,
-        config: dict
+        config: dict,
+        devices: dict = None
     ):
-        """Initialize LGTU application."""
+        """
+        Initialize LGTU application.
+
+        Parameters
+        ----------
+        engine : ScudEngine
+            Движок для управления оборудованием
+        cache : LocalAccessCache
+            Кэш доступа
+        store : EventStore
+            Хранилище событий
+        backend : BackendClient
+            Клиент бэкенда
+        config : dict
+            Конфигурация
+        devices : dict, optional
+            Мапинг устройств из конфига
+        """
         self._engine = engine
         self._config = config
+        self._devices = devices or {}
         self._running = False
-        
+
         # Domain components
         timings = config.get("timings", {})
         auth_timeout = timings.get("auth_timeout_s", 5.0)
         self._turnstile = TurnstileState(auth_timeout=auth_timeout, timings=timings)
         self._access_policy = AccessPolicy(cache=cache)
         self._passage_tracker = PassageTracker()
-        
+
         # Infrastructure adapters
         self._sound_player = SoundPlayer()
-        
+
         # Application services
         self._event_bus = EventBus(turnstile=self._turnstile)
         self._access_service = AccessService(cache)
         self._passage_service = PassageService(store)
         self._sync_service = SyncService(backend, store, sync_interval=timings.get("backend_sync_interval_s", 60.0))
-        
+
         # Event loop for async operations
         self._loop = None
         self._loop_thread = None
-        
+
         # Register handlers
         self._register_handlers()
     
@@ -72,17 +91,17 @@ class LGTUApplication:
         """Register event handlers."""
         # Register domain event handlers
         self._event_bus.subscribe("QrRead", lambda e: handle_qr_read(
-            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus
+            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus, self._devices
         ))
         self._event_bus.subscribe("CardRead", lambda e: handle_card_read(
-            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus
+            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus, self._devices
         ))
         self._event_bus.subscribe("PassageDetected", lambda e: handle_passage_detected(
-            e, self._turnstile, self._passage_tracker, self._event_bus, self._passage_service._event_log
+            e, self._turnstile, self._passage_tracker, self._event_bus, self._passage_service._event_log, self._devices
         ))
         self._event_bus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(e, self._event_bus))
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile, self._event_bus))
-        self._event_bus.subscribe("ButtonPressed", lambda e: handle_button_pressed(e, self._turnstile, self._event_bus))
+        self._event_bus.subscribe("ButtonPressed", lambda e: handle_button_pressed(e, self._turnstile, self._event_bus, self._devices))
         self._event_bus.subscribe("OutputCommandsGenerated", lambda e: self._handle_output_commands(e))
     
     def _handle_output_commands(self, event) -> None:

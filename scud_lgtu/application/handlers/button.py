@@ -3,9 +3,6 @@
 
 Обрабатывает события нажатия кнопок управления турникетом.
 Кнопки работают на LOW: 1 = покой, 0 = нажатие.
-- button_1: открыть на вход
-- button_2: открыть на выход
-- button_3: закрыть турникет
 """
 from scud_lgtu.domain.events import ButtonPressed, OutputCommandsGenerated
 from scud_lgtu.domain.enums import DirectionEnum
@@ -14,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
+def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: dict) -> None:
     """
     Обработать событие нажатия кнопки.
 
@@ -26,6 +23,8 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
         Состояние турникета для управления
     event_bus : EventBus
         Шина событий для публикации команд
+    devices : dict
+        Мапинг устройств из конфига
 
     Note
     ----
@@ -39,50 +38,40 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus) -> None:
     # При нажатии (state=False) открываем турникет
     # При отжатии (state=True) запускаем таймер закрытия
 
-    if event.button_id == "button_1":
-        if not event.state:
-            # Нажатие - открыть для входа
+    # Получаем конфигурацию кнопок из devices
+    buttons = devices.get("buttons", {})
+
+    # Находим конфигурацию кнопки по label
+    button_config = None
+    for button_name, button_cfg in buttons.items():
+        if button_cfg.get("label") == event.button_id:
+            button_config = button_cfg
+            break
+
+    if not button_config:
+        logger.error(f"Кнопка не найдена в конфиге: {event.button_id}")
+        return
+
+    action = button_config.get("action", "close")
+
+    if not event.state:
+        # Нажатие - выполнить действие
+        if action == "open_entry":
             commands = turnstile.open_entry()
-            logger.info(f"button_1 pressed, open_entry commands: {commands}")
-            if commands:
-                commands_event = OutputCommandsGenerated(commands=commands)
-                logger.info(f"Publishing OutputCommandsGenerated: {commands_event}")
-                event_bus.publish(commands_event)
-        else:
-            # Отжатие - запустить таймер закрытия
-            turnstile.start_open_timer()
-            logger.info(f"button_1 released, started open timer")
-
-    elif event.button_id == "button_2":
-        if not event.state:
-            # Нажатие - открыть для выхода
+            logger.info(f"{event.button_id} pressed, open_entry commands: {commands}")
+        elif action == "open_exit":
             commands = turnstile.open_exit()
-            logger.info(f"button_2 pressed, open_exit commands: {commands}")
-            if commands:
-                commands_event = OutputCommandsGenerated(commands=commands)
-                logger.info(f"Publishing OutputCommandsGenerated: {commands_event}")
-                event_bus.publish(commands_event)
-        else:
-            # Отжатие - запустить таймер закрытия
-            turnstile.start_open_timer()
-            logger.info(f"button_2 released, started open timer")
-
-    elif event.button_id == "button_3":
-        if not event.state:
-            # Нажатие - закрыть турникет
+            logger.info(f"{event.button_id} pressed, open_exit commands: {commands}")
+        else:  # close
             commands = turnstile.close()
-            logger.info(f"button_3 pressed, close commands: {commands}")
-            if commands:
-                commands_event = OutputCommandsGenerated(commands=commands)
-                logger.info(f"Publishing OutputCommandsGenerated: {commands_event}")
-                event_bus.publish(commands_event)
+            logger.info(f"{event.button_id} pressed, close commands: {commands}")
 
+        if commands:
+            commands_event = OutputCommandsGenerated(commands=commands)
+            logger.info(f"Publishing OutputCommandsGenerated: {commands_event}")
+            event_bus.publish(commands_event)
     else:
-        # Неизвестная кнопка - закрыть турникет при нажатии
-        if not event.state:
-            commands = turnstile.close()
-            logger.info(f"unknown button pressed, close commands: {commands}")
-            if commands:
-                commands_event = OutputCommandsGenerated(commands=commands)
-                logger.info(f"Publishing OutputCommandsGenerated: {commands_event}")
-                event_bus.publish(commands_event)
+        # Отжатие - запустить таймер закрытия (только для open_entry и open_exit)
+        if action in ("open_entry", "open_exit"):
+            turnstile.start_open_timer()
+            logger.info(f"{event.button_id} released, started open timer")

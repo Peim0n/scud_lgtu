@@ -46,6 +46,66 @@ serial:
     port: /dev/ttyS2
     baud: 115200     # Скорость передачи (baud)
 
+# ── Устройства ──
+# Описание физических устройств и их ролей в системе
+devices:
+  # Считыватели (Wiegand и Serial/QR)
+  readers:
+    entry_reader:
+      label: "Wiegand-1"        # Ссылка на wiegand label
+      type: "wiegand"           # Тип: wiegand или serial
+      direction: "entry"        # Роль: entry (вход) или exit (выход)
+      indicator_success: "w1_green"  # Индикатор успеха (shift pin name)
+      indicator_fail: "w1_red"       # Индикатор отказа (shift pin name)
+      buzzer: "w1_beep"         # Бипер считывателя (shift pin name)
+
+    exit_reader:
+      label: "Wiegand-2"        # Ссылка на wiegand label
+      type: "wiegand"           # Тип: wiegand или serial
+      direction: "exit"         # Роль: entry (вход) или exit (выход)
+      indicator_success: "w2_green"  # Индикатор успеха (shift pin name)
+      indicator_fail: "w2_red"       # Индикатор отказа (shift pin name)
+      buzzer: "w2_beep"         # Бипер считывателя (shift pin name)
+
+  # Датчики прохода
+  sensors:
+    entry_sensor:
+      label: "sensor_1"        # Имя из mux_inputs
+      direction: "entry"        # Роль: entry (вход) или exit (выход)
+
+    exit_sensor:
+      label: "sensor_2"        # Имя из mux_inputs
+      direction: "exit"         # Роль: entry (вход) или exit (выход)
+
+  # Кнопки управления
+  buttons:
+    entry_button:
+      label: "button_1"         # Имя из mux_inputs
+      action: "open_entry"      # Действие: open_entry, open_exit, close
+
+    exit_button:
+      label: "button_2"         # Имя из mux_inputs
+      action: "open_exit"       # Действие: open_entry, open_exit, close
+
+    close_button:
+      label: "button_3"         # Имя из mux_inputs
+      action: "close"           # Действие: open_entry, open_exit, close
+
+  # Реле турникета
+  relays:
+    entry_relay:
+      label: "rel1"             # Имя из shift_pins
+      direction: "entry"        # Роль: entry (вход) или exit (выход)
+
+    exit_relay:
+      label: "rel2"             # Имя из shift_pins
+      direction: "exit"         # Роль: entry (вход) или exit (выход)
+
+  # Общие биперы
+  buzzers:
+    main_buzzer:
+      label: "buz"              # Имя из shift_pins
+
 # ── Мапинг входов мультиплексора и пинов сдвигового регистра ──
 # Бизнес-логика использует эти имена для работы с датчиками и выходами
 config:

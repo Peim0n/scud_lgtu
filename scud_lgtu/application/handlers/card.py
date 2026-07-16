@@ -14,7 +14,7 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 
-async def handle_card_read(event: CardRead, turnstile, access_policy, passage_tracker, event_bus) -> None:
+async def handle_card_read(event: CardRead, turnstile, access_policy, passage_tracker, event_bus, devices: dict) -> None:
     """
     Обработать событие считывания карты.
 
@@ -30,6 +30,8 @@ async def handle_card_read(event: CardRead, turnstile, access_policy, passage_tr
         Трекер проходов для предотвращения двойных проходов
     event_bus : EventBus
         Шина событий для публикации команд
+    devices : dict
+        Мапинг устройств из конфига
     """
     # Создание сессии авторизации с префиксом cardid
     session = AuthSession(
@@ -46,5 +48,5 @@ async def handle_card_read(event: CardRead, turnstile, access_policy, passage_tr
         passage_tracker=passage_tracker,
         event_bus=event_bus,
         session=session,
-        reader="w1"
+        devices=devices
     )

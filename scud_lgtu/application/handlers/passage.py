@@ -12,7 +12,7 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 
-async def handle_passage_detected(event: PassageDetected, turnstile, passage_tracker, event_bus, event_log) -> None:
+async def handle_passage_detected(event: PassageDetected, turnstile, passage_tracker, event_bus, event_log, devices: dict) -> None:
     """
     Обработать событие обнаружения прохода.
 
@@ -28,6 +28,8 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         Шина событий для публикации команд
     event_log : EventLogAdapter
         Адаптер лога событий для записи проходов
+    devices : dict
+        Мапинг устройств из конфига
 
     Note
     ----
@@ -42,6 +44,22 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
     duration = event.duration
 
     logger.info(f"Проход: {zone}, направление={direction}, длительность={duration:.3f}s")
+
+    # Получаем конфигурацию датчиков из devices
+    sensors = devices.get("sensors", {})
+
+    # Находим конфигурацию датчика по label
+    sensor_config = None
+    for sensor_name, sensor_cfg in sensors.items():
+        if sensor_cfg.get("label") == zone:
+            sensor_config = sensor_cfg
+            break
+
+    if not sensor_config:
+        logger.error(f"Датчик не найден в конфиге: {zone}")
+        return
+
+    sensor_direction = sensor_config.get("direction", "entry")
 
     if direction == "blockage":
         # Заслон - держать реле открытым

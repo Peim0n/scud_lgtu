@@ -22,60 +22,78 @@ from scud_lgtu.config import load as load_config
 
 
 def build_application(config_path: str = None) -> LGTUApplication:
-    """Build LGTU application with all dependencies."""
+    """
+    Build LGTU application with all dependencies.
+
+    Parameters
+    ----------
+    config_path : str, optional
+        Путь к файлу конфигурации
+
+    Returns
+    -------
+    LGTUApplication
+        Сконфигурированное приложение
+    """
     # Load configuration
     if config_path is None:
         script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         config_path = os.path.join(script_dir, "config.yml")
-    
+
     config = load_config(config_path)
-    
+
+    # Load timings
+    timings = config.get("timings", {})
+
+    # Load device mapping
+    devices = config.get("devices", {})
+
     # Create infrastructure components
     engine = ScudEngine(config)
-    
+
     # Cache
     cache_path = os.path.join(os.path.dirname(config_path), "local_access.json")
     cache = LocalAccessCache(path=cache_path)
-    
+
     # Event store
     store = EventStore()
-    
+
     # Backend
     backend = BackendClient()
-    
+
     # Sound player
     sound_player = SoundPlayer(timings=timings)
-    
+
     # Create adapters
     access_repository = AccessRepositoryAdapter(cache)
     event_log = EventLogAdapter(store)
     sound_output = SoundOutputAdapter(sound_player)
     backend_gateway = BackendGatewayAdapter(backend)
-    
+
     # Pin mapping
     pin_map = load_pin_map(config)
     actuator = ShiftRegisterActuator(engine, pin_map)
-    
+
     # Domain components
-    timings = config.get("timings", {})
     auth_timeout = timings.get("auth_timeout_s", 5.0)  # Время действия авторизации из конфига
     turnstile = TurnstileState(auth_timeout=auth_timeout, timings=timings)
     access_policy = AccessPolicy(cache=cache)
     passage_tracker = PassageTracker()
-    
+
     # Application services
     event_bus = EventBus(turnstile=turnstile)
     access_service = AccessService(cache)
     passage_service = PassageService(store)
     sync_service = SyncService(backend, store, sync_interval=timings.get("backend_sync_interval_s", 60.0))
-    
+
     # Create application
     application = LGTUApplication(
         engine=engine,
         cache=cache,
         store=store,
         backend=backend,
-        config=config
+        config=config,
+        devices=devices  # Передаем мапинг устройств
     )
-    
+
     return application

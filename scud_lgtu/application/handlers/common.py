@@ -11,7 +11,7 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 
-async def handle_credential_common(event, turnstile, access_policy, passage_tracker, event_bus, session, reader: str = "w1") -> None:
+async def handle_credential_common(event, turnstile, access_policy, passage_tracker, event_bus, session, devices: dict) -> None:
     """
     Общий обработчик для учётных данных (карты и QR-коды).
 
@@ -29,10 +29,30 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         Шина событий для публикации команд
     session : AuthSession
         Сессия авторизации с токеном
-    reader : str, optional
-        Имя считывателя (по умолчанию "w1")
+    devices : dict
+        Мапинг устройств из конфига
     """
     logger.info(f"Обработка события учётных данных: {event}")
+
+    # Определяем считыватель по reader_id из события
+    reader_id = event.reader_id
+    readers = devices.get("readers", {})
+
+    # Находим конфигурацию считывателя по label
+    reader_config = None
+    for reader_name, reader_cfg in readers.items():
+        if reader_cfg.get("label") == reader_id:
+            reader_config = reader_cfg
+            break
+
+    if not reader_config:
+        logger.error(f"Считыватель не найден в конфиге: {reader_id}")
+        return
+
+    # Получаем индикаторы и бипер из конфига
+    indicator_success = reader_config.get("indicator_success", "w1_green")
+    indicator_fail = reader_config.get("indicator_fail", "w1_red")
+    direction = reader_config.get("direction", "entry")
 
     # Проверка доступа
     decision = access_policy.check(event.credential)
@@ -46,15 +66,18 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         passage_tracker.track(session)
 
         # Открытие турникета через background task (таймер запускается сразу)
-        asyncio.create_task(turnstile.open_entry_async(event_bus, start_timer=True))
-        logger.info(f"Открытие турникета через async task")
+        if direction == "entry":
+            asyncio.create_task(turnstile.open_entry_async(event_bus, start_timer=True))
+        else:
+            asyncio.create_task(turnstile.open_exit_async(event_bus, start_timer=True))
+        logger.info(f"Открытие турникета через async task (direction={direction})")
 
         # Включить зеленый индикатор на configured duration
-        asyncio.create_task(turnstile.set_indicator_async(event_bus, f"{reader}_green", True, turnstile._indicator_duration))
+        asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_success, True, turnstile._indicator_duration))
     else:
         # Отказ в доступе - последовательность писков через background task
         asyncio.create_task(turnstile.deny_beep_sequence(event_bus))
         logger.info(f"Отказ в доступе, запущена последовательность писков")
 
         # Включить красный индикатор на configured duration
-        asyncio.create_task(turnstile.set_indicator_async(event_bus, f"{reader}_red", True, turnstile._indicator_duration))
+        asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_fail, True, turnstile._indicator_duration))
