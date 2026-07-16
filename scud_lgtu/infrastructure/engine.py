@@ -109,8 +109,8 @@ class ScudEngine:
         """Загрузить конфигурацию и подготовить очереди событий/команд."""
         self._cfg = load_config() if config_path is None else load_config()
         self._timings: dict[str, float] = self._cfg.get("timings", {})
-        self._event_queue: queue.Queue = queue.Queue(maxsize=1000)
-        self._cmd_queue: queue.Queue = queue.Queue(maxsize=100)
+        self._event_queue: queue.Queue = queue.Queue(maxsize=timings.get("event_queue_maxsize", 1000))
+        self._cmd_queue: queue.Queue = queue.Queue(maxsize=timings.get("command_queue_maxsize", 100))
 
         self._stop_event = threading.Event()
         self._ctrl: Optional[GpiodPinController] = None

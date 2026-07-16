@@ -574,8 +574,11 @@ class PinControllerThread:
         mux_addr_settle_s: float = 500e-6,
         event_queue: Optional[Queue] = None,
         config: Optional[dict] = None,
+        timings: dict = None,
     ):
         """Подготовить потоки GPIO для мультиплексора и сдвигового регистра."""
+        if timings is None:
+            timings = {}
         # Принимаем готовый контроллер — не создаём новый,
         # чтобы не конфликтовать с уже открытыми линиями gpiod.
         self._controller = controller
@@ -589,10 +592,11 @@ class PinControllerThread:
         self._mux_addr_settle_s = mux_addr_settle_s
         self._event_queue = event_queue
         self._config = config
+        self._timings = timings
 
         # Публичные очереди (доступны из главного потока сразу после __init__)
-        self.shift_input_queue: Queue = Queue(maxsize=50)
-        self.mux_output_queue: Queue = Queue(maxsize=100)
+        self.shift_input_queue: Queue = Queue(maxsize=timings.get("shift_queue_maxsize", 50))
+        self.mux_output_queue: Queue = Queue(maxsize=timings.get("mux_queue_maxsize", 100))
 
         # Единый лок — используется воркерами и может быть передан снаружи
         # (главный поток тоже должен брать этот лок при прямой работе с GPIO)

@@ -44,7 +44,7 @@ def build_application(config_path: str = None) -> LGTUApplication:
     backend = BackendClient()
     
     # Sound player
-    sound_player = SoundPlayer()
+    sound_player = SoundPlayer(timings=timings)
     
     # Create adapters
     access_repository = AccessRepositoryAdapter(cache)

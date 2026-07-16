@@ -434,8 +434,8 @@ class AccessController:
     def _beep_sequence(self, beep_mask: int) -> None:
         """Последовательность из трёх коротких сигналов пищалки."""
         from scud_lgtu.config import load as load_config
-        cfg = load_config().get("shift_masks", {})
-        beep_mask = cfg.get("buz", 0x0100)
+        cfg = load_config()
+        beep_mask = cfg.get("shift_masks", {}).get("buz", 0x0100)
 
         signal_duration = self._timings.get("beep_signal_duration_s", 0.05)
         signal_pause = self._timings.get("beep_signal_pause_s", 0.1)
@@ -492,21 +492,22 @@ class AccessController:
     def _set_indicator_for_reader(self, reader: str, result: str, card_data: Optional[str] = None) -> None:
         """Включить индикатор/пищалку для конкретного считывателя."""
         from scud_lgtu.config import load as load_config
-        cfg = load_config().get("shift_masks", {})
+        cfg = load_config()
+        masks = cfg.get("shift_masks", {})
         if "Wiegand-1" in reader:
             if result == "pass":
-                ind_mask = cfg.get("w1_green", 0x0004)
+                ind_mask = masks.get("w1_green", 0x0002)
                 beep_mask = 0
             else:
-                ind_mask = cfg.get("w1_red", 0x0002)
-                beep_mask = cfg.get("buz", 0x0100)
+                ind_mask = masks.get("w1_red", 0x0004)
+                beep_mask = masks.get("buz", 0x0100)
         elif "Wiegand-2" in reader:
             if result == "pass":
-                ind_mask = cfg.get("w2_green", 0x0400)
+                ind_mask = masks.get("w2_green", 0x0200)
                 beep_mask = 0
             else:
-                ind_mask = cfg.get("w2_red", 0x0200)
-                beep_mask = cfg.get("buz", 0x0100)
+                ind_mask = masks.get("w2_red", 0x0400)
+                beep_mask = masks.get("buz", 0x0100)
         else:
             return
 
