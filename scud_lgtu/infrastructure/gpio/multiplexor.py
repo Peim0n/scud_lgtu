@@ -86,12 +86,37 @@ class Multiplexer:
         output_queue: Queue,
         lock: threading.Lock,
         stop_event: threading.Event,
-        poll_interval: float = 0.02,
-        addr_settle_s: float = _DEFAULT_ADDR_SETTLE_S,
+        poll_interval: float = 0.02,  # Дефолтное значение, будет переопределено из конфига
+        addr_settle_s: float = _DEFAULT_ADDR_SETTLE_S,  # Дефолтное значение, будет переопределено из конфига
         event_queue: Optional[Queue] = None,
         config: Optional[dict] = None,
     ):
-        """Инициализировать воркер мультиплексора."""
+        """
+        Инициализировать воркер мультиплексора.
+
+        Parameters
+        ----------
+        controller : GpiodPinController
+            Инициализированный контроллер GPIO
+        input_pin : str
+            Имя пина чтения данных с мультиплексора
+        output_pins : tuple of str
+            Адресные пины мультиплексора
+        output_queue : Queue
+            Очередь для считанных состояний
+        lock : threading.Lock
+            Общий лок для защиты GPIO от гонки
+        stop_event : threading.Event
+            Событие остановки потока
+        poll_interval : float, optional
+            Пауза между полными проходами по адресам (секунды)
+        addr_settle_s : float, optional
+            Время стабилизации выхода мультиплексора (секунды)
+        event_queue : Queue, optional
+            Общая очередь событий
+        config : dict, optional
+            Конфигурация для мапинга входов
+        """
         self._controller = controller
         self._input_pin = input_pin
         self._output_pins = list(output_pins)

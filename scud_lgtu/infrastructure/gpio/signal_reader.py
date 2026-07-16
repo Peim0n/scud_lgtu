@@ -89,10 +89,27 @@ class InputSignalReader:
         sensor_offsets: Optional[Dict[int, int]] = None,
         output_queue: Optional[Queue] = None,
         running_event: Optional[threading.Event] = None,
-        debounce_time: float = 0.5,
-        event_timeout: float = 0.1,
+        debounce_time: float = 0.5,  # Дефолтное значение, будет переопределено из конфига
+        event_timeout: float = 0.1,  # Дефолтное значение, будет переопределено из конфига
     ):
-        """Инициализировать маппинг датчиков и очередь результатов."""
+        """
+        Инициализировать маппинг датчиков и очередь результатов.
+
+        Parameters
+        ----------
+        chip_path : str
+            Путь к GPIO chip
+        sensor_offsets : Dict[int, int], optional
+            Маппинг {logical_id: gpio_offset}
+        output_queue : Queue, optional
+            Очередь для передачи InputData
+        running_event : threading.Event, optional
+            Событие работы потока
+        debounce_time : float, optional
+            Время подавления дребезга при инициализации (секунды)
+        event_timeout : float, optional
+            Таймаут ожидания событий (секунды)
+        """
         self.chip_path = chip_path
         self.sensor_offsets = sensor_offsets or {}
         # Обратный маппинг: gpio_offset → logical_id
