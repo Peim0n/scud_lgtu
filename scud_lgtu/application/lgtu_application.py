@@ -71,10 +71,10 @@ class LGTUApplication:
         """Register event handlers."""
         # Register domain event handlers
         self._event_bus.subscribe("QrRead", lambda e: handle_qr_read(
-            e, self._turnstile, self._access_policy, self._passage_tracker
+            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus
         ))
         self._event_bus.subscribe("CardRead", lambda e: handle_card_read(
-            e, self._turnstile, self._access_policy, self._passage_tracker
+            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus
         ))
         self._event_bus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(e, self._event_bus))
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile))

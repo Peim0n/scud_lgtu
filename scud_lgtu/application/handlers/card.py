@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def handle_card_read(event: CardRead, turnstile, access_policy, passage_tracker) -> None:
+def handle_card_read(event: CardRead, turnstile, access_policy, passage_tracker, event_bus) -> None:
     """Обработать событие считывания карты."""
     logger.info(f"Обработка события карты: {event}")
     
@@ -29,9 +29,10 @@ def handle_card_read(event: CardRead, turnstile, access_policy, passage_tracker)
         # Открытие турникета
         commands = turnstile.open_entry()
         logger.info(f"Команды открытия турникета: {commands}")
-        # Применение команд через исполнительный механизм (для реализации)
+        if commands:
+            from scud_lgtu.domain.events import OutputCommandsGenerated
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
     else:
-        # Отказ в доступе
-        commands = turnstile.block()
-        logger.info(f"Команды блокировки: {commands}")
-        # Применение команд через исполнительный механизм (для реализации)
+        # Отказ в доступе - 3 коротких писка
+        turnstile.start_deny_beep()
+        logger.info(f"Отказ в доступе, запущена последовательность писков")

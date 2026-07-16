@@ -32,6 +32,11 @@ class TurnstileState:
         self._alarm_beep_since: Optional[float] = None
         self._alarm_beep_on = False
         self._alarm_beep_cycle = 0.5  # 0.5 сек on, 0.5 сек off
+        self._deny_beep_count = 0
+        self._deny_beep_since: Optional[float] = None
+        self._deny_beep_total = 3
+        self._deny_beep_duration = 0.1  # 100ms on
+        self._deny_beep_pause = 0.1  # 100ms off
     
     def can_open(self, direction: DirectionEnum) -> bool:
         """Проверить, можно ли открыть турникет в заданном направлении."""
@@ -100,6 +105,11 @@ class TurnstileState:
         """Запустить таймер закрытия (при отжатии кнопки)."""
         if self._current_state in (TurnstileStateEnum.ENTRY_OPEN, TurnstileStateEnum.EXIT_OPEN):
             self._open_since = time()
+    
+    def start_deny_beep(self) -> None:
+        """Запустить последовательность из 3 коротких писков при отказе в доступе."""
+        self._deny_beep_count = 0
+        self._deny_beep_since = time()
     
     def set_alarm(self) -> List[OutputCommand]:
         """Установить режим тревоги (пожарная тревога)."""
@@ -184,6 +194,24 @@ class TurnstileState:
                 self._alarm_beep_on = not self._alarm_beep_on
                 self._alarm_beep_since = now
                 commands.append(OutputCommand(name="buz", state=self._alarm_beep_on))
+        
+        # Последовательность из 3 коротких писков при отказе в доступе
+        if self._deny_beep_since and self._deny_beep_count < self._deny_beep_total:
+            elapsed = now - self._deny_beep_since
+            cycle_duration = self._deny_beep_duration + self._deny_beep_pause
+            beep_start = self._deny_beep_count * cycle_duration
+            
+            if elapsed >= beep_start and elapsed < beep_start + self._deny_beep_duration:
+                # Включить бипер
+                commands.append(OutputCommand(name="buz", state=True))
+            elif elapsed >= beep_start + self._deny_beep_duration and elapsed < (self._deny_beep_count + 1) * cycle_duration:
+                # Выключить бипер
+                commands.append(OutputCommand(name="buz", state=False))
+            elif elapsed >= (self._deny_beep_count + 1) * cycle_duration:
+                # Переход к следующему писку
+                self._deny_beep_count += 1
+                if self._deny_beep_count >= self._deny_beep_total:
+                    self._deny_beep_since = None
         
         return commands
     
