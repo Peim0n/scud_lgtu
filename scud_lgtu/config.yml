@@ -51,36 +51,40 @@ serial:
 devices:
   # Мапинг полных имен reader из engine к логическим именам устройств
   reader_names:
-    wiegand_Wiegand-1: entry_reader
-    wiegand_Wiegand-2: exit_reader
-    serial_Serial-1: qr_reader
+    wiegand_Wiegand-1: card_reader_1
+    wiegand_Wiegand-2: card_reader_2
+    serial_Serial-1: qr_reader_1
     serial_Serial-2: qr_reader_2
 
   # Считыватели (Wiegand и Serial/QR)
   readers:
-    entry_reader:
+    card_reader_1:
       label: "Wiegand-1"        # Ссылка на wiegand label
       type: "wiegand"           # Тип: wiegand или serial
-      direction: "entry"        # Роль: entry (вход) или exit (выход)
       indicator_success: "w1_green"  # Индикатор успеха (shift pin name)
       indicator_fail: "w1_red"       # Индикатор отказа (shift pin name)
       buzzer: "w1_beep"         # Бипер считывателя (shift pin name)
 
-    exit_reader:
+    card_reader_2:
       label: "Wiegand-2"        # Ссылка на wiegand label
       type: "wiegand"           # Тип: wiegand или serial
-      direction: "exit"         # Роль: entry (вход) или exit (выход)
       indicator_success: "w2_green"  # Индикатор успеха (shift pin name)
       indicator_fail: "w2_red"       # Индикатор отказа (shift pin name)
       buzzer: "w2_beep"         # Бипер считывателя (shift pin name)
 
-    qr_reader:
+    qr_reader_1:
       label: "Serial-1"         # Ссылка на serial label
       type: "serial"            # Тип: wiegand или serial
-      direction: "entry"        # Роль: entry (вход) или exit (выход)
       indicator_success: "w1_green"  # Индикатор успеха (shift pin name)
       indicator_fail: "w1_red"       # Индикатор отказа (shift pin name)
       buzzer: "w1_beep"         # Бипер считывателя (shift pin name)
+
+    qr_reader_2:
+      label: "Serial-2"         # Ссылка на serial label
+      type: "serial"            # Тип: wiegand или serial
+      indicator_success: "w2_green"  # Индикатор успеха (shift pin name)
+      indicator_fail: "w2_red"       # Индикатор отказа (shift pin name)
+      buzzer: "w2_beep"         # Бипер считывателя (shift pin name)
 
   # Датчики прохода
   sensors:
