@@ -32,7 +32,7 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
     При нажатии (state=False) открываем турникет.
     При отжатии (state=True) запускаем таймер закрытия.
     """
-    logger.info(f"handle_button_pressed: {event}")
+    logger.debug(f"handle_button_pressed: {event}")
 
     # Кнопки работают на LOW: 1 = покой, 0 = нажатие
     # При нажатии (state=False) открываем турникет
@@ -58,20 +58,20 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
         # Нажатие - выполнить действие
         if action == "open_entry":
             commands = turnstile.open_entry()
-            logger.info(f"{event.button_id} pressed, open_entry commands: {commands}")
+            logger.debug(f"{event.button_id} pressed, open_entry commands: {commands}")
         elif action == "open_exit":
             commands = turnstile.open_exit()
-            logger.info(f"{event.button_id} pressed, open_exit commands: {commands}")
+            logger.debug(f"{event.button_id} pressed, open_exit commands: {commands}")
         else:  # close
             commands = turnstile.close()
-            logger.info(f"{event.button_id} pressed, close commands: {commands}")
+            logger.debug(f"{event.button_id} pressed, close commands: {commands}")
 
         if commands:
             commands_event = OutputCommandsGenerated(commands=commands)
-            logger.info(f"Publishing OutputCommandsGenerated: {commands_event}")
+            logger.debug(f"Publishing OutputCommandsGenerated: {commands_event}")
             event_bus.publish(commands_event)
     else:
         # Отжатие - запустить таймер закрытия (только для open_entry и open_exit)
         if action in ("open_entry", "open_exit"):
             turnstile.start_open_timer()
-            logger.info(f"{event.button_id} released, started open timer")
+            logger.debug(f"{event.button_id} released, started open timer")

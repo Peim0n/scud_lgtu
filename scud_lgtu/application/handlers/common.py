@@ -32,7 +32,7 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
     devices : dict
         Мапинг устройств из конфига
     """
-    logger.info(f"Обработка события учётных данных: {event}")
+    logger.debug(f"Обработка события учётных данных: {event}")
 
     # reader_id теперь логическое имя устройства (entry_reader, exit_reader, qr_reader)
     reader_id = event.reader_id
@@ -52,7 +52,7 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
 
     # Проверка доступа
     decision = access_policy.check(event.credential)
-    logger.info(f"Результат проверки доступа: {decision}")
+    logger.debug(f"Результат проверки доступа: {decision}")
 
     if decision.allowed:
         # Обновляем user_id в сессии
@@ -66,14 +66,14 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
             asyncio.create_task(turnstile.open_entry_async(event_bus, start_timer=True))
         else:
             asyncio.create_task(turnstile.open_exit_async(event_bus, start_timer=True))
-        logger.info(f"Открытие турникета через async task (direction={direction})")
+        logger.debug(f"Открытие турникета через async task (direction={direction})")
 
         # Включить зеленый индикатор на configured duration
         asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_success, True, turnstile._indicator_duration))
     else:
         # Отказ в доступе - последовательность писков через background task
         asyncio.create_task(turnstile.deny_beep_sequence(event_bus))
-        logger.info(f"Отказ в доступе, запущена последовательность писков")
+        logger.debug(f"Отказ в доступе, запущена последовательность писков")
 
         # Включить красный индикатор на configured duration
         asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_fail, True, turnstile._indicator_duration))

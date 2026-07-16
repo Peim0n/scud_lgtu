@@ -108,13 +108,13 @@ class LGTUApplication:
         """Обработать событие с командами для выхода."""
         from scud_lgtu.domain.events import OutputCommandsGenerated
         if isinstance(event, OutputCommandsGenerated):
-            logger.info(f"Handling OutputCommandsGenerated: {event.commands}")
+            logger.debug(f"Handling OutputCommandsGenerated: {event.commands}")
             # Собираем все команды в словарь состояний для сдвигового регистра
             output_states = {}
             for cmd in event.commands:
-                logger.info(f"Applying command: {cmd}")
+                logger.debug(f"Applying command: {cmd}")
                 output_states[cmd.name] = cmd.state
-            
+
             # Отправляем состояния в сдвиговый регистр через PinControllerThread
             if output_states:
                 try:
@@ -122,7 +122,7 @@ class LGTUApplication:
                     pct = self._engine._pct
                     if pct and pct._shift_worker:
                         pct._shift_worker.set_mask(output_states)
-                        logger.info(f"Sent to shift register: {output_states}")
+                        logger.debug(f"Sent to shift register: {output_states}")
                 except Exception as e:
                     logger.error(f"Error sending to shift register: {e}")
     
@@ -196,7 +196,7 @@ class LGTUApplication:
                     input_name=input_name,
                     state=state_bool
                 )
-                logger.info(f"Mux Input Changed event: {event}")
+                logger.debug(f"Mux Input Changed event: {event}")
                 events.append(event)
             return events if events else None
         elif scud_event.type == EventType.SERIAL_DATA:
@@ -224,20 +224,20 @@ class LGTUApplication:
     
     def _initialize_button_states(self) -> None:
         """Initialize button states to avoid false edge detection."""
-        logger.info("Initializing button states")
+        logger.debug("Initializing button states")
         try:
             from scud_lgtu.application.handlers.mux import _button_states
             # Initialize all buttons to None so first event is treated as initial state
             button_names = ["button_1", "button_2", "button_3"]
             for name in button_names:
                 _button_states[name] = None
-            logger.info(f"Initialized button states: {_button_states}")
+            logger.debug(f"Initialized button states: {_button_states}")
         except Exception as e:
             logger.error(f"Error initializing button states: {e}")
     
     def _initialize_outputs(self) -> None:
         """Initialize all outputs to safe state (relays closed)."""
-        logger.info("Initializing outputs to safe state")
+        logger.debug("Initializing outputs to safe state")
         try:
             pct = self._engine._pct
             if pct and pct._shift_worker:
@@ -260,7 +260,7 @@ class LGTUApplication:
                     "od2": False,
                 }
                 pct._shift_worker.set_mask(safe_states)
-                logger.info(f"Initialized outputs to safe state: {safe_states}")
+                logger.debug(f"Initialized outputs to safe state: {safe_states}")
         except Exception as e:
             logger.error(f"Error initializing outputs: {e}")
     

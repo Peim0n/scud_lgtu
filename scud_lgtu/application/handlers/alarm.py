@@ -26,10 +26,10 @@ def handle_alarm_changed(event: AlarmChanged, turnstile, event_bus) -> None:
     """
     if event.active:
         commands = turnstile.set_alarm()
-        logger.info(f"Alarm activated, commands: {commands}")
+        logger.debug(f"Alarm activated, commands: {commands}")
     else:
         commands = turnstile.clear_alarm()
-        logger.info(f"Alarm cleared, commands: {commands}")
+        logger.debug(f"Alarm cleared, commands: {commands}")
 
     # Публикуем команды через event_bus
     if commands:

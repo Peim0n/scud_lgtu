@@ -10,7 +10,7 @@ _button_states = {}
 
 def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
     """Обработать событие изменения входа мультиплексора."""
-    logger.info(f"handle_mux_input_changed: {event}")
+    logger.debug(f"handle_mux_input_changed: {event}")
     # Преобразование входа мультиплексора в события домена
     if event.input_name.startswith("button_"):
         # Детектируем фронт нажатия (1 -> 0)
@@ -23,10 +23,10 @@ def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
                 button_id=event.input_name,
                 state=event.state
             )
-            logger.info(f"Publishing ButtonPressed: {button_event}")
+            logger.debug(f"Publishing ButtonPressed: {button_event}")
             event_bus.publish(button_event)
         elif prev_state is None:
-            logger.info(f"Button {event.input_name} initial state: {event.state}")
+            logger.debug(f"Button {event.input_name} initial state: {event.state}")
     elif event.input_name == "alarm":
         # Событие тревоги
         alarm_event = AlarmChanged(
