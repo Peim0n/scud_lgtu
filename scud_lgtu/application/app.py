@@ -377,8 +377,10 @@ class AccessController:
         logger.info("Открытие турникета")
         # REL2 (bit15) для выхода - включить
         from scud_lgtu.config import load as load_config
-        cfg = load_config().get("shift_masks", {})
-        relay_mask = cfg.get("open_out", 0x8000)
+        cfg = load_config()
+        shift_pins = cfg.get("config", {}).get("shift_pins", {})
+        rel2_pin = shift_pins.get("rel2", {}).get("pin", 15)
+        relay_mask = 1 << rel2_pin
         self._shift_state |= relay_mask
         self._engine.send_command(
             ScudCommand(
@@ -393,8 +395,10 @@ class AccessController:
         """Выключить реле турникета."""
         logger.info("Закрытие турникета")
         from scud_lgtu.config import load as load_config
-        cfg = load_config().get("shift_masks", {})
-        relay_mask = cfg.get("open_out", 0x8000)
+        cfg = load_config()
+        shift_pins = cfg.get("config", {}).get("shift_pins", {})
+        rel2_pin = shift_pins.get("rel2", {}).get("pin", 15)
+        relay_mask = 1 << rel2_pin
         self._shift_state &= ~relay_mask
         self._engine.send_command(
             ScudCommand(
@@ -439,7 +443,9 @@ class AccessController:
         """
         from scud_lgtu.config import load as load_config
         cfg = load_config()
-        beep_mask = cfg.get("shift_masks", {}).get("buz", 0x0100)
+        shift_pins = cfg.get("config", {}).get("shift_pins", {})
+        buz_pin = shift_pins.get("buz", {}).get("pin", 8)
+        beep_mask = 1 << buz_pin
 
         signal_duration = self._timings.get("deny_beep_duration_s", 0.1)
         signal_pause = self._timings.get("deny_beep_pause_s", 0.1)
@@ -498,21 +504,28 @@ class AccessController:
         """Включить индикатор/пищалку для конкретного считывателя."""
         from scud_lgtu.config import load as load_config
         cfg = load_config()
-        masks = cfg.get("shift_masks", {})
+        shift_pins = cfg.get("config", {}).get("shift_pins", {})
+
         if "Wiegand-1" in reader:
             if result == "pass":
-                ind_mask = masks.get("w1_green", 0x0002)
+                w1_green_pin = shift_pins.get("w1_green", {}).get("pin", 1)
+                ind_mask = 1 << w1_green_pin
                 beep_mask = 0
             else:
-                ind_mask = masks.get("w1_red", 0x0004)
-                beep_mask = masks.get("buz", 0x0100)
+                w1_red_pin = shift_pins.get("w1_red", {}).get("pin", 2)
+                ind_mask = 1 << w1_red_pin
+                buz_pin = shift_pins.get("buz", {}).get("pin", 8)
+                beep_mask = 1 << buz_pin
         elif "Wiegand-2" in reader:
             if result == "pass":
-                ind_mask = masks.get("w2_green", 0x0200)
+                w2_green_pin = shift_pins.get("w2_green", {}).get("pin", 9)
+                ind_mask = 1 << w2_green_pin
                 beep_mask = 0
             else:
-                ind_mask = masks.get("w2_red", 0x0400)
-                beep_mask = masks.get("buz", 0x0100)
+                w2_red_pin = shift_pins.get("w2_red", {}).get("pin", 10)
+                ind_mask = 1 << w2_red_pin
+                buz_pin = shift_pins.get("buz", {}).get("pin", 8)
+                beep_mask = 1 << buz_pin
         else:
             return
 

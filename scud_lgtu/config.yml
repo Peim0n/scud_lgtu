@@ -152,16 +152,6 @@ config:
     rel1: {pin: 14, inverted: false}
     rel2: {pin: 15, inverted: false}
 
-  # Маски для сдвигового регистра (hex)
-  shift_masks:
-    buz: 0x0100
-    rel1: 0x4000
-    rel2: 0x8000
-    w1_green: 0x0002
-    w1_red: 0x0004
-    w2_green: 0x0200
-    w2_red: 0x0400
-
 # ── Параметры доступа ──
 # STATIC_KEY — уникален для точки доступа (16 байт в hex).
 # DYNAMIC_KEY — меняется ежедневно (16 байт в hex).
