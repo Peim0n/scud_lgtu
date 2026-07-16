@@ -6,7 +6,7 @@
 """
 from scud_lgtu.domain.events import CardRead
 from scud_lgtu.domain.models import AuthSession
-from scud_lgtu.domain.enums import DirectionEnum, TokenTypeEnum, AccessResultEnum
+from scud_lgtu.domain.enums import DirectionEnum, TokenTypeEnum
 from scud_lgtu.application.handlers.common import handle_credential_common
 import logging
 import asyncio
