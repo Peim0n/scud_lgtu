@@ -59,7 +59,7 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
 
     # Проверка доступа
     decision = access_policy.check(event.credential)
-    logger.debug(f"Результат проверки доступа: {decision}")
+    logger.info(f"Результат проверки доступа: allowed={decision.allowed}, reason={decision.reason}, user_id={decision.user_id}")
 
     if decision.allowed:
         # Обновляем user_id в сессии
