@@ -28,6 +28,7 @@ import threading
 import time
 from typing import Optional
 from scud_lgtu.infrastructure.engine import ScudEngine
+from scud_lgtu.infrastructure.serial.qr_codec import QRDecoder
 from scud_lgtu.infrastructure.persistence.event_store import EventStore, PassageEvent, EventType, EventSource
 from scud_lgtu.infrastructure.cache.access_cache import LocalAccessCache
 from scud_lgtu.infrastructure.backend.client import BackendClient
@@ -85,6 +86,10 @@ class LGTUApplication:
         self._config = config
         self._devices = devices or {}
         self._running = False
+
+        # QR decoder
+        keys_dir = config.get("qr_keys_dir", "scud_lgtu/key")
+        self._qr_decoder = QRDecoder(keys_dir=keys_dir)
 
         # Domain components
         timings = config.get("timings", {})
@@ -225,11 +230,23 @@ class LGTUApplication:
             # Обработка данных из serial порта (QR-код)
             data = scud_event.payload.get("data", "")
             if data:
-                credential = Credential(
-                    token_type=TokenTypeEnum.MAXID,
-                    value=str(data),
-                    encrypted=False
-                )
+                try:
+                    # Декодируем QR код для получения MaxID
+                    qr_fields = self._qr_decoder.decode_url(data)
+                    max_id = qr_fields.get("max_id")
+                    if max_id is None:
+                        logger.error(f"QR код не содержит max_id: {data}")
+                        return None
+
+                    credential = Credential(
+                        token_type=TokenTypeEnum.MAXID,
+                        value=str(max_id),
+                        encrypted=False
+                    )
+                except Exception as e:
+                    logger.error(f"Ошибка декодирования QR кода: {e}")
+                    return None
+
                 # Используем мапинг reader_names из config
                 reader = scud_event.payload.get("reader", "unknown")
                 reader_names = self._devices.get("reader_names", {})
