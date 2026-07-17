@@ -27,10 +27,14 @@ import os
 import struct
 from typing import Any, Union
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.asymmetric import ed25519
-from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
-from cryptography.exceptions import InvalidSignature
+try:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
+    from cryptography.exceptions import InvalidSignature
+    CRYPTOGRAPHY_AVAILABLE = True
+except ImportError:
+    CRYPTOGRAPHY_AVAILABLE = False
 
 
 def build_payload(timestamp: int, max_id: int) -> bytes:
@@ -70,6 +74,9 @@ def encode_qr(
     str
         Полный URL QR-кода.
     """
+    if not CRYPTOGRAPHY_AVAILABLE:
+        raise ImportError("Модуль cryptography не установлен. Установите: pip install cryptography")
+
     if isinstance(private_key_pem, str):
         private_key_pem = private_key_pem.encode("utf-8")
 
@@ -108,6 +115,8 @@ class QRDecoder:
 
     def __init__(self, keys_dir: str = "key") -> None:
         """Инициализировать декодер с директорией ключей."""
+        if not CRYPTOGRAPHY_AVAILABLE:
+            raise ImportError("Модуль cryptography не установлен. Установите: pip install cryptography")
         self._keys_dir = keys_dir
 
     def decode_url(self, full_url: str, expected_head: str | None = None) -> dict[str, Any]:
