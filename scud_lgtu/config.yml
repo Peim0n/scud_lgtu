@@ -100,6 +100,13 @@ devices:
       label: "sensor_2"        # Имя из mux_inputs
       direction: "exit"         # Роль: entry (вход) или exit (выход)
 
+# ── Зоны прохода ──
+passage:
+  zones:
+    - label: "zone1"
+      entry_sensor: "sensor_1"
+      exit_sensor: "sensor_2"
+
   # Кнопки управления
   buttons:
     entry_button:
