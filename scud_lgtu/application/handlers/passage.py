@@ -13,13 +13,15 @@ PassageTracker. Поддерживает различные направлени
 """
 from scud_lgtu.domain.events import PassageDetected
 from scud_lgtu.domain.events import OutputCommandsGenerated
+from scud_lgtu.domain.models import Passage
+from scud_lgtu.domain.enums import PassageResultEnum, DirectionEnum
 import logging
 import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_passage_detected(event: PassageDetected, turnstile, passage_tracker, event_bus, event_log, devices: dict) -> None:
+async def handle_passage_detected(event: PassageDetected, turnstile, passage_tracker, event_bus, passage_service, devices: dict) -> None:
     """
     Обработать событие обнаружения прохода.
 
@@ -33,8 +35,8 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         Трекер проходов для отслеживания завершения
     event_bus : EventBus
         Шина событий для публикации команд
-    event_log : EventLogAdapter
-        Адаптер лога событий для записи проходов
+    passage_service : PassageService
+        Сервис для записи проходов
     devices : dict
         Мапинг устройств из конфига
 
@@ -71,7 +73,13 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         logger.warning(f"Заслон: {zone}, длительность={duration:.3f}s")
 
         # Логировать заслон
-        event_log.log_passage(zone, "blockage", duration, result="blockage")
+        passage = Passage(
+            direction=DirectionEnum.BLOCKAGE,
+            zone=zone,
+            duration=duration,
+            result=PassageResultEnum.BLOCKAGE
+        )
+        passage_service.log_passage(passage)
 
         # Держать реле открытым (не закрывать)
         # Реле уже открыто при проходе, просто не закрываем его
@@ -82,7 +90,13 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         logger.info(f"Разворот: {zone}, длительность={duration:.3f}s")
 
         # Логировать разворот
-        event_log.log_passage(zone, "turnback", duration, result="turnback")
+        passage = Passage(
+            direction=DirectionEnum.TURNBACK,
+            zone=zone,
+            duration=duration,
+            result=PassageResultEnum.TURNBACK
+        )
+        passage_service.log_passage(passage)
 
         # Закрыть реле
         await turnstile.close_async(event_bus)
@@ -93,7 +107,14 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
     await turnstile.close_async(event_bus)
 
     # Логировать проход
-    event_log.log_passage(zone, direction, duration, result="pass")
+    direction_enum = DirectionEnum.IN if direction == "in" else DirectionEnum.OUT
+    passage = Passage(
+        direction=direction_enum,
+        zone=zone,
+        duration=duration,
+        result=PassageResultEnum.PASS
+    )
+    passage_service.log_passage(passage)
 
     # Отметить проход как завершённый в passage_tracker
     # Это позволит снова зайти с той же картой (но только если направление изменилось)

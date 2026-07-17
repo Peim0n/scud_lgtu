@@ -129,7 +129,7 @@ class LGTUApplication:
             e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus, self._devices
         ))
         self._event_bus.subscribe("PassageDetected", lambda e: handle_passage_detected(
-            e, self._turnstile, self._passage_tracker, self._event_bus, self._passage_service._event_log, self._devices
+            e, self._turnstile, self._passage_tracker, self._event_bus, self._passage_service, self._devices
         ))
         self._event_bus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(e, self._event_bus))
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile, self._event_bus))
