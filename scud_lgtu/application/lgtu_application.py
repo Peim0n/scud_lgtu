@@ -360,17 +360,15 @@ class LGTUApplication:
                     # Собираем все команды в словарь состояний для сдвигового регистра
                     output_states = {}
                     for cmd in commands:
-                        logger.info(f"Applying command: {cmd}")
                         output_states[cmd.name] = cmd.state
-                    
+
                     # Отправляем состояния в сдвиговый регистр через PinControllerThread
                     if output_states:
                         try:
                             # Получаем доступ к PinControllerThread через engine
                             pct = self._engine._pct
-                            if pct and pct._shift_worker:
-                                pct._shift_worker.set_mask(output_states)
-                                logger.info(f"Sent to shift register: {output_states}")
+                            if pct:
+                                pct.set_mask(output_states)
                         except Exception as e:
                             logger.error(f"Error sending to shift register: {e}")
                 
