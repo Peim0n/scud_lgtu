@@ -104,8 +104,8 @@ devices:
 passage:
   zones:
     - label: "zone1"
-      inner: 4  # sensor_1 на mux input 4
-      outer: 2  # sensor_2 на mux input 2
+      inner: "sensor_1"  # Внутренний датчик (вход)
+      outer: "sensor_2"  # Внешний датчик (выход)
 
   # Кнопки управления
   buttons:
