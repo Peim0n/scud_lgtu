@@ -268,6 +268,22 @@ class LGTUApplication:
                 )
                 logger.info(f"Serial QR Read event: {event}")
                 return event
+        elif scud_event.type == EventType.INPUT_SIGNAL:
+            # Обработка событий от датчиков прохода
+            from scud_lgtu.domain.events import PassageDetected
+            zone = scud_event.payload.get("zone")
+            direction = scud_event.payload.get("direction")
+            duration = scud_event.payload.get("duration")
+            token = scud_event.payload.get("token")
+            if zone and direction and duration is not None:
+                event = PassageDetected(
+                    direction=direction,
+                    zone=zone,
+                    duration=duration,
+                    token=token
+                )
+                logger.info(f"Passage Detected event: {event}")
+                return event
         
         logger.debug(f"Unknown event type: {scud_event.type}")
         return None
