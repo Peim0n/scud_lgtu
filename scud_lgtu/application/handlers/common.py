@@ -78,9 +78,5 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         # Включить зеленый индикатор на configured duration
         asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_success, True, turnstile._indicator_duration))
     else:
-        # Отказ в доступе - последовательность писков через background task
-        asyncio.create_task(turnstile.deny_beep_sequence(event_bus))
-        logger.debug(f"Отказ в доступе, запущена последовательность писков")
-
-        # Включить красный индикатор на configured duration
-        asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_fail, True, turnstile._indicator_duration))
+        # Отказ в доступе - игнорируем, турникет не открыт
+        logger.info(f"Отказ в доступе: {decision.reason}")
