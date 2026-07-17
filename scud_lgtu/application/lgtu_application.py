@@ -140,11 +140,9 @@ class LGTUApplication:
         """Обработать событие с командами для выхода."""
         from scud_lgtu.domain.events import OutputCommandsGenerated
         if isinstance(event, OutputCommandsGenerated):
-            logger.debug(f"Handling OutputCommandsGenerated: {event.commands}")
             # Собираем все команды в словарь состояний для сдвигового регистра
             output_states = {}
             for cmd in event.commands:
-                logger.debug(f"Applying command: {cmd}")
                 output_states[cmd.name] = cmd.state
 
             # Отправляем состояния в сдвиговый регистр через PinControllerThread
@@ -152,9 +150,8 @@ class LGTUApplication:
                 try:
                     # Получаем доступ к PinControllerThread через engine
                     pct = self._engine._pct
-                    if pct and pct._shift_worker:
-                        pct._shift_worker.set_mask(output_states)
-                        logger.debug(f"Sent to shift register: {output_states}")
+                    if pct:
+                        pct.set_mask(output_states)
                 except Exception as e:
                     logger.error(f"Error sending to shift register: {e}")
     
@@ -312,7 +309,7 @@ class LGTUApplication:
                     "od1": False,
                     "od2": False,
                 }
-                pct._shift_worker.set_mask(safe_states)
+                pct.set_mask(safe_states)
                 logger.debug(f"Initialized outputs to safe state: {safe_states}")
         except Exception as e:
             logger.error(f"Error initializing outputs: {e}")
