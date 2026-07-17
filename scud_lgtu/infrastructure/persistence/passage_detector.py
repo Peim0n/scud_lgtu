@@ -99,19 +99,22 @@ class PassageDetector:
         inner_val = states.get(self._inner_name, 0)
         outer_val = states.get(self._outer_name, 0)
 
+        logger.debug(f"[{self._zone}] Состояние датчиков: inner={inner_val}, outer={outer_val}")
+
         with self._lock:
             self._update_sensor("inner", self._inner, inner_val, timestamp)
             self._update_sensor("outer", self._outer, outer_val, timestamp)
 
     def _update_sensor(self, sensor: str, state: SensorState, value: int, timestamp: float) -> None:
         """Обновить состояние одного датчика (rising/falling)."""
-        if value and not state.active:
-            # Rising — начало импульса
+        # Инвертированная логика: 1 = нет сигнала, 0 = есть сигнал
+        if not value and not state.active:
+            # Rising — начало импульса (датчик сработал)
             state.active = True
             state.start_time = timestamp
             self._maybe_start(sensor, timestamp)
-        elif not value and state.active:
-            # Falling — конец импульса
+        elif value and state.active:
+            # Falling — конец импульса (датчик перестал срабатывать)
             state.active = False
             self._check_completion(sensor, timestamp)
 
