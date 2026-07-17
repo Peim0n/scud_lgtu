@@ -307,9 +307,9 @@ timings:
   sound_queue_maxsize: 20
 
 # ── Логирование ──
-# WARNING для снижения нагрузки на CPU и I/O на OrangePi Zero
+# INFO для production на OrangePi Zero
 logging:
-  level: WARNING
+  level: INFO
   format: "%(asctime)s %(name)s [%(levelname)s] %(message)s"
 
 # ── Тестовый HTTP API ──
