@@ -55,7 +55,7 @@ class TurnstileStateEnum(str, Enum):
 class TurnstileState:
     """Конечный автомат турникета."""
     
-    def __init__(self, auth_timeout: float = 5.0, timings: dict = None):
+    def __init__(self, auth_timeout: float = 5.0, timings: dict = None, devices: dict = None):
         """
         Инициализировать состояние турникета.
 
@@ -65,6 +65,8 @@ class TurnstileState:
             Время действия авторизации в секундах (по умолчанию 5.0)
         timings : dict, optional
             Словарь таймингов из конфигурации. Если None, используются дефолтные значения.
+        devices : dict, optional
+            Словарь конфигурации устройств из config.yml. Содержит мапинг реле, индикаторов и биперов.
         """
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since: Optional[float] = None
@@ -72,7 +74,7 @@ class TurnstileState:
         self._auth_timeout = auth_timeout
         self._output_commands: List[OutputCommand] = []
         self._beep_since: Optional[float] = None
-        
+
         # Тайминги из конфига или дефолтные значения
         if timings is None:
             timings = {}
@@ -83,7 +85,24 @@ class TurnstileState:
         self._deny_beep_total = timings.get("deny_beep_count", 3)  # Количество писков при отказе
         self._open_beep_duration = timings.get("open_beep_duration_s", 0.1)  # Длительность писка при открытии
         self._indicator_duration = timings.get("indicator_duration_s", 2.0)  # Длительность индикатора
-        
+
+        # Мапинг устройств из конфига или дефолтные значения
+        if devices is None:
+            devices = {}
+        relays = devices.get("relays", {})
+        buzzers = devices.get("buzzers", {})
+
+        # Получаем имена пинов из конфига или используем дефолтные
+        self._entry_relay = relays.get("entry_relay", {}).get("label", "rel1")
+        self._exit_relay = relays.get("exit_relay", {}).get("label", "rel2")
+        self._main_buzzer = buzzers.get("main_buzzer", {}).get("label", "buz")
+
+        # Для индикаторов используем дефолтные имена (пока нет в конфиге)
+        self._entry_green = "w1_green"
+        self._entry_red = "w1_red"
+        self._exit_green = "w2_green"
+        self._exit_red = "w2_red"
+
         self._alarm_beep_since: Optional[float] = None
         self._alarm_beep_on = False
         self._open_task: Optional[asyncio.Task] = None  # Активная задача открытия
@@ -106,14 +125,14 @@ class TurnstileState:
     
     def open_entry(self, start_timer: bool = False) -> List[OutputCommand]:
         """Открыть турникет для входа.
-        
+
         Args:
             start_timer: Если True, запустить таймер закрытия сразу (для карт).
                         Если False, таймер запускается отдельно (для кнопок).
         """
         if not self.can_open(DirectionEnum.IN):
             return []
-        
+
         self._current_state = TurnstileStateEnum.ENTRY_OPEN
         if start_timer:
             self._open_since = time()
@@ -121,37 +140,37 @@ class TurnstileState:
             self._open_since = None  # Таймер запускается отдельно при отжатии кнопки
         self._beep_since = time()  # Start beep timer
         self._output_commands = [
-            OutputCommand(name="rel1", state=True),
-            OutputCommand(name="w1_green", state=True),
-            OutputCommand(name="w1_red", state=False),
-            OutputCommand(name="buz", state=True),
+            OutputCommand(name=self._entry_relay, state=True),
+            OutputCommand(name=self._entry_green, state=True),
+            OutputCommand(name=self._entry_red, state=False),
+            OutputCommand(name=self._main_buzzer, state=True),
         ]
         return self._output_commands
     
     def open_exit(self, start_timer: bool = False) -> List[OutputCommand]:
         """Открыть турникет для выхода.
-        
+
         Args:
             start_timer: Если True, запустить таймер закрытия сразу (для карт).
                         Если False, таймер запускается отдельно (для кнопок).
         """
         if not self.can_open(DirectionEnum.OUT):
             return []
-        
+
         # В режиме тревоги не меняем состояние, просто открываем реле
         if self._current_state != TurnstileStateEnum.ALARM:
             self._current_state = TurnstileStateEnum.EXIT_OPEN
-        
+
         if start_timer:
             self._open_since = time()
         else:
             self._open_since = None  # Таймер запускается отдельно при отжатии кнопки
         self._beep_since = time()  # Start beep timer
         self._output_commands = [
-            OutputCommand(name="rel2", state=True),
-            OutputCommand(name="w2_green", state=True),
-            OutputCommand(name="w2_red", state=False),
-            OutputCommand(name="buz", state=True),
+            OutputCommand(name=self._exit_relay, state=True),
+            OutputCommand(name=self._exit_green, state=True),
+            OutputCommand(name=self._exit_red, state=False),
+            OutputCommand(name=self._main_buzzer, state=True),
         ]
         return self._output_commands
     
@@ -159,14 +178,14 @@ class TurnstileState:
         """Закрыть турникет."""
         if self._current_state == TurnstileStateEnum.IDLE:
             return []
-        
+
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since = None
         self._output_commands = [
-            OutputCommand(name="rel1", state=False),
-            OutputCommand(name="rel2", state=False),
-            OutputCommand(name="w1_green", state=False),
-            OutputCommand(name="w2_green", state=False),
+            OutputCommand(name=self._entry_relay, state=False),
+            OutputCommand(name=self._exit_relay, state=False),
+            OutputCommand(name=self._entry_green, state=False),
+            OutputCommand(name=self._exit_green, state=False),
         ]
         return self._output_commands
     
@@ -189,15 +208,15 @@ class TurnstileState:
         try:
             for i in range(self._deny_beep_total):
                 # Включить бипер
-                commands = [OutputCommand(name="buz", state=True)]
+                commands = [OutputCommand(name=self._main_buzzer, state=True)]
                 event_bus.publish(OutputCommandsGenerated(commands=commands))
                 logger.debug(f"deny_beep: beep {i+1} ON")
-                
+
                 # Подождать configured duration
                 await asyncio.sleep(self._deny_beep_duration)
-                
+
                 # Выключить бипер
-                commands = [OutputCommand(name="buz", state=False)]
+                commands = [OutputCommand(name=self._main_buzzer, state=False)]
                 event_bus.publish(OutputCommandsGenerated(commands=commands))
                 logger.debug(f"deny_beep: beep {i+1} OFF")
                 
@@ -211,89 +230,65 @@ class TurnstileState:
         finally:
             self._deny_beep_task = None
     
-    async def open_entry_async(self, event_bus, start_timer: bool = True) -> None:
-        """Асинхронное открытие турникета для входа с автоматическим закрытием."""
+    async def _open_async_common(self, event_bus, direction: DirectionEnum, start_timer: bool = True) -> None:
+        """Общая логика асинхронного открытия турникета."""
         from scud_lgtu.domain.events import OutputCommandsGenerated
 
-        if not self.can_open(DirectionEnum.IN):
+        if not self.can_open(direction):
             return
 
         # Игнорировать новую задачу если предыдущая еще выполняется
         if self._open_task and not self._open_task.done():
-            logger.debug("open_entry: ignored - previous task still running")
+            logger.debug(f"open_{direction.value}: ignored - previous task still running")
             return
 
         self._open_task = asyncio.current_task()
 
         try:
-            self._current_state = TurnstileStateEnum.ENTRY_OPEN
+            # Определяем пины в зависимости от направления
+            if direction == DirectionEnum.IN:
+                self._current_state = TurnstileStateEnum.ENTRY_OPEN
+                relay = self._entry_relay
+                green = self._entry_green
+                red = self._entry_red
+            else:
+                self._current_state = TurnstileStateEnum.EXIT_OPEN
+                relay = self._exit_relay
+                green = self._exit_green
+                red = self._exit_red
 
             # Открыть реле, включить зеленый, выключить красный, включить бипер
             commands = [
-                OutputCommand(name="rel1", state=True),
-                OutputCommand(name="w1_green", state=True),
-                OutputCommand(name="w1_red", state=False),
-                OutputCommand(name="buz", state=True),
+                OutputCommand(name=relay, state=True),
+                OutputCommand(name=green, state=True),
+                OutputCommand(name=red, state=False),
+                OutputCommand(name=self._main_buzzer, state=True),
             ]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.debug(f"open_entry: opened entry")
+            logger.debug(f"open_{direction.value}: opened")
 
-            # Выключить бипер через 100 мс
-            await asyncio.sleep(0.1)
-            commands = [OutputCommand(name="buz", state=False)]
+            # Выключить бипер через configured duration
+            await asyncio.sleep(self._open_beep_duration)
+            commands = [OutputCommand(name=self._main_buzzer, state=False)]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.debug("open_entry: beep off")
+            logger.debug(f"open_{direction.value}: beep off")
 
             # Запустить таймер закрытия если нужно
             if start_timer:
                 self.start_open_timer()
 
         except asyncio.CancelledError:
-            logger.debug("open_entry: task cancelled")
+            logger.debug(f"open_{direction.value}: task cancelled")
         finally:
             self._open_task = None
+
+    async def open_entry_async(self, event_bus, start_timer: bool = True) -> None:
+        """Асинхронное открытие турникета для входа с автоматическим закрытием."""
+        await self._open_async_common(event_bus, DirectionEnum.IN, start_timer)
 
     async def open_exit_async(self, event_bus, start_timer: bool = True) -> None:
         """Асинхронное открытие турникета для выхода с автоматическим закрытием."""
-        from scud_lgtu.domain.events import OutputCommandsGenerated
-
-        if not self.can_open(DirectionEnum.OUT):
-            return
-
-        # Игнорировать новую задачу если предыдущая еще выполняется
-        if self._open_task and not self._open_task.done():
-            logger.debug("open_exit: ignored - previous task still running")
-            return
-
-        self._open_task = asyncio.current_task()
-
-        try:
-            self._current_state = TurnstileStateEnum.EXIT_OPEN
-
-            # Открыть реле, включить зеленый, выключить красный, включить бипер
-            commands = [
-                OutputCommand(name="rel2", state=True),
-                OutputCommand(name="w2_green", state=True),
-                OutputCommand(name="w2_red", state=False),
-                OutputCommand(name="buz", state=True),
-            ]
-            event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.debug(f"open_exit: opened exit")
-
-            # Выключить бипер через 100 мс
-            await asyncio.sleep(0.1)
-            commands = [OutputCommand(name="buz", state=False)]
-            event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.debug("open_exit: beep off")
-
-            # Запустить таймер закрытия если нужно
-            if start_timer:
-                self.start_open_timer()
-
-        except asyncio.CancelledError:
-            logger.debug("open_exit: task cancelled")
-        finally:
-            self._open_task = None
+        await self._open_async_common(event_bus, DirectionEnum.OUT, start_timer)
 
     async def set_indicator_async(self, event_bus, name: str, state: bool, duration: float = None) -> None:
         """Асинхронная задача для включения индикатора на заданное время."""
@@ -361,17 +356,17 @@ class TurnstileState:
         """Установить режим тревоги (пожарная тревога)."""
         if self._current_state == TurnstileStateEnum.ALARM:
             return []
-        
+
         self._current_state = TurnstileStateEnum.ALARM
         self._alarm_since = time()
         self._alarm_beep_since = time()
         self._alarm_beep_on = True
         self._output_commands = [
-            OutputCommand(name="rel1", state=True),
-            OutputCommand(name="rel2", state=True),
-            OutputCommand(name="w1_red", state=True),
-            OutputCommand(name="w2_red", state=True),
-            OutputCommand(name="buz", state=True),
+            OutputCommand(name=self._entry_relay, state=True),
+            OutputCommand(name=self._exit_relay, state=True),
+            OutputCommand(name=self._entry_red, state=True),
+            OutputCommand(name=self._exit_red, state=True),
+            OutputCommand(name=self._main_buzzer, state=True),
         ]
         return self._output_commands
     
@@ -379,17 +374,17 @@ class TurnstileState:
         """Сбросить режим тревоги."""
         if self._current_state != TurnstileStateEnum.ALARM:
             return []
-        
+
         self._current_state = TurnstileStateEnum.IDLE
         self._alarm_since = None
         self._alarm_beep_since = None
         self._alarm_beep_on = False
         self._output_commands = [
-            OutputCommand(name="rel1", state=False),
-            OutputCommand(name="rel2", state=False),
-            OutputCommand(name="w1_red", state=False),
-            OutputCommand(name="w2_red", state=False),
-            OutputCommand(name="buz", state=False),
+            OutputCommand(name=self._entry_relay, state=False),
+            OutputCommand(name=self._exit_relay, state=False),
+            OutputCommand(name=self._entry_red, state=False),
+            OutputCommand(name=self._exit_red, state=False),
+            OutputCommand(name=self._main_buzzer, state=False),
         ]
         return self._output_commands
     
@@ -397,13 +392,13 @@ class TurnstileState:
         """Заблокировать турникет."""
         if self._current_state == TurnstileStateEnum.BLOCKED:
             return []
-        
+
         self._current_state = TurnstileStateEnum.BLOCKED
         self._output_commands = [
-            OutputCommand(name="rel1", state=False),
-            OutputCommand(name="rel2", state=False),
-            OutputCommand(name="w1_red", state=True),
-            OutputCommand(name="w2_red", state=True),
+            OutputCommand(name=self._entry_relay, state=False),
+            OutputCommand(name=self._exit_relay, state=False),
+            OutputCommand(name=self._entry_red, state=True),
+            OutputCommand(name=self._exit_red, state=True),
         ]
         return self._output_commands
     
@@ -411,11 +406,11 @@ class TurnstileState:
         """Разблокировать турникет."""
         if self._current_state != TurnstileStateEnum.BLOCKED:
             return []
-        
+
         self._current_state = TurnstileStateEnum.IDLE
         self._output_commands = [
-            OutputCommand(name="w1_red", state=False),
-            OutputCommand(name="w2_red", state=False),
+            OutputCommand(name=self._entry_red, state=False),
+            OutputCommand(name=self._exit_red, state=False),
         ]
         return self._output_commands
     
@@ -429,7 +424,7 @@ class TurnstileState:
         
         # Автоматическое выключение бипера после длительности
         if self._beep_since and (now - self._beep_since) > self._beep_duration:
-            commands.append(OutputCommand(name="buz", state=False))
+            commands.append(OutputCommand(name=self._main_buzzer, state=False))
             self._beep_since = None
         
         # Периодический бипер при тревоге (0.5 сек on, 0.5 сек off)
@@ -439,7 +434,7 @@ class TurnstileState:
                 # Переключить состояние бипера
                 self._alarm_beep_on = not self._alarm_beep_on
                 self._alarm_beep_since = now
-                commands.append(OutputCommand(name="buz", state=self._alarm_beep_on))
+                commands.append(OutputCommand(name=self._main_buzzer, state=self._alarm_beep_on))
         
         
         return commands

@@ -107,7 +107,8 @@ def build_application(config_path: str = None) -> LGTUApplication:
 
     # Domain components
     auth_timeout = timings.get("auth_timeout_s", 5.0)  # Время действия авторизации из конфига
-    turnstile = TurnstileState(auth_timeout=auth_timeout, timings=timings)
+    passage_devices = devices.get("passage", {})
+    turnstile = TurnstileState(auth_timeout=auth_timeout, timings=timings, devices=passage_devices)
     access_policy = AccessPolicy(cache=cache)
     passage_tracker = PassageTracker()
 
