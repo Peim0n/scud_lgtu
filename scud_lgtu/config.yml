@@ -104,15 +104,19 @@ devices:
   buttons:
     entry_button:
       label: "button_1"         # Имя из mux_inputs
-      action: "open_entry"      # Действие: open_entry, open_exit, close
+      action: "open_entry"      # Действие: open_entry, open_exit
+      relay: "rel1"             # Реле для открытия
+      open_duration: 2.0        # Время открытия в секундах
 
     exit_button:
       label: "button_2"         # Имя из mux_inputs
-      action: "open_exit"       # Действие: open_entry, open_exit, close
+      action: "open_exit"       # Действие: open_entry, open_exit
+      relay: "rel2"             # Реле для открытия
+      open_duration: 2.0        # Время открытия в секундах
 
-    close_button:
-      label: "button_3"         # Имя из mux_inputs
-      action: "close"           # Действие: open_entry, open_exit, close
+    # close_button:
+    #   label: "button_3"         # Имя из mux_inputs
+    #   action: "close"           # Действие: close (пока не используется)
 
   # Реле турникета
   relays:
