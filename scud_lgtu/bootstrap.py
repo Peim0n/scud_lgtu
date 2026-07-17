@@ -75,6 +75,10 @@ def build_application(config_path: str = None) -> LGTUApplication:
     # Load device mapping
     devices = config.get("devices", {})
 
+    # Add passage zones to devices for passage handler
+    passage_zones = config.get("passage", {}).get("zones", [])
+    devices["passage_zones"] = passage_zones
+
     # Create infrastructure components
     engine = ScudEngine(config, timings=timings)
 

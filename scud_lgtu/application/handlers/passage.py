@@ -52,21 +52,19 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
 
     logger.info(f"Проход: {zone}, направление={direction}, длительность={duration:.3f}s")
 
-    # Получаем конфигурацию датчиков из devices
-    sensors = devices.get("sensors", {})
+    # Получаем конфигурацию зон прохода из devices
+    passage_zones = devices.get("passage_zones", {})
 
-    # Находим конфигурацию датчика по label
-    sensor_config = None
-    for sensor_name, sensor_cfg in sensors.items():
-        if sensor_cfg.get("label") == zone:
-            sensor_config = sensor_cfg
+    # Находим конфигурацию зоны по label
+    zone_config = None
+    for zone_cfg in passage_zones:
+        if zone_cfg.get("label") == zone:
+            zone_config = zone_cfg
             break
 
-    if not sensor_config:
-        logger.error(f"Датчик не найден в конфиге: {zone}")
+    if not zone_config:
+        logger.error(f"Зона прохода не найдена в конфиге: {zone}")
         return
-
-    sensor_direction = sensor_config.get("direction", "entry")
 
     if direction == "blockage":
         # Заслон - держать реле открытым
