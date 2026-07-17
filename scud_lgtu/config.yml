@@ -311,6 +311,13 @@ timings:
 logging:
   level: INFO
   format: "%(asctime)s %(name)s [%(levelname)s] %(message)s"
+  # Детальная настройка по модулям (опционально)
+  loggers:
+    asyncio: WARNING
+    scud_lgtu.application.lgtu_application: INFO
+    scud_lgtu.application.handlers: INFO
+    scud_lgtu.infrastructure.gpio.shift_register: INFO
+    scud_lgtu.infrastructure.gpio.multiplexor: INFO
 
 # ── Тестовый HTTP API ──
 api:
