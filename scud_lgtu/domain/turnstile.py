@@ -181,7 +181,7 @@ class TurnstileState:
         
         # Игнорировать новую задачу если предыдущая еще выполняется
         if self._deny_beep_task and not self._deny_beep_task.done():
-            logger.info("deny_beep: ignored - previous task still running")
+            logger.debug("deny_beep: ignored - previous task still running")
             return
         
         self._deny_beep_task = asyncio.current_task()
@@ -191,7 +191,7 @@ class TurnstileState:
                 # Включить бипер
                 commands = [OutputCommand(name="buz", state=True)]
                 event_bus.publish(OutputCommandsGenerated(commands=commands))
-                logger.info(f"deny_beep: beep {i+1} ON")
+                logger.debug(f"deny_beep: beep {i+1} ON")
                 
                 # Подождать configured duration
                 await asyncio.sleep(self._deny_beep_duration)
@@ -199,15 +199,15 @@ class TurnstileState:
                 # Выключить бипер
                 commands = [OutputCommand(name="buz", state=False)]
                 event_bus.publish(OutputCommandsGenerated(commands=commands))
-                logger.info(f"deny_beep: beep {i+1} OFF")
+                logger.debug(f"deny_beep: beep {i+1} OFF")
                 
                 # Подождать configured pause перед следующим писком
                 if i < self._deny_beep_total - 1:  # Не ждать после последнего писка
                     await asyncio.sleep(self._deny_beep_pause)
             
-            logger.info("deny_beep: sequence completed")
+            logger.debug("deny_beep: sequence completed")
         except asyncio.CancelledError:
-            logger.info("deny_beep: task cancelled")
+            logger.debug("deny_beep: task cancelled")
         finally:
             self._deny_beep_task = None
     
@@ -220,7 +220,7 @@ class TurnstileState:
 
         # Игнорировать новую задачу если предыдущая еще выполняется
         if self._open_task and not self._open_task.done():
-            logger.info("open_entry: ignored - previous task still running")
+            logger.debug("open_entry: ignored - previous task still running")
             return
 
         self._open_task = asyncio.current_task()
@@ -236,20 +236,20 @@ class TurnstileState:
                 OutputCommand(name="buz", state=True),
             ]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.info(f"open_entry: opened entry")
+            logger.debug(f"open_entry: opened entry")
 
             # Выключить бипер через 100 мс
             await asyncio.sleep(0.1)
             commands = [OutputCommand(name="buz", state=False)]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.info("open_entry: beep off")
+            logger.debug("open_entry: beep off")
 
             # Запустить таймер закрытия если нужно
             if start_timer:
                 self.start_open_timer()
 
         except asyncio.CancelledError:
-            logger.info("open_entry: task cancelled")
+            logger.debug("open_entry: task cancelled")
         finally:
             self._open_task = None
 
@@ -262,7 +262,7 @@ class TurnstileState:
 
         # Игнорировать новую задачу если предыдущая еще выполняется
         if self._open_task and not self._open_task.done():
-            logger.info("open_exit: ignored - previous task still running")
+            logger.debug("open_exit: ignored - previous task still running")
             return
 
         self._open_task = asyncio.current_task()
@@ -278,20 +278,20 @@ class TurnstileState:
                 OutputCommand(name="buz", state=True),
             ]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.info(f"open_exit: opened exit")
+            logger.debug(f"open_exit: opened exit")
 
             # Выключить бипер через 100 мс
             await asyncio.sleep(0.1)
             commands = [OutputCommand(name="buz", state=False)]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.info("open_exit: beep off")
+            logger.debug("open_exit: beep off")
 
             # Запустить таймер закрытия если нужно
             if start_timer:
                 self.start_open_timer()
 
         except asyncio.CancelledError:
-            logger.info("open_exit: task cancelled")
+            logger.debug("open_exit: task cancelled")
         finally:
             self._open_task = None
 
@@ -301,7 +301,7 @@ class TurnstileState:
         
         # Игнорировать новую задачу если предыдущая еще выполняется
         if self._indicator_task and not self._indicator_task.done():
-            logger.info(f"set_indicator: ignored - previous task still running")
+            logger.debug(f"set_indicator: ignored - previous task still running")
             return
         
         self._indicator_task = asyncio.current_task()
@@ -310,16 +310,16 @@ class TurnstileState:
             # Включить индикатор
             commands = [OutputCommand(name=name, state=state)]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.info(f"set_indicator: {name}={state}")
+            logger.debug(f"set_indicator: {name}={state}")
             
             # Если задана длительность - выключить через это время
             if duration is not None:
                 await asyncio.sleep(duration)
                 commands = [OutputCommand(name=name, state=False)]
                 event_bus.publish(OutputCommandsGenerated(commands=commands))
-                logger.info(f"set_indicator: {name}=False after {duration}s")
+                logger.debug(f"set_indicator: {name}=False after {duration}s")
         except asyncio.CancelledError:
-            logger.info("set_indicator: task cancelled")
+            logger.debug("set_indicator: task cancelled")
         finally:
             self._indicator_task = None
     
@@ -337,7 +337,7 @@ class TurnstileState:
         
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since = None
-        logger.info("close_async: turnstile closed")
+        logger.debug("close_async: turnstile closed")
     
     async def _close_after_timeout(self, event_bus, timeout: float) -> None:
         """Асинхронная задача для закрытия через таймаут."""
@@ -355,7 +355,7 @@ class TurnstileState:
             ]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
             self._current_state = TurnstileStateEnum.IDLE
-            logger.info(f"close_after_timeout: closed turnstile")
+            logger.debug(f"close_after_timeout: closed turnstile")
     
     def set_alarm(self) -> List[OutputCommand]:
         """Установить режим тревоги (пожарная тревога)."""
