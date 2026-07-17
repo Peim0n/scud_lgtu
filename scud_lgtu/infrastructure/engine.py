@@ -31,10 +31,15 @@ from typing import Any, Optional
 from scud_lgtu.infrastructure.persistence.event_store import ScudEvent, ScudCommand, EventType, EventSource, CommandTarget, CommandAction
 from scud_lgtu.config import load as load_config
 from scud_lgtu.infrastructure.gpio.controller import GpiodPinController, PinControllerThread
+from scud_lgtu.infrastructure.gpio.emulator_controller import EmulatorPinController
 from scud_lgtu.infrastructure.serial.wiegand_reader import WeigandReader, CardData
+from scud_lgtu.infrastructure.serial.emulator_wiegand import EmulatorWiegandReader
 from scud_lgtu.infrastructure.serial.reader import BackgroundSerialReader
+from scud_lgtu.infrastructure.serial.emulator_reader import EmulatorSerialReader, EmulatorSerialReaderWithQueue
 from scud_lgtu.infrastructure.gpio.signal_reader import InputSignalReader, InputData
 from scud_lgtu.infrastructure.persistence.passage_detector import PassageDetector
+from scud_lgtu.infrastructure.config.module_resolver import ModuleResolver
+from scud_lgtu.infrastructure.emulator_server import EmulatorUDPServer
 
 logger = logging.getLogger(__name__)
 
@@ -133,12 +138,20 @@ class ScudEngine:
         else:
             self._timings = timings
 
+        # Инициализация ModuleResolver для новой архитектуры
+        self._resolver = ModuleResolver(self._cfg)
+
         self._event_queue: queue.Queue = queue.Queue(maxsize=self._timings.get("event_queue_maxsize", 1000))
         self._cmd_queue: queue.Queue = queue.Queue(maxsize=self._timings.get("command_queue_maxsize", 100))
 
         self._stop_event = threading.Event()
         self._ctrl: Optional[GpiodPinController] = None
         self._pct: Optional[PinControllerThread] = None
+
+        # UDP сервер для эмуляции (если включён)
+        self._emulator_server: Optional[EmulatorUDPServer] = None
+        self._wiegand_emulators: List[EmulatorWiegandReader] = []
+        self._serial_emulators: List[EmulatorSerialReaderWithQueue] = []
 
         self._threads: dict[str, threading.Thread] = {}
         self._serial_readers: list[BackgroundSerialReader] = []
@@ -178,6 +191,7 @@ class ScudEngine:
         self._start_serial()
         self._start_wiegand()
         self._start_signals()
+        self._start_emulator_server()  # Запуск UDP сервера для эмуляции
         self._start_command_loop()
         self._start_watchdog()
 
@@ -242,38 +256,70 @@ class ScudEngine:
     def _init_gpio(self) -> None:
         """Настроить GPIO: адресные пины, вход мультиплексора, сдвиговый регистр."""
         cfg = self._cfg
-        sr = cfg["shift"]
-        mux = cfg["mux"]
 
-        all_outputs = list(mux["addr_pins"]) + [sr["ser_data"], sr["ser_clk"], sr["ser_latch"]]
-        modes: dict[str, str] = {mux["input_pin"]: "input"}
+        # Выбор типа контроллера из конфига
+        controller_type = cfg.get("controller_type", {}).get("gpio", "real")
+        logger.info(f"GPIO controller type: {controller_type}")
+
+        # Используем ModuleResolver для получения пинов из gpiod_controller
+        self._resolver.set_context("gpiod_controller")
+        shift_data = self._resolver.resolve("shift_data")
+        shift_clk = self._resolver.resolve("shift_clk")
+        shift_latch = self._resolver.resolve("shift_latch")
+        mux_a0 = self._resolver.resolve("mux_a0")
+        mux_a1 = self._resolver.resolve("mux_a1")
+        mux_a2 = self._resolver.resolve("mux_a2")
+        mux_input = self._resolver.resolve("mux_input")
+
+        all_outputs = [mux_a0, mux_a1, mux_a2, shift_data, shift_clk, shift_latch]
+        modes: dict[str, str] = {mux_input: "input"}
         for p in all_outputs:
             modes[p] = "output"
 
-        self._ctrl = GpiodPinController()
-        self._ctrl.open(modes, pull_ups=[mux["input_pin"]])
-        self._ctrl.set_output_states(dict.fromkeys(all_outputs, 0))
-        logger.info("GpiodPinController инициализирован")
+        if controller_type == "emulator":
+            self._ctrl = EmulatorPinController()
+            self._ctrl.open()
+            self._ctrl.register_pin(mux_input, "/dev/gpiochip0", 0)
+            for p in all_outputs:
+                self._ctrl.register_pin(p, "/dev/gpiochip0", 0)
+            self._ctrl.set_pin_modes(modes)
+            self._ctrl.set_pull_up([mux_input])
+            self._ctrl.set_output_states(dict.fromkeys(all_outputs, 0))
+            logger.info("EmulatorPinController инициализирован (режим эмуляции)")
+        else:
+            self._ctrl = GpiodPinController()
+            self._ctrl.open(modes, pull_ups=[mux_input])
+            self._ctrl.set_output_states(dict.fromkeys(all_outputs, 0))
+            logger.info("GpiodPinController инициализирован (реальное оборудование)")
 
     def _start_workers(self) -> None:
         """Запустить PinControllerThread с MuxWorker и ShiftRegWorker."""
-        sr = self._cfg["shift"]
-        mux = self._cfg["mux"]
+        # Используем ModuleResolver для получения пинов из gpiod_controller
+        self._resolver.set_context("gpiod_controller")
+        shift_data = self._resolver.resolve("shift_data")
+        shift_clk = self._resolver.resolve("shift_clk")
+        shift_latch = self._resolver.resolve("shift_latch")
+        mux_a0 = self._resolver.resolve("mux_a0")
+        mux_a1 = self._resolver.resolve("mux_a1")
+        mux_a2 = self._resolver.resolve("mux_a2")
+        mux_input = self._resolver.resolve("mux_input")
+
         timings = self._cfg.get("timings", {})
         config = self._cfg.get("config", {})
 
         self._pct = PinControllerThread(
             controller=self._ctrl,
-            mux_input=mux["input_pin"],
-            mux_outputs=tuple(mux["addr_pins"]),
-            shift_ser_data=sr["ser_data"],
-            shift_ser_clk=sr["ser_clk"],
-            shift_ser_latch=sr["ser_latch"],
-            shift_reg_len=sr["reg_len"],
+            mux_input=mux_input,
+            mux_outputs=(mux_a0, mux_a1, mux_a2),
+            shift_ser_data=shift_data,
+            shift_ser_clk=shift_clk,
+            shift_ser_latch=shift_latch,
+            shift_reg_len=16,
             mux_poll_interval=timings.get("mux_poll_interval_s", 0.02),
             mux_addr_settle_s=timings.get("mux_addr_settle_s", 500e-6),
             event_queue=self._event_queue,
             config=config,
+            resolver=self._resolver,
         )
         self._pct.start()
         self._threads["mux_worker"] = self._pct._mux_thread
@@ -282,18 +328,71 @@ class ScudEngine:
 
     def _start_serial(self) -> None:
         """Запустить фоновые читатели Serial-портов."""
+        # Выбор типа контроллера из конфига
+        controller_type = self._cfg.get("controller_type", {}).get("serial", "real")
+
         for i, s in enumerate(self._cfg.get("serial", [])):
-            reader = BackgroundSerialReader(
-                s["port"],
-                s["baud"],
-                retry_delay=self._timings.get("serial_retry_delay_s", 1.0),
-            )
+            if controller_type == "emulator":
+                # Используем эмулятор с очередью для программного ввода
+                reader = EmulatorSerialReaderWithQueue(s["port"])
+                logger.info("Используется EmulatorSerialReaderWithQueue (режим эмуляции)")
+            else:
+                reader = BackgroundSerialReader(
+                    s["port"],
+                    s["baud"],
+                    retry_delay=self._timings.get("serial_retry_delay_s", 1.0),
+                )
+                logger.info("Используется BackgroundSerialReader (реальное оборудование)")
+
             q = reader.start()
             name = f"serial_{s['label']}"
             self._serial_readers.append(reader)
+
+            # Сохраняем эмуляторы для UDP сервера
+            if controller_type == "emulator":
+                self._serial_emulators.append(reader)
+
             self._threads[name] = reader
             self._serial_queue_loop(q, name)
             logger.info("Serial reader %s запущен", name)
+
+    def _start_emulator_server(self) -> None:
+        """Запустить UDP сервер для приёма команд симуляции."""
+        # Запускаем только если есть эмуляторы
+        if not self._wiegand_emulators and not self._serial_emulators:
+            logger.info("Emulator server: нет эмуляторов, сервер не запускается")
+            return
+
+        self._emulator_server = EmulatorUDPServer(host="127.0.0.1", port=9999)
+
+        # Регистрируем callback для симуляции карт
+        def handle_card(command: dict):
+            card_uid = command.get('card_uid')
+            reader_id = command.get('reader_id')
+            if card_uid and reader_id:
+                for reader in self._wiegand_emulators:
+                    if reader.reader_id == reader_id:
+                        reader.simulate_card_read(card_uid)
+                        logger.info(f"Emulator server: симуляция карты {card_uid} на {reader_id}")
+                        break
+
+        self._emulator_server.register_callback('card', handle_card)
+
+        # Регистрируем callback для симуляции QR-кодов
+        def handle_qr(command: dict):
+            qr_data = command.get('qr_data')
+            port = command.get('port')
+            if qr_data and port:
+                for reader in self._serial_emulators:
+                    if reader._port == port:
+                        reader.simulate_input(qr_data)
+                        logger.info(f"Emulator server: симуляция QR {qr_data} на {port}")
+                        break
+
+        self._emulator_server.register_callback('qr', handle_qr)
+
+        self._emulator_server.start()
+        logger.info("Emulator server запущен на 127.0.0.1:9999")
 
     def _serial_queue_loop(self, q: queue.Queue, name: str) -> None:
         """Передать строки из Serial-очереди в общую event_queue."""
@@ -319,17 +418,40 @@ class ScudEngine:
 
     def _start_wiegand(self) -> None:
         """Запустить Wiegand-читатели из конфигурации."""
+        # Выбор типа контроллера из конфига
+        controller_type = self._cfg.get("controller_type", {}).get("wiegand", "real")
+
         for i, w in enumerate(self._cfg.get("wiegand", [])):
-            t, q, ev = WeigandReader.start(
-                d0=w["d0"],
-                d1=w["d1"],
-                wiegand_type=w["type"],
-                encrypted=w.get("encrypted", False),
-                decrypt_key=w.get("decrypt_key"),
-                bit_timeout=self._timings.get("wiegand_bit_timeout_s", 0.025),
-                wait_timeout=self._timings.get("wiegand_wait_timeout_s", 0.005),
-                ignore_after_valid=self._timings.get("wiegand_ignore_after_valid_s", 0.05),
-            )
+            if controller_type == "emulator":
+                # Используем эмулятор (без консольного ввода по умолчанию)
+                reader = EmulatorWiegandReader(
+                    d0_pin=w["d0"],
+                    d1_pin=w["d1"],
+                    reader_id=w["label"],
+                    bit_timeout=self._timings.get("wiegand_bit_timeout_s", 0.025),
+                    wait_timeout=self._timings.get("wiegand_wait_timeout_s", 0.005),
+                    console_input=False,  # Отключаем консольный ввод по умолчанию
+                )
+                q = reader.start()
+                ev = threading.Event()
+                ev.set()
+                t = reader._thread
+                self._wiegand_emulators.append(reader)  # Сохраняем для UDP сервера
+                logger.info("Используется EmulatorWiegandReader (режим эмуляции)")
+            else:
+                # Используем реальный reader
+                t, q, ev = WeigandReader.start(
+                    d0=w["d0"],
+                    d1=w["d1"],
+                    wiegand_type=w["type"],
+                    encrypted=w.get("encrypted", False),
+                    decrypt_key=w.get("decrypt_key"),
+                    bit_timeout=self._timings.get("wiegand_bit_timeout_s", 0.025),
+                    wait_timeout=self._timings.get("wiegand_wait_timeout_s", 0.005),
+                    ignore_after_valid=self._timings.get("wiegand_ignore_after_valid_s", 0.05),
+                )
+                logger.info("Используется WeigandReader (реальное оборудование)")
+
             name = f"wiegand_{w['label']}"
             self._wiegand_events.append(ev)
             self._threads[name] = t

@@ -25,6 +25,7 @@ from typing import Any, Optional
 
 from scud_lgtu.infrastructure.gpio.controller import GpiodPinController
 from scud_lgtu.infrastructure.persistence.event_store import ScudEvent, EventType, EventSource
+from scud_lgtu.infrastructure.config.module_resolver import ModuleResolver
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +40,6 @@ class ShiftRegister:
         Инициализированный контроллер GPIO.
     input_queue : queue.Queue
         Очередь входящих значений (int).
-    ser_data_pin : str
-        Имя пина SER_DATA (данные), например ``'PA6'``.
-    ser_clk_pin : str
-        Имя пина SER_CLK (тактирование), например ``'PA19'``.
-    ser_latch_pin : str
-        Имя пина SER_LATCH (защёлка), например ``'PA7'``.
-    reg_len : int
-        Разрядность регистра (биты), например ``16``.
     lock : threading.Lock
         Общий лок с Multiplexer.
     stop_event : threading.Event
@@ -54,43 +47,78 @@ class ShiftRegister:
     event_queue : queue.Queue, optional
         Общая очередь событий. После успешной записи публикуется
         ``ScudEvent(type='shift_done', source='shift')``.
+    resolver : ModuleResolver
+        Резолвер модульных имен для конфигурации.
     config : dict, optional
-        Конфигурация пинов сдвигового регистра для автоматического мапинга.
-        Формат: ``{'shift_pins': {'name': {'pin': 0, 'inverted': False}}}``.
+        Полный конфигурационный словарь (для обратной совместимости).
     """
 
     def __init__(
         self,
         controller: GpiodPinController,
         input_queue: Queue,
-        ser_data_pin: str,
-        ser_clk_pin: str,
-        ser_latch_pin: str,
-        reg_len: int,
         lock: threading.Lock,
         stop_event: threading.Event,
         event_queue: Optional[Queue] = None,
+        resolver: Optional[ModuleResolver] = None,
         config: Optional[dict] = None,
     ):
         """Инициализировать воркер сдвигового регистра."""
         self._controller = controller
         self._input_queue = input_queue
-        self._ser_data_pin = ser_data_pin
-        self._ser_clk_pin = ser_clk_pin
-        self._ser_latch_pin = ser_latch_pin
-        self._n = reg_len
         self._lock = lock
         self._stop_event = stop_event
         self._event_queue = event_queue
-        
+        self._resolver = resolver
+
         # Автоматический мапинг пинов
         self._pin_masks = {}
         self._last_sent_state = 0  # Последнее состояние, отправленное в регистр
-        if config:
+
+        # Загрузка конфигурации
+        if resolver:
+            # Новая архитектура с ModuleResolver
+            self._load_from_resolver()
+        elif config:
+            # Старая архитектура для обратной совместимости
             self._load_pin_masks(config)
+        else:
+            raise ValueError("Either resolver or config must be provided")
+
+        # Получение пинов сдвигового регистра
+        if resolver:
+            resolver.set_context("shift_register")
+            self._ser_data_pin = resolver.resolve("ser_data")
+            self._ser_clk_pin = resolver.resolve("ser_clk")
+            self._ser_latch_pin = resolver.resolve("ser_latch")
+            self._n = resolver.resolve("reg_len")
+        elif config:
+            # Старая архитектура
+            self._ser_data_pin = config.get("ser_data", "PA6")
+            self._ser_clk_pin = config.get("ser_clk", "PA19")
+            self._ser_latch_pin = config.get("ser_latch", "PA7")
+            self._n = config.get("reg_len", 16)
+
+    def _load_from_resolver(self) -> None:
+        """Загрузить мапинг пинов из ModuleResolver."""
+        if not self._resolver:
+            return
+
+        self._resolver.set_context("shift_register")
+        pins_config = self._resolver.resolve("pins")
+
+        for name, cfg in pins_config.items():
+            offset = cfg.get('offset')
+            inverted = cfg.get('inverted', False)
+            if offset is not None:
+                mask = 1 << offset
+                if inverted:
+                    mask = ~mask & ((1 << self._n) - 1)  # Инвертировать в пределах reg_len
+                self._pin_masks[name] = mask
+                logger.info(f"[ShiftRegister] Мапинг: {name} -> offset={offset}, inverted={inverted}, mask=0x{mask:04x}")
 
     def _load_pin_masks(self, config: dict) -> None:
-        """Загрузить мапинг пинов из конфигурации."""
+        """Загрузить мапинг пинов из конфигурации (старая архитектура)."""
         shift_pins = config.get('shift_pins', {})
         for name, cfg in shift_pins.items():
             pin = cfg.get('pin')
@@ -100,7 +128,7 @@ class ShiftRegister:
                 if inverted:
                     mask = ~mask & ((1 << self._n) - 1)  # Инвертировать в пределах reg_len
                 self._pin_masks[name] = mask
-                logger.info(f"[ShiftRegister] Мапинг: {name} -> pin={pin}, inverted={inverted}, mask=0x{mask:04x}")
+                logger.info(f"[ShiftRegister] Мапинг (legacy): {name} -> pin={pin}, inverted={inverted}, mask=0x{mask:04x}")
 
     def set_mask(self, masks: dict[str, bool]) -> None:
         """

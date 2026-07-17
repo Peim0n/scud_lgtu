@@ -14,7 +14,7 @@ from scud_lgtu.application.basic_business_logic import (
     get_passage_direction, is_passage_in, is_passage_out, is_blockage,
     check_qr_access, check_card_access, grant_access, deny_access,
     authorize_passage, check_authorization, mark_auth_used,
-    log_passage, log_error, log_info,
+    log_passage,
     open_turnstile, close_turnstile, flash_indicator, turn_off_indicator,
     set_green_indicator, set_red_indicator, beep_sequence, beep_repeat,
     set_indicator_with_timeout, set_shift_pins, is_alarm_active
@@ -50,50 +50,50 @@ class LGTUController:
     
     def process_qr_event(self, event: ScudEvent) -> None:
         """Обработка QR-кода (валидация уже реализована в декодере)."""
-        log_info(f"QR event received: {event.payload}")
+        logger.info(f"QR event received: {event.payload}")
         qr_data = event.payload.get("qr_data")
         if not qr_data:
             deny_access(self.engine)
-            log_error("QR event: no data")
+            logger.error("QR event: no data")
             return
-        
+
         max_id = event.payload.get("max_id")
         if not max_id:
             deny_access(self.engine)
-            log_error("QR event: no max_id in payload")
+            logger.error("QR event: no max_id in payload")
             return
-        
+
         allowed, user_id = check_qr_access(self.cache, str(max_id))
-        log_info(f"QR access check: max_id={max_id}, allowed={allowed}, user_id={user_id}")
+        logger.info(f"QR access check: max_id={max_id}, allowed={allowed}, user_id={user_id}")
         if allowed:
             self.auth_state = authorize_passage("in", "maxid", str(max_id), user_id)
-            log_info(f"QR authorized for {max_id}, calling grant_access")
+            logger.info(f"QR authorized for {max_id}, calling grant_access")
             grant_access(self.engine)
-            log_info(f"grant_access called successfully")
+            logger.info(f"grant_access called successfully")
         else:
-            log_info(f"QR access denied for {max_id}, calling deny_access")
+            logger.info(f"QR access denied for {max_id}, calling deny_access")
             deny_access(self.engine)
             self.event_counter = log_passage(self.store, self.event_counter, "denied", str(max_id), None, "QR access denied")
     
     def process_card_event(self, event: ScudEvent) -> None:
         """Обработка карты МИР с учетом шифрования считывателем."""
-        log_info(f"Card event received: {event.payload}")
+        logger.info(f"Card event received: {event.payload}")
         card_data = event.payload.get("card_data")
         if not card_data:
             deny_access(self.engine)
-            log_error("Card event: no card_data")
+            logger.error("Card event: no card_data")
             return
-        
+
         is_valid = event.payload.get("is_valid", True)
         if not is_valid:
             deny_access(self.engine)
             error_msg = event.payload.get("error_message", "Invalid card")
-            log_error(f"Card event: invalid card - {error_msg}")
+            logger.error(f"Card event: invalid card - {error_msg}")
             return
-        
+
         card_uid = str(card_data)
-        log_info(f"Processing card UID: {card_uid}")
-        
+        logger.info(f"Processing card UID: {card_uid}")
+
         is_encrypted = event.payload.get("encrypted", False)
         
         if is_encrypted:
@@ -101,19 +101,19 @@ class LGTUController:
         else:
             card_id = self.encrypt_card_pan(card_uid)
         
-        log_info(f"Checking access for card_id: {card_id}")
+        logger.info(f"Checking access for card_id: {card_id}")
         allowed, user_id = check_card_access(self.cache, card_id)
-        log_info(f"Access check result: allowed={allowed}, user_id={user_id}")
-        
+        logger.info(f"Access check result: allowed={allowed}, user_id={user_id}")
+
         if allowed:
             self.auth_state = authorize_passage("in", "cardid", card_id, user_id)
             set_green_indicator(self.engine, "w1")
             beep_sequence(self.engine, count=1)
-            log_info(f"Card authorized for {card_id}, calling grant_access")
+            logger.info(f"Card authorized for {card_id}, calling grant_access")
             grant_access(self.engine)
-            log_info(f"grant_access called successfully")
+            logger.info(f"grant_access called successfully")
         else:
-            log_info(f"Card access denied for {card_id}, calling deny_access")
+            logger.info(f"Card access denied for {card_id}, calling deny_access")
             deny_access(self.engine)
             self.event_counter = log_passage(self.store, self.event_counter, "denied", card_id, None, "Card access denied")
     
@@ -121,10 +121,10 @@ class LGTUController:
         """Обработка данных из Serial-порта (QR-коды)."""
         reader = event.payload.get("reader", "unknown")
         data = str(event.payload.get("data", "")).strip()
-        log_info(f"Serial data from {reader}: {data}")
-        
+        logger.info(f"Serial data from {reader}: {data}")
+
         if data.startswith("https://pass.lipetsk.ru/"):
-            log_info(f"QR URL detected from {reader}: {data}")
+            logger.info(f"QR URL detected from {reader}: {data}")
             try:
                 qr_fields = self.qr_decoder.decode_url(data)
                 max_id = qr_fields.get("max_id")
@@ -140,13 +140,13 @@ class LGTUController:
                     )
                     self.process_qr_event(qr_event)
                 else:
-                    log_error("QR decode failed: no max_id in result")
+                    logger.error("QR decode failed: no max_id in result")
                     deny_access(self.engine)
             except Exception as e:
-                log_error(f"QR decode failed: {e}")
+                logger.error(f"QR decode failed: {e}")
                 deny_access(self.engine)
         else:
-            log_info(f"Invalid QR format (not pass.lipetsk.ru): {data}")
+            logger.info(f"Invalid QR format (not pass.lipetsk.ru): {data}")
             deny_access(self.engine)
     
     def encrypt_card_pan(self, pan: str) -> str:
@@ -156,18 +156,18 @@ class LGTUController:
     
     def process_passage_event(self, event: ScudEvent) -> None:
         """Обработка события прохода через турникет от датчиков."""
-        log_info(f"Passage event received: {event.payload}")
+        logger.info(f"Passage event received: {event.payload}")
         
         if is_passage_in(event):
-            log_info("Passage IN detected")
+            logger.info("Passage IN detected")
             self.handle_passage_in(event)
             self.mark_passage_completed("in")
         elif is_passage_out(event):
-            log_info("Passage OUT detected")
+            logger.info("Passage OUT detected")
             self.handle_passage_out(event)
             self.mark_passage_completed("out")
         elif is_blockage(event):
-            log_info("Blockage detected")
+            logger.info("Blockage detected")
             self.handle_blockage(event)
     
     def mark_passage_completed(self, direction: str) -> None:
@@ -175,7 +175,7 @@ class LGTUController:
         for token, passage_info in self.last_passages.items():
             if passage_info["direction"] == direction and not passage_info["passed"]:
                 self.last_passages[token]["passed"] = True
-                log_info(f"Passage {direction} completed for token {token}")
+                logger.info(f"Passage {direction} completed for token {token}")
                 break
     
     def handle_passage_in(self, event: ScudEvent) -> None:
@@ -248,28 +248,28 @@ class LGTUController:
     
     def process_alarm_event(self, event: ScudEvent) -> None:
         """Обработка события пожарной сигнализации."""
-        log_info(f"Alarm event received: {event.payload}")
+        logger.info(f"Alarm event received: {event.payload}")
         alarm_state = event.payload.get("state")
-        log_info(f"Alarm state: {alarm_state}")
+        logger.info(f"Alarm state: {alarm_state}")
         
         fire_alarm_active = bool(alarm_state)
-        log_info(f"Fire alarm active: {fire_alarm_active}")
-        
+        logger.info(f"Fire alarm active: {fire_alarm_active}")
+
         if fire_alarm_active:
             if not self.alarm_active:
                 self.alarm_active = True
-                log_info("Activating fire alarm mode - opening turnstile and starting indication")
+                logger.info("Activating fire alarm mode - opening turnstile and starting indication")
                 open_turnstile(self.engine)
-                log_info("Turnstile opened via open_turnstile")
+                logger.info("Turnstile opened via open_turnstile")
                 self.start_alarm_indication()
-                log_error("Fire alarm active - turnstile unlocked")
+                logger.error("Fire alarm active - turnstile unlocked")
         else:
             if self.alarm_active:
                 self.alarm_active = False
-                log_info("Deactivating fire alarm mode - closing turnstile and stopping indication")
+                logger.info("Deactivating fire alarm mode - closing turnstile and stopping indication")
                 set_shift_pins(self.engine, {"rel2": False, "w1_red": False, "buz": False, "w1_beep": False, "w2_beep": False})
-                log_info("Turnstile closed and indication stopped")
-                log_info("Fire alarm cleared - turnstile locked")
+                logger.info("Turnstile closed and indication stopped")
+                logger.info("Fire alarm cleared - turnstile locked")
     
     def start_alarm_indication(self) -> None:
         """Запустить индикацию пожарной тревоги (мигающий красный + пищание)."""
@@ -298,27 +298,27 @@ class LGTUController:
     
     def handle_button_1(self) -> None:
         """Обработка кнопки 1 - открыть на вход (rel1)."""
-        log_info("Button 1: opening turnstile for entry (rel1)")
+        logger.info("Button 1: opening turnstile for entry (rel1)")
         if self.button_release_timer:
             self.button_release_timer.cancel()
             self.button_release_timer = None
-            log_info("Button 1: timer cancelled")
+            logger.info("Button 1: timer cancelled")
         set_shift_pins(self.engine, {"rel1": True, "w1_green": True})
         self._active_relay = "rel1"
         self._active_indicator = "w1_green"
-        log_info("Button 1: turnstile opened (rel1)")
+        logger.info("Button 1: turnstile opened (rel1)")
     
     def handle_button_2(self) -> None:
         """Обработка кнопки 2 - открыть на выход (rel2)."""
-        log_info("Button 2: opening turnstile for exit (rel2)")
+        logger.info("Button 2: opening turnstile for exit (rel2)")
         if self.button_release_timer:
             self.button_release_timer.cancel()
             self.button_release_timer = None
-            log_info("Button 2: timer cancelled")
+            logger.info("Button 2: timer cancelled")
         set_shift_pins(self.engine, {"rel2": True, "w2_green": True})
         self._active_relay = "rel2"
         self._active_indicator = "w2_green"
-        log_info("Button 2: turnstile opened (rel2)")
+        logger.info("Button 2: turnstile opened (rel2)")
     
     def handle_button_3(self) -> None:
         """Обработка кнопки 3 - не используется."""
@@ -326,10 +326,10 @@ class LGTUController:
     
     def handle_button_release(self) -> None:
         """Обработка отжатия кнопки - запустить таймер закрытия."""
-        log_info("Button released: starting 2s timer to close turnstile")
+        logger.info("Button released: starting 2s timer to close turnstile")
         if self.button_release_timer:
             self.button_release_timer.cancel()
-            log_info("Previous timer cancelled")
+            logger.info("Previous timer cancelled")
         
         import threading
         relay = getattr(self, "_active_relay", "rel2")
@@ -337,21 +337,21 @@ class LGTUController:
         button_timer_duration = self.timings.get("button_timer_duration_s", 2.0)  # Длительность таймера кнопки из конфига
         self.button_release_timer = threading.Timer(button_timer_duration, self._close_turnstile_after_timer)
         self.button_release_timer.start()
-        log_info(f"Timer started: will close turnstile in {button_timer_duration} seconds")
+        logger.info(f"Timer started: will close turnstile in {button_timer_duration} seconds")
     
     def _close_turnstile_after_timer(self) -> None:
         """Закрыть турникет после таймера."""
-        log_info("Timer expired: closing turnstile")
+        logger.info("Timer expired: closing turnstile")
         relay = getattr(self, "_active_relay", "rel2")
         indicator = getattr(self, "_active_indicator", "w1_green")
         set_shift_pins(self.engine, {relay: False, indicator: False})
         self.button_release_timer = None
-        log_info(f"Turnstile closed after timer ({relay}, {indicator})")
+        logger.info(f"Turnstile closed after timer ({relay}, {indicator})")
     
     def process_mux_event(self, event: ScudEvent) -> None:
         """Обработка событий от мультиплексора (кнопки, аларм, датчики)."""
         states = event.payload.get("states", {})
-        log_info(f"MUX event received: {states}")
+        logger.info(f"MUX event received: {states}")
         
         for key, value in states.items():
             if key not in self.last_mux_state:
@@ -360,25 +360,25 @@ class LGTUController:
             
             old_value = self.last_mux_state[key]
             if old_value != value:
-                log_info(f"State change detected: {key}: {old_value} -> {value}")
+                logger.info(f"State change detected: {key}: {old_value} -> {value}")
                 self.last_mux_state[key] = value
                 
                 if key == "button_1":
                     if value == 0:
-                        log_info("Button 1 pressed (state=0)")
+                        logger.info("Button 1 pressed (state=0)")
                         self.handle_button_1()
                     else:
-                        log_info("Button 1 released (state=1)")
+                        logger.info("Button 1 released (state=1)")
                         self.handle_button_release()
                 elif key == "button_2":
                     if value == 0:
-                        log_info("Button 2 pressed (state=0)")
+                        logger.info("Button 2 pressed (state=0)")
                         self.handle_button_2()
                     else:
-                        log_info("Button 2 released (state=1)")
+                        logger.info("Button 2 released (state=1)")
                         self.handle_button_release()
                 elif key == "alarm":
-                    log_info(f"Alarm state changed: {value}")
+                    logger.info(f"Alarm state changed: {value}")
                     alarm_event = ScudEvent(
                         type=EventType.INPUT_SIGNAL,
                         source=EventSource.MUX,
@@ -392,9 +392,9 @@ class LGTUController:
             keys_response = self.backend.get_keys()
             if keys_response.get("status") == "ok":
                 self.cache.update_keys(keys_response.get("keys", []))
-                log_info("Keys synchronized successfully")
+                logger.info("Keys synchronized successfully")
         except Exception as e:
-            log_error(f"Keys sync failed: {e}")
+            logger.error(f"Keys sync failed: {e}")
     
     def sync_access_list(self) -> None:
         """Синхронизация списков доступа с бэкендом."""
@@ -402,9 +402,9 @@ class LGTUController:
             access_response = self.backend.get_access_list()
             if access_response.get("status") == "ok":
                 self.cache.update(access_response.get("identifiers", []))
-                log_info("Access list synchronized successfully")
+                logger.info("Access list synchronized successfully")
         except Exception as e:
-            log_error(f"Access list sync failed: {e}")
+            logger.error(f"Access list sync failed: {e}")
     
     def check_timeouts(self) -> None:
         """Проверка таймаутов (не требуется - basic_business_logic управляет таймингами)."""
@@ -412,7 +412,7 @@ class LGTUController:
     
     def run(self) -> None:
         """Основной цикл обработки событий."""
-        log_info("LGTU Controller started")
+        logger.info("LGTU Controller started")
         
         last_keys_sync = 0
         last_access_sync = 0

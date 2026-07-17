@@ -42,8 +42,7 @@ from scud_lgtu.application.event_bus import EventBus
 from scud_lgtu.application.services.access_service import AccessService
 from scud_lgtu.application.services.passage_service import PassageService
 from scud_lgtu.application.services.sync_service import SyncService
-from scud_lgtu.application.handlers.qr import handle_qr_read
-from scud_lgtu.application.handlers.card import handle_card_read
+from scud_lgtu.application.handlers.credential import handle_credential
 from scud_lgtu.application.handlers.passage import handle_passage_detected
 from scud_lgtu.application.handlers.mux import handle_mux_input_changed
 from scud_lgtu.application.handlers.alarm import handle_alarm_changed
@@ -123,11 +122,11 @@ class LGTUApplication:
     def _register_handlers(self) -> None:
         """Register event handlers."""
         # Register domain event handlers
-        self._event_bus.subscribe("QrRead", lambda e: handle_qr_read(
-            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus, self._devices
+        self._event_bus.subscribe("QrRead", lambda e: handle_credential(
+            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus, self._devices, token_prefix="maxid"
         ))
-        self._event_bus.subscribe("CardRead", lambda e: handle_card_read(
-            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus, self._devices
+        self._event_bus.subscribe("CardRead", lambda e: handle_credential(
+            e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus, self._devices, token_prefix="cardid"
         ))
         self._event_bus.subscribe("PassageDetected", lambda e: handle_passage_detected(
             e, self._turnstile, self._passage_tracker, self._event_bus, self._passage_service, self._devices

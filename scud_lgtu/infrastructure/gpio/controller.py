@@ -582,6 +582,7 @@ class PinControllerThread:
         event_queue: Optional[Queue] = None,
         config: Optional[dict] = None,
         timings: dict = None,
+        resolver: Optional['ModuleResolver'] = None,
     ):
         """Подготовить потоки GPIO для мультиплексора и сдвигового регистра."""
         if timings is None:
@@ -597,6 +598,7 @@ class PinControllerThread:
         self._shift_reg_len = shift_reg_len
         self._mux_poll_interval = mux_poll_interval
         self._mux_addr_settle_s = mux_addr_settle_s
+        self._resolver = resolver
         self._event_queue = event_queue
         self._config = config
         self._timings = timings
@@ -648,13 +650,10 @@ class PinControllerThread:
         shift = ShiftRegister(
             controller=self._controller,
             input_queue=self.shift_input_queue,
-            ser_data_pin=self._shift_ser_data,
-            ser_clk_pin=self._shift_ser_clk,
-            ser_latch_pin=self._shift_ser_latch,
-            reg_len=self._shift_reg_len,
             lock=self.lock,
             stop_event=self._stop_event,
             event_queue=self._event_queue,
+            resolver=self._resolver,
             config=self._config,
         )
         self._shift_worker = shift

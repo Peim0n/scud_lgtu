@@ -41,6 +41,13 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
+# Try to import ModuleResolver for new architecture
+try:
+    from scud_lgtu.infrastructure.config.module_resolver import ModuleResolver
+    MODULE_RESOLVER_AVAILABLE = True
+except ImportError:
+    MODULE_RESOLVER_AVAILABLE = False
+
 
 class TurnstileStateEnum(str, Enum):
     """Состояния турникета."""
@@ -54,8 +61,8 @@ class TurnstileStateEnum(str, Enum):
 @dataclass
 class TurnstileState:
     """Конечный автомат турникета."""
-    
-    def __init__(self, auth_timeout: float = 5.0, timings: dict = None, devices: dict = None):
+
+    def __init__(self, auth_timeout: float = 5.0, timings: dict = None, devices: dict = None, resolver: Optional[ModuleResolver] = None):
         """
         Инициализировать состояние турникета.
 
@@ -67,6 +74,9 @@ class TurnstileState:
             Словарь таймингов из конфигурации. Если None, используются дефолтные значения.
         devices : dict, optional
             Словарь конфигурации устройств из config.yml. Содержит мапинг реле, индикаторов и биперов.
+            Для обратной совместимости со старой архитектурой.
+        resolver : ModuleResolver, optional
+            Резолвер модульных имен для новой архитектуры.
         """
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since: Optional[float] = None
@@ -74,40 +84,83 @@ class TurnstileState:
         self._auth_timeout = auth_timeout
         self._output_commands: List[OutputCommand] = []
         self._beep_since: Optional[float] = None
+        self._resolver = resolver
 
-        # Тайминги из конфига или дефолтные значения
-        if timings is None:
-            timings = {}
-        self._beep_duration = timings.get("beep_signal_duration_s", 0.1)  # Длительность сигнала бипера
-        self._alarm_beep_cycle = timings.get("alarm_beep_on_duration_s", 0.5) + timings.get("alarm_beep_off_duration_s", 0.5)  # Полный цикл тревоги
-        self._deny_beep_duration = timings.get("deny_beep_duration_s", 0.1)  # Длительность писка при отказе
-        self._deny_beep_pause = timings.get("deny_beep_pause_s", 0.1)  # Пауза между писками при отказе
-        self._deny_beep_total = timings.get("deny_beep_count", 3)  # Количество писков при отказе
-        self._open_beep_duration = timings.get("open_beep_duration_s", 0.1)  # Длительность писка при открытии
-        self._indicator_duration = timings.get("indicator_duration_s", 2.0)  # Длительность индикатора
-
-        # Мапинг устройств из конфига или дефолтные значения
-        if devices is None:
-            devices = {}
-        relays = devices.get("relays", {})
-        buzzers = devices.get("buzzers", {})
-
-        # Получаем имена пинов из конфига или используем дефолтные
-        self._entry_relay = relays.get("entry_relay", {}).get("label", "rel1")
-        self._exit_relay = relays.get("exit_relay", {}).get("label", "rel2")
-        self._main_buzzer = buzzers.get("main_buzzer", {}).get("label", "buz")
-
-        # Для индикаторов используем дефолтные имена (пока нет в конфиге)
-        self._entry_green = "w1_green"
-        self._entry_red = "w1_red"
-        self._exit_green = "w2_green"
-        self._exit_red = "w2_red"
+        # Загрузка конфигурации
+        if resolver and MODULE_RESOLVER_AVAILABLE:
+            # Новая архитектура с ModuleResolver
+            self._load_from_resolver(timings)
+        else:
+            # Старая архитектура для обратной совместимости
+            self._load_from_legacy(timings, devices)
 
         self._alarm_beep_since: Optional[float] = None
         self._alarm_beep_on = False
         self._open_task: Optional[asyncio.Task] = None  # Активная задача открытия
         self._deny_beep_task: Optional[asyncio.Task] = None  # Активная задача deny beep
         self._indicator_task: Optional[asyncio.Task] = None  # Активная задача индикатора
+
+    def _load_from_resolver(self, timings: dict = None) -> None:
+        """Загрузить конфигурацию из ModuleResolver."""
+        if not self._resolver:
+            return
+
+        if timings is None:
+            timings = {}
+
+        # Загрузка таймингов из секции business
+        self._resolver.set_context("business")
+        business_timings = self._resolver.resolve("timings") if "timings" in self._resolver._get_module_config("business") else {}
+
+        self._beep_duration = business_timings.get("beep_signal_duration_s", timings.get("beep_signal_duration_s", 0.1))
+        self._alarm_beep_cycle = business_timings.get("alarm_beep_on_duration_s", timings.get("alarm_beep_on_duration_s", 0.5)) + \
+                                business_timings.get("alarm_beep_off_duration_s", timings.get("alarm_beep_off_duration_s", 0.5))
+        self._deny_beep_duration = business_timings.get("deny_beep_duration_s", timings.get("deny_beep_duration_s", 0.1))
+        self._deny_beep_pause = business_timings.get("deny_beep_pause_s", timings.get("deny_beep_pause_s", 0.1))
+        self._deny_beep_total = business_timings.get("deny_beep_count", timings.get("deny_beep_count", 3))
+        self._open_beep_duration = business_timings.get("open_beep_duration_s", timings.get("open_beep_duration_s", 0.1))
+        self._indicator_duration = business_timings.get("indicator_duration_s", timings.get("indicator_duration_s", 2.0))
+
+        # Загрузка имен пинов из секции business
+        self._entry_relay = self._resolver.resolve("entry_relay")
+        self._exit_relay = self._resolver.resolve("exit_relay")
+        self._main_buzzer = self._resolver.resolve("main_buzzer")
+        self._entry_green = self._resolver.resolve("inner_indicator_success")
+        self._entry_red = self._resolver.resolve("inner_indicator_fail")
+        self._exit_green = self._resolver.resolve("outer_indicator_success")
+        self._exit_red = self._resolver.resolve("outer_indicator_fail")
+
+        logger.info("[TurnstileState] Конфигурация загружена через ModuleResolver")
+
+    def _load_from_legacy(self, timings: dict = None, devices: dict = None) -> None:
+        """Загрузить конфигурацию из старого формата (для обратной совместимости)."""
+        if timings is None:
+            timings = {}
+        if devices is None:
+            devices = {}
+
+        self._beep_duration = timings.get("beep_signal_duration_s", 0.1)
+        self._alarm_beep_cycle = timings.get("alarm_beep_on_duration_s", 0.5) + timings.get("alarm_beep_off_duration_s", 0.5)
+        self._deny_beep_duration = timings.get("deny_beep_duration_s", 0.1)
+        self._deny_beep_pause = timings.get("deny_beep_pause_s", 0.1)
+        self._deny_beep_total = timings.get("deny_beep_count", 3)
+        self._open_beep_duration = timings.get("open_beep_duration_s", 0.1)
+        self._indicator_duration = timings.get("indicator_duration_s", 2.0)
+
+        relays = devices.get("relays", {})
+        buzzers = devices.get("buzzers", {})
+
+        self._entry_relay = relays.get("entry_relay", {}).get("label", "rel1")
+        self._exit_relay = relays.get("exit_relay", {}).get("label", "rel2")
+        self._main_buzzer = buzzers.get("main_buzzer", {}).get("label", "buz")
+
+        # Для индикаторов используем дефолтные имена
+        self._entry_green = "w1_green"
+        self._entry_red = "w1_red"
+        self._exit_green = "w2_green"
+        self._exit_red = "w2_red"
+
+        logger.info("[TurnstileState] Конфигурация загружена из legacy формата")
     
     def can_open(self, direction: DirectionEnum) -> bool:
         """Проверить, можно ли открыть турникет в заданном направлении."""

@@ -1,18 +1,18 @@
 """
-Обработчик событий QR-кодов системы СКУД.
+Обработчик событий учётных данных системы СКУД.
 
-Этот модуль реализует обработчик событий считывания QR-кодов с QR-считывателей.
-Обработчик создаёт сессию авторизации с префиксом maxid и делегирует дальнейшую
+Этот модуль реализует параметризованный обработчик событий считывания карт и QR-кодов.
+Обработчик создаёт сессию авторизации с заданным префиксом токена и делегирует дальнейшую
 обработку общему обработчику учётных данных, который проверяет доступ, открывает
 турникет и управляет индикаторами.
 
 Функции
 -------
-- handle_qr_read: обработать событие считывания QR-кода
+- handle_credential: обработать событие считывания учётных данных (карта или QR-код)
 """
-from scud_lgtu.domain.events import QrRead
+from scud_lgtu.domain.events import CardRead, QrRead
 from scud_lgtu.domain.models import AuthSession
-from scud_lgtu.domain.enums import DirectionEnum, TokenTypeEnum
+from scud_lgtu.domain.enums import DirectionEnum
 from scud_lgtu.application.handlers.common import handle_credential_common
 import logging
 import asyncio
@@ -20,14 +20,22 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 
-async def handle_qr_read(event: QrRead, turnstile, access_policy, passage_tracker, event_bus, devices: dict) -> None:
+async def handle_credential(
+    event: CardRead | QrRead,
+    turnstile,
+    access_policy,
+    passage_tracker,
+    event_bus,
+    devices: dict,
+    token_prefix: str = "cardid"
+) -> None:
     """
-    Обработать событие считывания QR-кода.
+    Обработать событие считывания учётных данных.
 
     Parameters
     ----------
-    event : QrRead
-        Событие считывания QR-кода
+    event : CardRead | QrRead
+        Событие считывания карты или QR-кода
     turnstile : TurnstileState
         Состояние турникета для управления
     access_policy : AccessPolicy
@@ -38,10 +46,12 @@ async def handle_qr_read(event: QrRead, turnstile, access_policy, passage_tracke
         Шина событий для публикации команд
     devices : dict
         Мапинг устройств из конфига
+    token_prefix : str
+        Префикс токена ("cardid" для карт, "maxid" для QR-кодов)
     """
-    # Создание сессии авторизации с префиксом maxid
+    # Создание сессии авторизации с заданным префиксом
     session = AuthSession(
-        token=f"maxid:{event.credential.value}",
+        token=f"{token_prefix}:{event.credential.value}",
         direction=DirectionEnum.IN,
         user_id=None  # Будет заполнено в handle_credential_common
     )

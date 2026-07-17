@@ -23,6 +23,7 @@ from scud_lgtu.infrastructure.sound import SoundOutputAdapter
 from scud_lgtu.infrastructure.backend import BackendGatewayAdapter
 from scud_lgtu.infrastructure.gpio.actuator import ShiftRegisterActuator
 from scud_lgtu.infrastructure.gpio.pin_map import load_pin_map
+from scud_lgtu.infrastructure.config.module_resolver import ModuleResolver
 from scud_lgtu.domain.turnstile import TurnstileState
 from scud_lgtu.domain.services import AccessPolicy, PassageTracker
 from scud_lgtu.application.lgtu_application import LGTUApplication
@@ -108,7 +109,11 @@ def build_application(config_path: str = None) -> LGTUApplication:
     # Domain components
     auth_timeout = timings.get("auth_timeout_s", 5.0)  # Время действия авторизации из конфига
     passage_devices = devices.get("passage", {})
-    turnstile = TurnstileState(auth_timeout=auth_timeout, timings=timings, devices=passage_devices)
+
+    # Инициализация ModuleResolver для новой архитектуры
+    resolver = ModuleResolver(config)
+
+    turnstile = TurnstileState(auth_timeout=auth_timeout, timings=timings, devices=passage_devices, resolver=resolver)
     access_policy = AccessPolicy(cache=cache)
     passage_tracker = PassageTracker()
 

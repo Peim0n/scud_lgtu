@@ -9,8 +9,7 @@ from scud_lgtu.domain.events import QrRead, CardRead, ButtonPressed, AlarmChange
 from scud_lgtu.domain.models import Credential
 from scud_lgtu.domain.enums import DirectionEnum, TokenTypeEnum
 from scud_lgtu.application.event_bus import EventBus
-from scud_lgtu.application.handlers.qr import handle_qr_read
-from scud_lgtu.application.handlers.card import handle_card_read
+from scud_lgtu.application.handlers.credential import handle_credential
 from scud_lgtu.application.handlers.button import handle_button_pressed
 from scud_lgtu.application.handlers.alarm import handle_alarm_changed
 from scud_lgtu.application.handlers.passage import handle_passage_detected
@@ -95,29 +94,29 @@ class TestCardFlow:
     async def test_card_valid_pass(self, event_bus, turnstile, access_policy, passage_tracker):
         """Тест успешного прохода по карте."""
         # Arrange
-        credential = Credential(value="1234567890", type=TokenTypeEnum.CARD)
+        credential = Credential(token_type=TokenTypeEnum.CARDID, value="1234567890")
         event = CardRead(credential=credential, reader_id="Wiegand-1")
-        
+
         # Act
-        await handle_card_read(event, turnstile, access_policy, passage_tracker, event_bus)
-        
+        await handle_credential(event, turnstile, access_policy, passage_tracker, event_bus, devices={}, token_prefix="cardid")
+
         # Assert
-        assert turnstile._current_state.value == "ENTRY_OPEN"
+        assert turnstile._current_state.value == "entry_open"
         assert len(passage_tracker._last_passages) == 1
         logger.info("✓ Карта: успешный проход")
-    
+
     @pytest.mark.asyncio
     async def test_card_invalid_deny(self, event_bus, turnstile, access_policy, passage_tracker):
         """Тест отказа в доступе по карте."""
         # Arrange
-        credential = Credential(value="0000000000", type=TokenTypeEnum.CARD)
+        credential = Credential(token_type=TokenTypeEnum.CARDID, value="0000000000")
         event = CardRead(credential=credential, reader_id="Wiegand-1")
-        
+
         # Act
-        await handle_card_read(event, turnstile, access_policy, passage_tracker, event_bus)
-        
+        await handle_credential(event, turnstile, access_policy, passage_tracker, event_bus, devices={}, token_prefix="cardid")
+
         # Assert
-        assert turnstile._current_state.value == "IDLE"
+        assert turnstile._current_state.value == "idle"
         assert len(passage_tracker._last_passages) == 0
         logger.info("✓ Карта: отказ в доступе")
 
@@ -129,29 +128,29 @@ class TestQrFlow:
     async def test_qr_valid_pass(self, event_bus, turnstile, access_policy, passage_tracker):
         """Тест успешного прохода по QR-коду."""
         # Arrange
-        credential = Credential(value="9876543210", type=TokenTypeEnum.QR)
+        credential = Credential(token_type=TokenTypeEnum.MAXID, value="9876543210")
         event = QrRead(credential=credential, reader_id="QR-1")
-        
+
         # Act
-        await handle_qr_read(event, turnstile, access_policy, passage_tracker, event_bus)
-        
+        await handle_credential(event, turnstile, access_policy, passage_tracker, event_bus, devices={}, token_prefix="maxid")
+
         # Assert
-        assert turnstile._current_state.value == "ENTRY_OPEN"
+        assert turnstile._current_state.value == "entry_open"
         assert len(passage_tracker._last_passages) == 1
         logger.info("✓ QR-код: успешный проход")
-    
+
     @pytest.mark.asyncio
     async def test_qr_invalid_deny(self, event_bus, turnstile, access_policy, passage_tracker):
         """Тест отказа в доступе по QR-коду."""
         # Arrange
-        credential = Credential(value="0000000000", type=TokenTypeEnum.QR)
+        credential = Credential(token_type=TokenTypeEnum.MAXID, value="0000000000")
         event = QrRead(credential=credential, reader_id="QR-1")
-        
+
         # Act
-        await handle_qr_read(event, turnstile, access_policy, passage_tracker, event_bus)
-        
+        await handle_credential(event, turnstile, access_policy, passage_tracker, event_bus, devices={}, token_prefix="maxid")
+
         # Assert
-        assert turnstile._current_state.value == "IDLE"
+        assert turnstile._current_state.value == "idle"
         assert len(passage_tracker._last_passages) == 0
         logger.info("✓ QR-код: отказ в доступе")
 
@@ -163,37 +162,37 @@ class TestButtonFlow:
         """Тест кнопки 1 - открытие на вход."""
         # Arrange
         event = ButtonPressed(button_id="button_1", state=False)
-        
+
         # Act
-        handle_button_pressed(event, turnstile, event_bus)
-        
+        handle_button_pressed(event, turnstile, event_bus, devices={})
+
         # Assert
-        assert turnstile._current_state.value == "ENTRY_OPEN"
+        assert turnstile._current_state.value == "entry_open"
         logger.info("✓ Кнопка 1: открытие на вход")
-    
+
     def test_button_2_open_exit(self, event_bus, turnstile):
         """Тест кнопки 2 - открытие на выход."""
         # Arrange
         event = ButtonPressed(button_id="button_2", state=False)
-        
+
         # Act
-        handle_button_pressed(event, turnstile, event_bus)
-        
+        handle_button_pressed(event, turnstile, event_bus, devices={})
+
         # Assert
-        assert turnstile._current_state.value == "EXIT_OPEN"
+        assert turnstile._current_state.value == "exit_open"
         logger.info("✓ Кнопка 2: открытие на выход")
-    
+
     def test_button_3_close(self, event_bus, turnstile):
         """Тест кнопки 3 - закрытие."""
         # Arrange
         turnstile._current_state = turnstile._current_state.__class__.ENTRY_OPEN
         event = ButtonPressed(button_id="button_3", state=False)
-        
+
         # Act
-        handle_button_pressed(event, turnstile, event_bus)
-        
+        handle_button_pressed(event, turnstile, event_bus, devices={})
+
         # Assert
-        assert turnstile._current_state.value == "IDLE"
+        assert turnstile._current_state.value == "idle"
         logger.info("✓ Кнопка 3: закрытие")
 
 
@@ -204,26 +203,26 @@ class TestAlarmFlow:
         """Тест активации тревоги."""
         # Arrange
         event = AlarmChanged(active=True)
-        
+
         # Act
         handle_alarm_changed(event, turnstile, event_bus)
-        
+
         # Assert
-        assert turnstile._current_state.value == "ALARM"
+        assert turnstile._current_state == turnstile._current_state.__class__.ALARM
         assert turnstile._alarm_since is not None
         logger.info("✓ Тревога: активация")
-    
+
     def test_alarm_deactivate(self, event_bus, turnstile):
         """Тест деактивации тревоги."""
         # Arrange
         turnstile._current_state = turnstile._current_state.__class__.ALARM
         event = AlarmChanged(active=False)
-        
+
         # Act
         handle_alarm_changed(event, turnstile, event_bus)
-        
+
         # Assert
-        assert turnstile._current_state.value == "IDLE"
+        assert turnstile._current_state == turnstile._current_state.__class__.IDLE
         assert turnstile._alarm_since is None
         logger.info("✓ Тревога: деактивация")
 
@@ -236,49 +235,49 @@ class TestPassageFlow:
         """Тест прохода на вход."""
         # Arrange
         event = PassageDetected(direction="in", zone="zone1", duration=1.5, token="test_token")
-        
+
         # Act
-        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log)
-        
+        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log, devices={})
+
         # Assert
-        assert turnstile._current_state.value == "IDLE"
+        assert turnstile._current_state.value == "idle"
         logger.info("✓ Проход: вход")
-    
+
     @pytest.mark.asyncio
     async def test_passage_out(self, event_bus, turnstile, passage_tracker, event_log):
         """Тест прохода на выход."""
         # Arrange
         event = PassageDetected(direction="out", zone="zone1", duration=1.5, token="test_token")
-        
+
         # Act
-        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log)
-        
+        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log, devices={})
+
         # Assert
-        assert turnstile._current_state.value == "IDLE"
+        assert turnstile._current_state.value == "idle"
         logger.info("✓ Проход: выход")
-    
+
     @pytest.mark.asyncio
     async def test_passage_turnback(self, event_bus, turnstile, passage_tracker, event_log):
         """Тест разворота."""
         # Arrange
         event = PassageDetected(direction="turnback", zone="zone1", duration=3.0)
-        
+
         # Act
-        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log)
-        
+        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log, devices={})
+
         # Assert
-        assert turnstile._current_state.value == "IDLE"
+        assert turnstile._current_state.value == "idle"
         logger.info("✓ Проход: разворот")
-    
+
     @pytest.mark.asyncio
     async def test_passage_blockage(self, event_bus, turnstile, passage_tracker, event_log):
         """Тест заслона."""
         # Arrange
         event = PassageDetected(direction="blockage", zone="zone1", duration=6.0)
-        
+
         # Act
-        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log)
-        
+        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log, devices={})
+
         # Assert - при заслоне реле должно остаться открытым
         logger.info("✓ Проход: заслон")
 
@@ -291,41 +290,41 @@ class TestAlarmIgnoreEvents:
         """Тест игнорирования карты во время тревоги."""
         # Arrange
         turnstile._current_state = turnstile._current_state.__class__.ALARM
-        credential = Credential(value="1234567890", type=TokenTypeEnum.CARD)
+        credential = Credential(token_type=TokenTypeEnum.CARDID, value="1234567890")
         event = CardRead(credential=credential, reader_id="Wiegand-1")
-        
+
         # Act
-        await handle_card_read(event, turnstile, access_policy, passage_tracker, event_bus)
-        
+        await handle_credential(event, turnstile, access_policy, passage_tracker, event_bus, devices={}, token_prefix="cardid")
+
         # Assert - состояние не должно измениться
-        assert turnstile._current_state.value == "ALARM"
+        assert turnstile._current_state == turnstile._current_state.__class__.ALARM
         logger.info("✓ Тревога: карта игнорируется")
-    
+
     @pytest.mark.asyncio
     async def test_alarm_ignores_qr(self, event_bus, turnstile, access_policy, passage_tracker):
         """Тест игнорирования QR-кода во время тревоги."""
         # Arrange
         turnstile._current_state = turnstile._current_state.__class__.ALARM
-        credential = Credential(value="9876543210", type=TokenTypeEnum.QR)
+        credential = Credential(token_type=TokenTypeEnum.MAXID, value="9876543210")
         event = QrRead(credential=credential, reader_id="QR-1")
-        
+
         # Act
-        await handle_qr_read(event, turnstile, access_policy, passage_tracker, event_bus)
-        
+        await handle_credential(event, turnstile, access_policy, passage_tracker, event_bus, devices={}, token_prefix="maxid")
+
         # Assert - состояние не должно измениться
-        assert turnstile._current_state.value == "ALARM"
+        assert turnstile._current_state == turnstile._current_state.__class__.ALARM
         logger.info("✓ Тревога: QR-код игнорируется")
-    
+
     @pytest.mark.asyncio
     async def test_alarm_allows_passage(self, event_bus, turnstile, passage_tracker, event_log):
         """Тест обработки проходов во время тревоги."""
         # Arrange
         turnstile._current_state = turnstile._current_state.__class__.ALARM
         event = PassageDetected(direction="in", zone="zone1", duration=1.5, token="test_token")
-        
+
         # Act
-        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log)
-        
+        await handle_passage_detected(event, turnstile, passage_tracker, event_bus, event_log, devices={})
+
         # Assert - проходы должны обрабатываться
         # (проверяем что обработчик был вызван без ошибок)
         logger.info("✓ Тревога: проходы обрабатываются")
@@ -338,15 +337,15 @@ class TestDoublePassPrevention:
     async def test_double_pass_prevention(self, event_bus, turnstile, access_policy, passage_tracker):
         """Тест предотвращения двойного прохода."""
         # Arrange
-        credential = Credential(value="1234567890", type=TokenTypeEnum.CARD)
+        credential = Credential(token_type=TokenTypeEnum.CARDID, value="1234567890")
         event = CardRead(credential=credential, reader_id="Wiegand-1")
-        
+
         # Act - первый проход
-        await handle_card_read(event, turnstile, access_policy, passage_tracker, event_bus)
-        
+        await handle_credential(event, turnstile, access_policy, passage_tracker, event_bus, devices={}, token_prefix="cardid")
+
         # Act - попытка повторного прохода
-        await handle_card_read(event, turnstile, access_policy, passage_tracker, event_bus)
-        
+        await handle_credential(event, turnstile, access_policy, passage_tracker, event_bus, devices={}, token_prefix="cardid")
+
         # Assert - сессия должна быть отслежена
         assert len(passage_tracker._last_passages) == 1
         logger.info("✓ Двойной проход: предотвращение")

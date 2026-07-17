@@ -134,7 +134,7 @@ class Multiplexer:
         mux_inputs = config.get('mux_inputs', {})
         for num, name in mux_inputs.items():
             self._input_names[num] = name
-            logger.info(f"[Multiplexer] Мапинг: вход {num} -> '{name}'")
+            logger.debug(f"[Multiplexer] Мапинг: вход {num} -> '{name}'")
 
     def _work_mux(self) -> None:
         """
@@ -208,7 +208,7 @@ class Multiplexer:
         Запускается как target для ``threading.Thread``.
         Завершается при установке ``stop_event``.
         """
-        logger.info(
+        logger.debug(
             "🔄 MuxWorker запущен (input=%s, outputs=%s, settle=%.0f мкс)",
             self._input_pin, self._output_pins, self._addr_settle_s * 1e6,
         )
@@ -219,4 +219,4 @@ class Multiplexer:
                 logger.error("MuxWorker ошибка: %s", e, exc_info=True)
             # Короткая пауза между циклами, чтобы не перегружать CPU
             self._stop_event.wait(timeout=self._poll_interval)
-        logger.info("MuxWorker остановлен.")
+        logger.debug("MuxWorker остановлен.")
