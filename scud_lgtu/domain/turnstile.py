@@ -214,20 +214,20 @@ class TurnstileState:
     async def open_entry_async(self, event_bus, start_timer: bool = True) -> None:
         """Асинхронное открытие турникета для входа с автоматическим закрытием."""
         from scud_lgtu.domain.events import OutputCommandsGenerated
-        
+
         if not self.can_open(DirectionEnum.IN):
             return
-        
+
         # Игнорировать новую задачу если предыдущая еще выполняется
         if self._open_task and not self._open_task.done():
             logger.info("open_entry: ignored - previous task still running")
             return
-        
+
         self._open_task = asyncio.current_task()
-        
+
         try:
             self._current_state = TurnstileStateEnum.ENTRY_OPEN
-            
+
             # Открыть реле, включить зеленый, выключить красный, включить бипер
             commands = [
                 OutputCommand(name="rel1", state=True),
@@ -237,21 +237,64 @@ class TurnstileState:
             ]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
             logger.info(f"open_entry: opened entry")
-            
-            # Выключить бипер через configured duration
-            await asyncio.sleep(self._open_beep_duration)
+
+            # Выключить бипер через 100 мс
+            await asyncio.sleep(0.1)
             commands = [OutputCommand(name="buz", state=False)]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-            logger.info(f"open_entry: beep off")
-            
+            logger.info("open_entry: beep off")
+
             # Запустить таймер закрытия если нужно
             if start_timer:
-                asyncio.create_task(self._close_after_timeout(event_bus, self._auth_timeout))
+                self.start_open_timer()
+
         except asyncio.CancelledError:
             logger.info("open_entry: task cancelled")
         finally:
             self._open_task = None
-    
+
+    async def open_exit_async(self, event_bus, start_timer: bool = True) -> None:
+        """Асинхронное открытие турникета для выхода с автоматическим закрытием."""
+        from scud_lgtu.domain.events import OutputCommandsGenerated
+
+        if not self.can_open(DirectionEnum.OUT):
+            return
+
+        # Игнорировать новую задачу если предыдущая еще выполняется
+        if self._open_task and not self._open_task.done():
+            logger.info("open_exit: ignored - previous task still running")
+            return
+
+        self._open_task = asyncio.current_task()
+
+        try:
+            self._current_state = TurnstileStateEnum.EXIT_OPEN
+
+            # Открыть реле, включить зеленый, выключить красный, включить бипер
+            commands = [
+                OutputCommand(name="rel2", state=True),
+                OutputCommand(name="w2_green", state=True),
+                OutputCommand(name="w2_red", state=False),
+                OutputCommand(name="buz", state=True),
+            ]
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
+            logger.info(f"open_exit: opened exit")
+
+            # Выключить бипер через 100 мс
+            await asyncio.sleep(0.1)
+            commands = [OutputCommand(name="buz", state=False)]
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
+            logger.info("open_exit: beep off")
+
+            # Запустить таймер закрытия если нужно
+            if start_timer:
+                self.start_open_timer()
+
+        except asyncio.CancelledError:
+            logger.info("open_exit: task cancelled")
+        finally:
+            self._open_task = None
+
     async def set_indicator_async(self, event_bus, name: str, state: bool, duration: float = None) -> None:
         """Асинхронная задача для включения индикатора на заданное время."""
         from scud_lgtu.domain.events import OutputCommandsGenerated

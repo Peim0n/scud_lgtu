@@ -88,6 +88,21 @@ sudo visudo
 
 Добавьте строку:
 
+### 6. Установка зависимостей для QR кодов
+
+Для работы QR кодов требуется модуль cryptography. Установите его в виртуальное окружение:
+
+```bash
+# Активируйте виртуальное окружение
+source /opt/scud_lgtu/venv/bin/activate
+
+# Установите cryptography
+pip install cryptography
+
+# Или через apt (если доступен пакет)
+sudo apt install python3-cryptography
+```
+
 ```
 orangepi ALL=(ALL) NOPASSWD: /opt/scud_lgtu/.venv/bin/python3
 ```
