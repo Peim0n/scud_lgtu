@@ -14,7 +14,7 @@ PassageTracker. Поддерживает различные направлени
 from scud_lgtu.domain.events import PassageDetected
 from scud_lgtu.domain.events import OutputCommandsGenerated
 from scud_lgtu.domain.models import Passage
-from scud_lgtu.domain.enums import PassageResultEnum, DirectionEnum
+from scud_lgtu.domain.enums import ResultEnum, DirectionEnum
 import logging
 import asyncio
 
@@ -74,10 +74,10 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
 
         # Логировать заслон
         passage = Passage(
-            direction=DirectionEnum.BLOCKAGE,
+            direction=DirectionEnum.IN,  # blockage doesn't have a direction, use IN as default
             zone=zone,
             duration=duration,
-            result=PassageResultEnum.BLOCKAGE
+            result=ResultEnum.BLOCKAGE
         )
         passage_service.log_passage(passage)
 
@@ -91,10 +91,10 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
 
         # Логировать разворот
         passage = Passage(
-            direction=DirectionEnum.TURNBACK,
+            direction=DirectionEnum.IN,  # turnback doesn't have a direction, use IN as default
             zone=zone,
             duration=duration,
-            result=PassageResultEnum.TURNBACK
+            result=ResultEnum.TURNBACK
         )
         passage_service.log_passage(passage)
 
@@ -112,7 +112,7 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         direction=direction_enum,
         zone=zone,
         duration=duration,
-        result=PassageResultEnum.PASS
+        result=ResultEnum.PASS
     )
     passage_service.log_passage(passage)
 

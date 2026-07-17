@@ -26,6 +26,8 @@ class ResultEnum(str, Enum):
     ONCOMING = "oncoming"
     DOUBLE = "double"
     FORCED = "forced"
+    BLOCKAGE = "blockage"
+    TURNBACK = "turnback"
 
 
 class SeverityEnum(str, Enum):
