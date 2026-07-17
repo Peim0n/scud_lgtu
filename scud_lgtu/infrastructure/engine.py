@@ -367,37 +367,32 @@ class ScudEngine:
             logger.info("ScudEngine: зоны прохода не настроены")
             return
 
-        # Получаем маппинг mux_inputs для конвертации имен в адреса
+        # Получаем маппинг mux_inputs для проверки имен
         mux_inputs = self._cfg.get("config", {}).get("mux_inputs", {})
-        # Создаем обратный маппинг: имя -> адрес
-        name_to_addr = {name: addr for addr, name in mux_inputs.items()}
 
         for zone in zones:
             inner_name = zone.get("inner")
             outer_name = zone.get("outer")
 
-            if inner_name not in name_to_addr:
+            if inner_name not in mux_inputs.values():
                 logger.error(f"ScudEngine: датчик {inner_name} не найден в mux_inputs")
                 continue
-            if outer_name not in name_to_addr:
+            if outer_name not in mux_inputs.values():
                 logger.error(f"ScudEngine: датчик {outer_name} не найден в mux_inputs")
                 continue
 
-            inner_addr = name_to_addr[inner_name]
-            outer_addr = name_to_addr[outer_name]
-
             detector = PassageDetector(
                 zone_label=zone["label"],
-                inner_addr=int(inner_addr),
-                outer_addr=int(outer_addr),
+                inner_name=inner_name,
+                outer_name=outer_name,
                 event_queue=self._event_queue,
                 passage_timeout=self._timings.get("passage_timeout_s", 2.0),
                 blockage_timeout=self._timings.get("passage_blockage_timeout_s", 5.0),
             )
             self._passage_detectors[zone["label"]] = detector
             logger.info(
-                "ScudEngine: зона прохода %s inner=%s (A%d) outer=%s (A%d)",
-                zone["label"], inner_name, inner_addr, outer_name, outer_addr
+                "ScudEngine: зона прохода %s inner=%s outer=%s",
+                zone["label"], inner_name, outer_name
             )
 
         timeout = self._timings.get("mux_queue_timeout_s", 0.1)
