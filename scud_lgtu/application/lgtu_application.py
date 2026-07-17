@@ -145,13 +145,10 @@ class LGTUApplication:
             for cmd in event.commands:
                 output_states[cmd.name] = cmd.state
 
-            # Отправляем состояния в сдвиговый регистр через PinControllerThread
+            # Отправляем состояния в сдвиговый регистр через публичный интерфейс engine
             if output_states:
                 try:
-                    # Получаем доступ к PinControllerThread через engine
-                    pct = self._engine._pct
-                    if pct:
-                        pct.set_mask(output_states)
+                    self._engine.set_output_mask(output_states)
                 except Exception as e:
                     logger.error(f"Error sending to shift register: {e}")
     
@@ -173,22 +170,52 @@ class LGTUApplication:
         if self._loop_thread and self._loop_thread.is_alive():
             self._loop_thread.join(timeout=2.0)
     
+    def _get_reader_id(self, reader: str) -> str:
+        """Получить reader_id из мапинга reader_names."""
+        reader_names = self._devices.get("reader_names", {})
+        return reader_names.get(reader, reader)
+
+    def _decode_qr_credential(self, data: str) -> Optional[Credential]:
+        """Декодировать QR код в Credential."""
+        if self._qr_decoder is not None:
+            try:
+                qr_fields = self._qr_decoder.decode_url(data)
+                max_id = qr_fields.get("max_id")
+                if max_id is None:
+                    logger.error(f"QR код не содержит max_id: {data}")
+                    return None
+
+                return Credential(
+                    token_type=TokenTypeEnum.MAXID,
+                    value=str(max_id),
+                    encrypted=False
+                )
+            except Exception as e:
+                logger.error(f"Ошибка декодирования QR кода: {e}")
+                return None
+        else:
+            # Если decoder недоступен, используем URL как есть
+            logger.warning("QR decoder недоступен, используется URL как credential value")
+            return Credential(
+                token_type=TokenTypeEnum.MAXID,
+                value=str(data),
+                encrypted=False
+            )
+
     def _convert_scud_event_to_domain(self, scud_event) -> Optional:
         """Convert ScudEvent to domain event."""
         from scud_lgtu.infrastructure.persistence.event_store import EventType, EventSource
-        
+
         logger.debug(f"Converting ScudEvent: type={scud_event.type}, source={scud_event.source}, payload={scud_event.payload}")
-        
+
         if scud_event.type == EventType.QR_READ:
             credential = Credential(
                 token_type=TokenTypeEnum.MAXID,
                 value=str(scud_event.payload.get("max_id", "")),
                 encrypted=False
             )
-            # Используем мапинг reader_names из config
             reader = scud_event.payload.get("reader", "unknown")
-            reader_names = self._devices.get("reader_names", {})
-            reader_id = reader_names.get(reader, reader)
+            reader_id = self._get_reader_id(reader)
             event = QrRead(
                 credential=credential,
                 reader_id=reader_id
@@ -201,10 +228,8 @@ class LGTUApplication:
                 value=str(scud_event.payload.get("card_data", "")),
                 encrypted=scud_event.payload.get("encrypted", False)
             )
-            # Используем мапинг reader_names из config
             reader = scud_event.payload.get("reader", "unknown")
-            reader_names = self._devices.get("reader_names", {})
-            reader_id = reader_names.get(reader, reader)
+            reader_id = self._get_reader_id(reader)
             event = CardRead(
                 credential=credential,
                 reader_id=reader_id
@@ -232,36 +257,12 @@ class LGTUApplication:
             # Обработка данных из serial порта (QR-код)
             data = scud_event.payload.get("data", "")
             if data:
-                # Декодируем QR код для получения MaxID, если доступен decoder
-                if self._qr_decoder is not None:
-                    try:
-                        qr_fields = self._qr_decoder.decode_url(data)
-                        max_id = qr_fields.get("max_id")
-                        if max_id is None:
-                            logger.error(f"QR код не содержит max_id: {data}")
-                            return None
+                credential = self._decode_qr_credential(data)
+                if credential is None:
+                    return None
 
-                        credential = Credential(
-                            token_type=TokenTypeEnum.MAXID,
-                            value=str(max_id),
-                            encrypted=False
-                        )
-                    except Exception as e:
-                        logger.error(f"Ошибка декодирования QR кода: {e}")
-                        return None
-                else:
-                    # Если decoder недоступен, используем URL как есть
-                    logger.warning("QR decoder недоступен, используется URL как credential value")
-                    credential = Credential(
-                        token_type=TokenTypeEnum.MAXID,
-                        value=str(data),
-                        encrypted=False
-                    )
-
-                # Используем мапинг reader_names из config
                 reader = scud_event.payload.get("reader", "unknown")
-                reader_names = self._devices.get("reader_names", {})
-                reader_id = reader_names.get(reader, reader)
+                reader_id = self._get_reader_id(reader)
                 event = QrRead(
                     credential=credential,
                     reader_id=reader_id
@@ -305,28 +306,26 @@ class LGTUApplication:
         """Initialize all outputs to safe state (relays closed)."""
         logger.debug("Initializing outputs to safe state")
         try:
-            pct = self._engine._pct
-            if pct and pct._shift_worker:
-                # Set all relays to closed (False)
-                safe_states = {
-                    "rel1": False,
-                    "rel2": False,
-                    "w1_green": False,
-                    "w1_red": False,
-                    "w2_green": False,
-                    "w2_red": False,
-                    "w1_beep": False,
-                    "w2_beep": False,
-                    "buz": False,
-                    "pult_buzz": False,
-                    "pult_l1": False,
-                    "pult_l2": False,
-                    "pult_l3": False,
-                    "od1": False,
-                    "od2": False,
-                }
-                pct.set_mask(safe_states)
-                logger.debug(f"Initialized outputs to safe state: {safe_states}")
+            # Set all relays to closed (False) через публичный интерфейс
+            safe_states = {
+                "rel1": False,
+                "rel2": False,
+                "w1_green": False,
+                "w1_red": False,
+                "w2_green": False,
+                "w2_red": False,
+                "w1_beep": False,
+                "w2_beep": False,
+                "buz": False,
+                "pult_buzz": False,
+                "pult_l1": False,
+                "pult_l2": False,
+                "pult_l3": False,
+                "od1": False,
+                "od2": False,
+            }
+            self._engine.set_output_mask(safe_states)
+            logger.debug(f"Initialized outputs to safe state: {safe_states}")
         except Exception as e:
             logger.error(f"Error initializing outputs: {e}")
     

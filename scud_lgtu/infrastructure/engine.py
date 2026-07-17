@@ -163,6 +163,11 @@ class ScudEngine:
         """Вернуть последнее состояние мультиплексора, полученное от MuxWorker."""
         return self._last_mux_state
 
+    def set_output_mask(self, masks: dict[str, bool]) -> None:
+        """Установить состояние выходов через сдвиговый регистр по именам."""
+        if self._pct is not None:
+            self._pct.set_mask(masks)
+
     def start(self) -> None:
         """Запустить все hardware-модули."""
         logger.info("ScudEngine: запуск…")
