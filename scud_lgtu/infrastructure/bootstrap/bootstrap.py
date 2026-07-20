@@ -132,8 +132,7 @@ def build_application(config_path: str = None) -> LGTUApplication:
         store=store,
         backend=backend,
         config=config,
-        devices=devices,  # Передаем мапинг устройств
-        resolver=resolver  # Передаем резолвер для бизнес-имен
+        devices=devices  # Передаем мапинг устройств
     )
 
     return application

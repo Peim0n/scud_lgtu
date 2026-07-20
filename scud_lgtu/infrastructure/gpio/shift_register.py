@@ -143,20 +143,44 @@ class ShiftRegister:
             new_state = self._last_sent_state
             logger.info(f"[ShiftRegister] set_mask: last_sent_state={self._last_sent_state:#06x}, masks={masks}")
             for name, state in masks.items():
-                if name not in self._pin_masks:
-                    logger.warning(f"[ShiftRegister] Неизвестная маска: {name}")
+                # Резолвим бизнес-имена в прямые имена пинов
+                resolved_name = self._resolve_name(name)
+                
+                if resolved_name not in self._pin_masks:
+                    logger.warning(f"[ShiftRegister] Неизвестная маска: {resolved_name} (original: {name})")
                     continue
-                mask = self._pin_masks[name]
-                logger.info(f"[ShiftRegister] Processing {name}: state={state}, mask={mask:#06x}")
+                mask = self._pin_masks[resolved_name]
+                logger.info(f"[ShiftRegister] Processing {resolved_name}: state={state}, mask={mask:#06x}")
                 if state:
                     new_state |= mask
                 else:
                     new_state &= ~mask
-                logger.info(f"[ShiftRegister] After {name}: new_state={new_state:#06x}")
+                logger.info(f"[ShiftRegister] After {resolved_name}: new_state={new_state:#06x}")
             logger.info(f"[ShiftRegister] Putting new_state={new_state:#06x} into queue")
             self._input_queue.put(new_state, timeout=1.0)
             # Сразу обновляем last_sent_state, чтобы следующие команды видели новое состояние
             self._last_sent_state = new_state
+    
+    def _resolve_name(self, name: str) -> str:
+        """Разрешить бизнес-имя в прямое имя пина."""
+        # Если имя содержит точку - это уже прямой мапинг
+        if '.' in name:
+            return name
+        
+        # Пытаемся разрешить через business секцию
+        if self._resolver is not None:
+            try:
+                self._resolver.set_context("business")
+                resolved = self._resolver.resolve(name)
+                
+                # Если результат - строка с точкой, возвращаем её (это прямой мапинг)
+                if isinstance(resolved, str) and '.' in resolved:
+                    return resolved
+            except Exception as e:
+                logger.debug(f"[ShiftRegister] Could not resolve name {name}: {e}")
+        
+        # Возвращаем как есть
+        return name
 
     def _work_shift(self, value: Any) -> None:
         """

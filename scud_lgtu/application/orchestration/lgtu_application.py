@@ -61,8 +61,7 @@ class LGTUApplication:
         store: EventStore,
         backend: BackendClient,
         config: dict,
-        devices: dict = None,
-        resolver = None
+        devices: dict = None
     ):
         """
         Инициализировать приложение LGTU.
@@ -81,13 +80,10 @@ class LGTUApplication:
             Конфигурация
         devices : dict, optional
             Мапинг устройств из конфига
-        resolver : ModuleResolver, optional
-            Резолвер для бизнес-имен
         """
         self._engine = engine
         self._config = config
         self._devices = devices or {}
-        self._resolver = resolver
         self._running = False
 
         # QR decoder (опционально, если установлен cryptography)
@@ -147,9 +143,7 @@ class LGTUApplication:
             # Собираем все команды в словарь состояний для сдвигового регистра
             output_states = {}
             for cmd in event.commands:
-                # Резолвим бизнес-имена в прямые имена пинов
-                resolved_name = self._resolve_device_name(cmd.name)
-                output_states[resolved_name] = cmd.state
+                output_states[cmd.name] = cmd.state
 
             # Отправляем состояния в сдвиговый регистр через публичный интерфейс engine
             if output_states:
@@ -157,30 +151,6 @@ class LGTUApplication:
                     self._engine.set_output_mask(output_states)
                 except Exception as e:
                     logger.error(f"Error sending to shift register: {e}")
-    
-    def _resolve_device_name(self, name: str) -> str:
-        """Разрешить бизнес-имя устройства в прямое имя пина."""
-        if self._resolver is None:
-            return name
-        
-        try:
-            # Если имя содержит точку - это уже прямой мапинг
-            if '.' in name:
-                return name
-            
-            # Пытаемся разрешить через business секцию
-            self._resolver.set_context("business")
-            resolved = self._resolver.resolve(name)
-            
-            # Если результат - строка с точкой, возвращаем её (это прямой мапинг)
-            if isinstance(resolved, str) and '.' in resolved:
-                return resolved
-            
-            # Иначе возвращаем как есть
-            return name
-        except Exception as e:
-            logger.debug(f"Could not resolve device name {name}: {e}")
-            return name
     
     def _start_event_loop(self) -> None:
         """Start asyncio event loop in separate thread."""
