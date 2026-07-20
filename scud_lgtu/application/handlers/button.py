@@ -26,7 +26,7 @@ _button_locks = threading.Lock()
 def _schedule_close(button_id: str, relay_name: str, duration: float, event_bus) -> None:
     """Запланировать закрытие реле через указанное время."""
     def close_relay():
-        commands = [OutputCommand(name=relay_name, state=False, action=CommandAction.SET_OUTPUT)]
+        commands = [OutputCommand(name=relay_name, state=False)]
         commands_event = OutputCommandsGenerated(commands=commands)
         event_bus.publish(commands_event)
         logger.info(f"Кнопка {button_id}: реле {relay_name} закрыто по таймеру")
@@ -92,7 +92,7 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
 
     if not event.state:
         # Нажатие (state=False) - открываем реле и обновляем таймер
-        commands = [OutputCommand(name=relay_name, state=True, action=CommandAction.SET_OUTPUT)]
+        commands = [OutputCommand(name=relay_name, state=True)]
         commands_event = OutputCommandsGenerated(commands=commands)
         event_bus.publish(commands_event)
         logger.info(f"Кнопка {event.button_id}: реле {relay_name} открыто")
