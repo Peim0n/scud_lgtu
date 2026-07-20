@@ -42,7 +42,6 @@ def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
     elif event.input_name == "alarm":
         # Детектируем фронт изменения состояния аларма
         prev_state = _alarm_state
-        _alarm_state = event.state
         
         # Публикуем событие только при изменении состояния, игнорируем инициализацию (None)
         if prev_state is not None and prev_state != event.state:
@@ -53,4 +52,6 @@ def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
             event_bus.publish(alarm_event)
         elif prev_state is None:
             logger.debug(f"Alarm initial state: {event.state}")
+        
+        _alarm_state = event.state
     # Другие входы мультиплексора могут обрабатываться аналогично
