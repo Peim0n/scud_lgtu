@@ -22,6 +22,7 @@ _alarm_state = None
 
 def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
     """Обработать событие изменения входа мультиплексора."""
+    global _alarm_state
     logger.debug(f"handle_mux_input_changed: {event}")
     # Преобразование входа мультиплексора в события домена
     if event.input_name.startswith("button_"):

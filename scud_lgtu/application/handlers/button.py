@@ -91,12 +91,14 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
         return
 
     if not event.state:
-        # Нажатие (state=False) - открываем реле
+        # Нажатие (state=False) - открываем реле и обновляем таймер
         commands = [OutputCommand(name=relay_name, state=True)]
         commands_event = OutputCommandsGenerated(commands=commands)
         event_bus.publish(commands_event)
         logger.info(f"Кнопка {event.button_id}: реле {relay_name} открыто")
-    else:
-        # Отжатие (state=True) - запускаем таймер закрытия
-        logger.info(f"Кнопка {event.button_id}: отжата, запуск таймера закрытия")
+
+        # Запускаем/обновляем таймер закрытия
         _schedule_close(event.button_id, relay_name, open_duration, event_bus)
+    else:
+        # Отжатие (state=True) - ничего не делаем, таймер продолжит работать
+        logger.debug(f"Кнопка {event.button_id}: отжата, таймер продолжает работу")
