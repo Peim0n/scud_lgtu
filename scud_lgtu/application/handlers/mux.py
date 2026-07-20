@@ -15,8 +15,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Храним предыдущие состояния кнопок для детекции фронтов
+# Храним предыдущие состояния кнопок и аларма для детекции фронтов
 _button_states = {}
+_alarm_state = None
 
 
 def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
@@ -39,10 +40,17 @@ def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
         elif prev_state is None:
             logger.debug(f"Button {event.input_name} initial state: {event.state}")
     elif event.input_name == "alarm":
-        # Событие тревоги
-        alarm_event = AlarmChanged(
-            active=event.state
-        )
-        logger.info(f"Publishing AlarmChanged: {alarm_event}")
-        event_bus.publish(alarm_event)
+        # Детектируем фронт изменения состояния аларма
+        prev_state = _alarm_state
+        _alarm_state = event.state
+        
+        # Публикуем событие только при изменении состояния, игнорируем инициализацию (None)
+        if prev_state is not None and prev_state != event.state:
+            alarm_event = AlarmChanged(
+                active=event.state
+            )
+            logger.info(f"Publishing AlarmChanged: {alarm_event}")
+            event_bus.publish(alarm_event)
+        elif prev_state is None:
+            logger.debug(f"Alarm initial state: {event.state}")
     # Другие входы мультиплексора могут обрабатываться аналогично
