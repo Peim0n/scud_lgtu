@@ -146,16 +146,21 @@ class ShiftRegister:
                 # Резолвим бизнес-имена в прямые имена пинов
                 resolved_name = self._resolve_name(name)
                 
-                if resolved_name not in self._pin_masks:
-                    logger.warning(f"[ShiftRegister] Неизвестная маска: {resolved_name} (original: {name})")
+                # Убираем префикс shift_register. если есть для поиска в _pin_masks
+                lookup_name = resolved_name
+                if lookup_name.startswith("shift_register."):
+                    lookup_name = lookup_name.replace("shift_register.", "")
+                
+                if lookup_name not in self._pin_masks:
+                    logger.warning(f"[ShiftRegister] Неизвестная маска: {lookup_name} (resolved: {resolved_name}, original: {name})")
                     continue
-                mask = self._pin_masks[resolved_name]
-                logger.info(f"[ShiftRegister] Processing {resolved_name}: state={state}, mask={mask:#06x}")
+                mask = self._pin_masks[lookup_name]
+                logger.info(f"[ShiftRegister] Processing {lookup_name}: state={state}, mask={mask:#06x}")
                 if state:
                     new_state |= mask
                 else:
                     new_state &= ~mask
-                logger.info(f"[ShiftRegister] After {resolved_name}: new_state={new_state:#06x}")
+                logger.info(f"[ShiftRegister] After {lookup_name}: new_state={new_state:#06x}")
             logger.info(f"[ShiftRegister] Putting new_state={new_state:#06x} into queue")
             self._input_queue.put(new_state, timeout=1.0)
             # Сразу обновляем last_sent_state, чтобы следующие команды видели новое состояние
