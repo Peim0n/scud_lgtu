@@ -248,12 +248,12 @@ devices:
     entry_button:
       label: "button_1"
       input: "business.entry_button"
-      relay: "business.entry_relay"
+      relay: "shift_register.rel1"
 
     exit_button:
       label: "button_2"
       input: "business.exit_button"
-      relay: "business.exit_relay"
+      relay: "shift_register.rel2"
 
 # ── Зоны прохода ──
 passage:
