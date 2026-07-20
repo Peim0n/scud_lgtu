@@ -80,10 +80,10 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
 
         # Отменяем таймер если он был запущен
         with _button_locks:
-            if button_id in _button_timers:
-                _button_timers[button_id].cancel()
-                del _button_timers[button_id]
-                logger.debug(f"Кнопка {button_id}: таймер отменен при нажатии")
+            if event.button_id in _button_timers:
+                _button_timers[event.button_id].cancel()
+                del _button_timers[event.button_id]
+                logger.debug(f"Кнопка {event.button_id}: таймер отменен при нажатии")
     else:
         # Отжатие (state=False) - запускаем таймер закрытия
         logger.info(f"Кнопка {event.button_id}: ОТЖАТИЕ (state=False), запускаем таймер закрытия")
