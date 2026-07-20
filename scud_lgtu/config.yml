@@ -121,14 +121,14 @@ business:
 # ── Wiegand-считыватели ──
 wiegand:
   - label: Wiegand-1
-    d0: "gpiod_controller.wiegand1_d0"
-    d1: "gpiod_controller.wiegand1_d1"
+    d0: 10  # PA10
+    d1: 2   # PA2
     type: era_mf_64_hash
     encrypted: false
 
   - label: Wiegand-2
-    d0: "gpiod_controller.wiegand2_d0"
-    d1: "gpiod_controller.wiegand2_d1"
+    d0: 3   # PA3
+    d1: 18  # PA18
     type: era_mf_64_hash
     encrypted: false
 
