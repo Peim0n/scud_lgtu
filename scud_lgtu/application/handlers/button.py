@@ -47,7 +47,7 @@ def _schedule_close(button_id: str, relay_name: str, duration: float, event_bus)
 
 def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: dict) -> None:
     """Обработать событие нажатия кнопки."""
-    logger.debug(f"handle_button_pressed: {event}")
+    logger.info(f"Button event: button_id={event.button_id}, state={event.state}")
 
     # Получаем конфигурацию кнопок из devices
     buttons = devices.get("buttons", {})
@@ -72,6 +72,7 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
 
     if not event.state:
         # Нажатие (state=False) - открываем реле и обновляем таймер
+        logger.info(f"Кнопка {event.button_id}: НАЖАТИЕ (state=False), открываем реле {relay_name}")
         commands = [OutputCommand(name=relay_name, state=True)]
         commands_event = OutputCommandsGenerated(commands=commands)
         event_bus.publish(commands_event)
@@ -81,4 +82,4 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
         _schedule_close(event.button_id, relay_name, open_duration, event_bus)
     else:
         # Отжатие (state=True) - ничего не делаем, таймер продолжит работать
-        logger.debug(f"Кнопка {event.button_id}: отжата, таймер продолжает работу")
+        logger.info(f"Кнопка {event.button_id}: ОТЖАТИЕ (state=True), таймер продолжает работу")
