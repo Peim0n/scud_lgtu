@@ -408,10 +408,8 @@ class TurnstileState:
         self._alarm_beep_since = time()
         self._alarm_beep_on = True
         self._output_commands = [
-            OutputCommand(name=self._entry_relay, state=True),
-            OutputCommand(name=self._exit_relay, state=True),
-            OutputCommand(name=self._entry_red, state=True),
-            OutputCommand(name=self._exit_red, state=True),
+            OutputCommand(name=self._exit_relay, state=True),  # Только выходное реле
+            OutputCommand(name=self._exit_red, state=True),     # Красный индикатор на выходе
             OutputCommand(name=self._main_buzzer, state=True),
         ]
         return self._output_commands
@@ -426,10 +424,8 @@ class TurnstileState:
         self._alarm_beep_since = None
         self._alarm_beep_on = False
         self._output_commands = [
-            OutputCommand(name=self._entry_relay, state=False),
-            OutputCommand(name=self._exit_relay, state=False),
-            OutputCommand(name=self._entry_red, state=False),
-            OutputCommand(name=self._exit_red, state=False),
+            OutputCommand(name=self._exit_relay, state=False),  # Только выходное реле
+            OutputCommand(name=self._exit_red, state=False),     # Красный индикатор на выходе
             OutputCommand(name=self._main_buzzer, state=False),
         ]
         return self._output_commands
