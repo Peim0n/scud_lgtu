@@ -113,15 +113,14 @@ class TurnstileState:
         self._open_beep_duration = self._resolver.get_timing("business", "open_beep_duration_s", timings.get("open_beep_duration_s", 0.1))
         self._indicator_duration = self._resolver.get_timing("business", "indicator_duration_s", timings.get("indicator_duration_s", 2.0))
 
-        # Загрузка имен пинов из секции business через интерфейс ConfigResolver
-        self._resolver.set_context("business")
-        self._entry_relay = self._resolver.resolve("entry_relay")
-        self._exit_relay = self._resolver.resolve("exit_relay")
-        self._main_buzzer = self._resolver.resolve("main_buzzer")
-        self._entry_green = self._resolver.resolve("inner_indicator_success")
-        self._entry_red = self._resolver.resolve("inner_indicator_fail")
-        self._exit_green = self._resolver.resolve("outer_indicator_success")
-        self._exit_red = self._resolver.resolve("outer_indicator_fail")
+        # Загрузка бизнес-имен (без резолвинга - это ответственность Infrastructure слоя)
+        self._entry_relay = "entry_relay"
+        self._exit_relay = "exit_relay"
+        self._main_buzzer = "main_buzzer"
+        self._entry_green = "inner_indicator_success"
+        self._entry_red = "inner_indicator_fail"
+        self._exit_green = "outer_indicator_success"
+        self._exit_red = "outer_indicator_fail"
 
         logger.info("[TurnstileState] Конфигурация загружена через ConfigResolver")
 
