@@ -6,29 +6,36 @@
 (AlarmChanged). Для кнопок выполняется детекция фронтов нажатия (1 -> 0) и отжатия
 (0 -> 1) для корректной обработки нажатий.
 
-Функции
+Классы
 -------
-- handle_mux_input_changed: обработать событие изменения входа мультиплексора
+- MuxInputHandler: обработчик событий мультиплексора с хранением состояния
 """
 from scud_lgtu.domain.common.events.events import MuxInputChanged, ButtonPressed, AlarmChanged
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Храним предыдущие состояния кнопок и аларма для детекции фронтов
-_button_states = {}
-_alarm_state = None
 
-
-def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
-    """Обработать событие изменения входа мультиплексора."""
-    global _alarm_state
-    logger.debug(f"handle_mux_input_changed: {event}")
-    # Преобразование входа мультиплексора в события домена
-    if event.input_name.startswith("button_"):
-        # Детектируем фронт нажатия (1 -> 0)
-        prev_state = _button_states.get(event.input_name, None)
-        _button_states[event.input_name] = event.state
+class MuxInputHandler:
+    """Обработчик событий мультиплексора с хранением состояния."""
+    
+    def __init__(self):
+        self._button_states = {}
+        self._alarm_state = None
+    
+    def handle(self, event: MuxInputChanged, event_bus) -> None:
+        """Обработать событие изменения входа мультиплексора."""
+        logger.debug(f"handle_mux_input_changed: {event}")
+        
+        if event.input_name.startswith("button_"):
+            self._handle_button(event, event_bus)
+        elif event.input_name == "alarm":
+            self._handle_alarm(event, event_bus)
+    
+    def _handle_button(self, event: MuxInputChanged, event_bus) -> None:
+        """Обработать событие кнопки."""
+        prev_state = self._button_states.get(event.input_name, None)
+        self._button_states[event.input_name] = event.state
         
         # Публикуем событие только при изменении состояния, игнорируем инициализацию (None)
         if prev_state is not None and prev_state != event.state:
@@ -40,9 +47,10 @@ def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
             event_bus.publish(button_event)
         elif prev_state is None:
             logger.debug(f"Button {event.input_name} initial state: {event.state}")
-    elif event.input_name == "alarm":
-        # Детектируем фронт изменения состояния аларма
-        prev_state = _alarm_state
+    
+    def _handle_alarm(self, event: MuxInputChanged, event_bus) -> None:
+        """Обработать событие аларма."""
+        prev_state = self._alarm_state
         
         # Публикуем событие только при изменении состояния, игнорируем инициализацию (None)
         if prev_state is not None and prev_state != event.state:
@@ -54,5 +62,13 @@ def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
         elif prev_state is None:
             logger.debug(f"Alarm initial state: {event.state}")
         
-        _alarm_state = event.state
-    # Другие входы мультиплексора могут обрабатываться аналогично
+        self._alarm_state = event.state
+
+
+# Глобальный экземпляр для обратной совместимости
+_mux_handler = MuxInputHandler()
+
+
+def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
+    """Обработать событие изменения входа мультиплексора (legacy interface)."""
+    _mux_handler.handle(event, event_bus)
