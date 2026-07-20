@@ -1,7 +1,7 @@
 """Backend infrastructure."""
 from scud_lgtu.infrastructure.backend.client import BackendClient
-from scud_lgtu.domain.ports import BackendGateway
-from scud_lgtu.domain.models import Passage
+from scud_lgtu.domain.access.ports.ports import BackendGateway
+from scud_lgtu.domain.common.models.models import Passage
 from typing import List
 
 

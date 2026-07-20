@@ -13,7 +13,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s [%(levelname)s] %(message)s",
 )
 
-from scud_lgtu.bootstrap import build_application
+from scud_lgtu.infrastructure.bootstrap import build_application
 
 
 def main():

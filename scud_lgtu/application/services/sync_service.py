@@ -15,8 +15,8 @@
 - tick: периодический тик для синхронизации
 - _sync: выполнить синхронизацию (выгрузка событий и обновление списка доступа)
 """
-from scud_lgtu.domain.ports import BackendGateway, EventLog
-from scud_lgtu.domain.models import Passage
+from scud_lgtu.domain.access.ports.ports import BackendGateway, EventLog
+from scud_lgtu.domain.common.models.models import Passage
 from typing import List
 import time
 

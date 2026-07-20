@@ -37,8 +37,16 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from queue import Queue
 
-import gpiod
-from gpiod.line import Direction, Value, Bias
+try:
+    import gpiod
+    from gpiod.line import Direction, Value, Bias
+    GPIOD_AVAILABLE = True
+except ImportError:
+    GPIOD_AVAILABLE = False
+    # Создаем заглушки для совместимости типов
+    Direction = None
+    Value = None
+    Bias = None
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +82,12 @@ PIN_MAP: Dict[str, Tuple[str, int]] = {
 }
 
 # gpiod Value для уровней 0/1
-_LEVEL_TO_VALUE = {0: Value.INACTIVE, 1: Value.ACTIVE}
-_VALUE_TO_LEVEL = {Value.INACTIVE: 0, Value.ACTIVE: 1}
+if GPIOD_AVAILABLE:
+    _LEVEL_TO_VALUE = {0: Value.INACTIVE, 1: Value.ACTIVE}
+    _VALUE_TO_LEVEL = {Value.INACTIVE: 0, Value.ACTIVE: 1}
+else:
+    _LEVEL_TO_VALUE = {0: 0, 1: 1}
+    _VALUE_TO_LEVEL = {0: 0, 1: 1}
 
 
 class GpiodPinController:
@@ -129,6 +141,9 @@ class GpiodPinController:
         pull_ups : list of str, optional
             Список пинов (режим input), на которых нужен pull-up.
         """
+        if not GPIOD_AVAILABLE:
+            raise RuntimeError("gpiod не установлен. Установите gpiod для работы с GPIO.")
+        
         pull_up_set = set(pull_ups or [])
 
         # Группируем пины по chip

@@ -1,7 +1,7 @@
 """Адаптер исполнительных механизмов GPIO."""
-from scud_lgtu.domain.ports import Actuator
-from scud_lgtu.domain.models import OutputCommand
-from scud_lgtu.infrastructure.engine import ScudEngine
+from scud_lgtu.domain.access.ports.ports import Actuator
+from scud_lgtu.domain.common.models.models import OutputCommand
+from scud_lgtu.infrastructure.core.engine import ScudEngine
 
 
 class ShiftRegisterActuator:

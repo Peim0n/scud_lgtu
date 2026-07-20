@@ -1,8 +1,8 @@
 """Адаптер журнала событий."""
 from scud_lgtu.infrastructure.persistence.event_store import EventStore, PassageEvent
-from scud_lgtu.domain.ports import EventLog
-from scud_lgtu.domain.models import Passage
-from scud_lgtu.domain.enums import ResultEnum, DirectionEnum
+from scud_lgtu.domain.access.ports.ports import EventLog
+from scud_lgtu.domain.common.models.models import Passage
+from scud_lgtu.domain.common.enums.enums import ResultEnum, DirectionEnum
 
 
 class EventLogAdapter:

@@ -1,1 +1,1 @@
-"""Tests for scud_lgtu package."""
+"""Tests for SCUD LGTU project."""

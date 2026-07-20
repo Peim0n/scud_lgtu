@@ -10,8 +10,8 @@
 -------
 - handle_credential_common: общий обработчик для учётных данных (карты и QR-коды)
 """
-from scud_lgtu.domain.models import AuthSession
-from scud_lgtu.domain.enums import DirectionEnum
+from scud_lgtu.domain.common.models.models import AuthSession
+from scud_lgtu.domain.common.enums.enums import DirectionEnum
 import logging
 import asyncio
 

@@ -1,10 +1,3 @@
-# ── Выбор типа контроллеров (реальное оборудование или эмуляция) ──
-# Возможные значения: "real" (реальное GPIO), "emulator" (эмуляция в памяти)
-controller_type:
-  gpio: emulator             # real = GpiodPinController, emulator = EmulatorPinController
-  serial: emulator           # real = BackgroundSerialReader, emulator = EmulatorSerialReader
-  wiegand: emulator          # real = WeigandReader, emulator = EmulatorWiegandReader
-
 # ── GPIO-контроллер (абстракция над gpiod) ──
 # Мапинг логических имен пинов на реальные gpiod пины
 gpiod_controller:
@@ -62,7 +55,7 @@ shift_register:
     shift_queue_maxsize: 50
 
 # Секция mux: конфигурация для класса Multiplexer
-mux_new:
+mux:
   addr_pins:
     A0: "gpiod_controller.mux_a0"
     A1: "gpiod_controller.mux_a1"
@@ -101,11 +94,11 @@ business:
   exit_relay: "shift_register.rel2"
 
   # Кнопки и датчики (через мультиплексор)
-  entry_button: "mux_new.button_1"
-  exit_button: "mux_new.button_2"
-  alarm_input: "mux_new.alarm"
-  entry_sensor: "mux_new.sensor_1"
-  exit_sensor: "mux_new.sensor_2"
+  entry_button: "mux.button_1"
+  exit_button: "mux.button_2"
+  alarm_input: "mux.alarm"
+  entry_sensor: "mux.sensor_1"
+  exit_sensor: "mux.sensor_2"
 
   timings:
     auth_timeout_s: 5.0
@@ -125,33 +118,8 @@ business:
     sensor_debounce_s: 0.5
     sensor_event_timeout_s: 0.1
 
-# ── Wiegand-считыватели (старая секция для обратной совместимости) ──
-# Считыватели карт с протоколом Wiegand
-# Имена пинов в формате PA<N>, PG<N>, PL<N> единообразно со всем конфигом.
-# encrypted: true  — если считыватель передаёт зашифрованные данные.
-# decrypt_key: ... — ключ/секрет для расшифровки (алгоритм задаётся в коде).
+# ── Wiegand-считыватели ──
 wiegand:
-  - label: Wiegand-1
-    d0: PA10         # DATA0 (GPIO)
-    d1: PA2          # DATA1 (GPIO)
-    type: era_mf_64_hash
-    encrypted: false
-    # decrypt_key: ""
-
-  - label: Wiegand-2
-    d0: PA3          # DATA0 (GPIO)
-    d1: PA18         # DATA1 (GPIO)
-    type: era_mf_64_hash
-    encrypted: false
-    # decrypt_key: ""
-
-wiegand_timings:
-  wiegand_bit_timeout_s: 0.025
-  wiegand_wait_timeout_s: 0.005
-  wiegand_ignore_after_valid_s: 0.05
-
-# ── Wiegand-считыватели (новая секция) ──
-wiegand_new:
   - label: Wiegand-1
     d0: "gpiod_controller.wiegand1_d0"
     d1: "gpiod_controller.wiegand1_d1"
@@ -235,7 +203,14 @@ devices:
 
 # ── Функциональные устройства (новая секция) ──
 # Конфигурация считывателей с ссылками на бизнес-секцию
-devices_new:
+devices:
+  # Мапинг полных имен reader из engine к логическим именам устройств
+  reader_names:
+    wiegand_Wiegand-1: entry_card_reader
+    wiegand_Wiegand-2: exit_card_reader
+    serial_Serial-1: entry_qr_reader
+    serial_Serial-2: exit_qr_reader
+
   readers:
     entry_card_reader:
       label: "Wiegand-1"
@@ -299,9 +274,11 @@ passage:
       relay: "rel2"             # Реле для открытия
       open_duration: 2.0        # Время открытия в секундах
 
-    # close_button:
-    #   label: "button_3"         # Имя из mux_inputs
-    #   action: "close"           # Действие: close (пока не используется)
+    close_button:
+      label: "button_3"         # Имя из mux_inputs
+      action: "close"           # Действие: close (пока не используется)
+      relay: "rel1"             # Реле для закрытия
+      open_duration: 2.0        # Время открытия в секундах
 
   # Реле турникета
   relays:
@@ -504,21 +481,40 @@ timings_old:
   sound_queue_maxsize: 20
 
 # ── Логирование ──
-# INFO для production на OrangePi Zero
+# Уровни: DEBUG, INFO, WARNING, ERROR, CRITICAL
+# Для дебага установите level: DEBUG и раскомментируйте нужные модули
 logging:
+  # Общий уровень логирования
   level: INFO
+  # Формат логов
   format: "%(asctime)s %(name)s [%(levelname)s] %(message)s"
-  # Детальная настройка по модулям (опционально)
+  
+  # Детальная настройка по модулям - раскомментируйте для дебага
   loggers:
-    asyncio: WARNING
-    scud_lgtu.application.lgtu_application: INFO
-    scud_lgtu.application.handlers: INFO
+    # Инфраструктура (железо) - WARNING по умолчанию, DEBUG для дебага GPIO
+    scud_lgtu.infrastructure.gpio.controller: WARNING
     scud_lgtu.infrastructure.gpio.shift_register: WARNING
     scud_lgtu.infrastructure.gpio.multiplexor: WARNING
+    scud_lgtu.infrastructure.gpio.signal_reader: WARNING
+    scud_lgtu.infrastructure.serial.wiegand_reader: WARNING
+    scud_lgtu.infrastructure.serial.qr_codec: WARNING
+    
+    # Доменный слой - INFO для бизнес-логики
     scud_lgtu.domain.turnstile: INFO
-
-# ── Тестовый HTTP API ──
-api:
-  enabled: true
-  host: "0.0.0.0"
-  port: 8080
+    scud_lgtu.domain.access: INFO
+    
+    # Application слой - INFO для обработки событий
+    scud_lgtu.application.orchestration: INFO
+    scud_lgtu.application.handlers: INFO
+    scud_lgtu.application.services: INFO
+    
+    # Инфраструктура (кэш, бэкенд, хранилище) - WARNING
+    scud_lgtu.infrastructure.cache: WARNING
+    scud_lgtu.infrastructure.backend: WARNING
+    scud_lgtu.infrastructure.persistence: WARNING
+    
+    # ScudEngine - WARNING для внутреннего цикла
+    scud_lgtu.infrastructure.core.engine: WARNING
+    
+    # Системные логгеры
+    asyncio: WARNING

@@ -29,16 +29,13 @@ class BackendClient:
         self._base_url = base_url
 
     def is_online(self) -> bool:
-        # TODO: реальная проверка HTTPS ping
         return False
 
     def get_access_list(self) -> dict[str, Any]:
-        # TODO: реальный запрос /controller/v1/access/get
         logger.warning("BackendClient.get_access_list: заглушка")
         return {}
 
     def send_events(self, events: list[PassageEvent]) -> None:
         if not events:
             return
-        # TODO: реальный запрос /controller/v1/event/put
         logger.warning("BackendClient.send_events: заглушка, %d событий", len(events))

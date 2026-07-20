@@ -14,8 +14,8 @@
 - log_passage: записать событие прохода
 - flush_events: выгрузить все события проходов
 """
-from scud_lgtu.domain.models import Passage
-from scud_lgtu.domain.ports import EventLog
+from scud_lgtu.domain.common.models.models import Passage
+from scud_lgtu.domain.access.ports.ports import EventLog
 
 
 class PassageService:

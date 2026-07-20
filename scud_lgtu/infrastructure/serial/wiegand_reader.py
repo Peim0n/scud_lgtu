@@ -30,8 +30,14 @@ from queue import Queue, Full
 from typing import Optional
 import datetime
 
-import gpiod
-from gpiod.line import Edge, Bias
+try:
+    import gpiod
+    from gpiod.line import Edge, Bias
+    GPIOD_AVAILABLE = True
+except ImportError:
+    GPIOD_AVAILABLE = False
+    Edge = None
+    Bias = None
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +339,6 @@ class WeigandReader:
             )
             return bit_seq
 
-        # TODO: реализовать расшифровку под конкретный алгоритм считывателя
         logger.warning("[WeigandReader] Расшифровка Wiegand не реализована, возвращаем как есть")
         return bit_seq
 

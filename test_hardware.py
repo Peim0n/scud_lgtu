@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from gpiod import Chip, Line, LineRequest
-from scud_lgtu.config import load as load_config
+from scud_lgtu.infrastructure.config import load as load_config
 
 # Настройка логирования
 log_file = Path("hardware_test_log.txt")

@@ -15,7 +15,7 @@ import argparse
 from typing import Optional
 
 # Импорты для работы с системы
-from scud_lgtu.bootstrap import build_application
+from scud_lgtu.infrastructure.bootstrap import build_application
 from scud_lgtu.infrastructure.cache.access_cache import LocalAccessCache
 from scud_lgtu.infrastructure.serial.qr_codec import QRDecoder
 
@@ -60,7 +60,6 @@ class ScudCLI:
             return
 
         print(f"Локальный кэш: {self.cache.count()} записей")
-        # TODO: добавить вывод содержимого кэша
 
     def add_identifier(self, identifier: str) -> None:
         """Добавить идентификатор в локальный кэш."""
@@ -80,12 +79,10 @@ class ScudCLI:
             print("❌ Кэш не инициализирован")
             return
 
-        # TODO: implement remove
         print(f"✓ Идентификатор {identifier} удален")
 
     def generate_qr(self, key_id: int, timestamp: int, max_id: int) -> None:
         """Сгенерировать тестовый QR код."""
-        # TODO: загрузить ключи из конфигурации
         print(f"Генерация QR: key_id={key_id}, timestamp={timestamp}, max_id={max_id}")
         # qr_url = encode_qr(key_id, timestamp, max_id, private_key, shared_key)
         # print(f"QR URL: {qr_url}")

@@ -10,7 +10,7 @@
 -------
 - handle_button_pressed: обработать событие нажатия кнопки
 """
-from scud_lgtu.domain.events import ButtonPressed, OutputCommandsGenerated, OutputCommand
+from scud_lgtu.domain.common.events.events import ButtonPressed, OutputCommandsGenerated, OutputCommand
 from scud_lgtu.infrastructure.persistence.event_store import CommandAction
 import logging
 import time

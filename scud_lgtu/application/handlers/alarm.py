@@ -9,7 +9,7 @@
 -------
 - handle_alarm_changed: обработать событие изменения тревоги
 """
-from scud_lgtu.domain.events import AlarmChanged, OutputCommandsGenerated
+from scud_lgtu.domain.common.events.events import AlarmChanged, OutputCommandsGenerated
 import logging
 
 logger = logging.getLogger(__name__)

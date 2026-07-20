@@ -1,6 +1,6 @@
 """Инфраструктура звука."""
 from scud_lgtu.infrastructure.sound.player import SoundPlayer
-from scud_lgtu.domain.ports import SoundOutput
+from scud_lgtu.domain.access.ports.ports import SoundOutput
 
 
 class SoundOutputAdapter:

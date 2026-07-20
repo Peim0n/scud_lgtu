@@ -1,7 +1,7 @@
 """Адаптер репозитория кэша."""
 from scud_lgtu.infrastructure.cache.access_cache import LocalAccessCache
-from scud_lgtu.domain.ports import AccessRepository
-from scud_lgtu.domain.models import Credential, AccessDecision
+from scud_lgtu.domain.access.ports.ports import AccessRepository
+from scud_lgtu.domain.common.models.models import Credential, AccessDecision
 
 
 class AccessRepositoryAdapter:

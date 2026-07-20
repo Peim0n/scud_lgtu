@@ -27,8 +27,14 @@ from dataclasses import dataclass
 from queue import Queue
 from typing import Optional, Dict
 
-import gpiod
-from gpiod.line import Edge, Bias
+try:
+    import gpiod
+    from gpiod.line import Edge, Bias
+    GPIOD_AVAILABLE = True
+except ImportError:
+    GPIOD_AVAILABLE = False
+    Edge = None
+    Bias = None
 
 logger = logging.getLogger(__name__)
 

@@ -10,9 +10,9 @@
 -------
 - handle_credential: обработать событие считывания учётных данных (карта или QR-код)
 """
-from scud_lgtu.domain.events import CardRead, QrRead
-from scud_lgtu.domain.models import AuthSession
-from scud_lgtu.domain.enums import DirectionEnum
+from scud_lgtu.domain.common.events.events import CardRead, QrRead
+from scud_lgtu.domain.common.models.models import AuthSession
+from scud_lgtu.domain.common.enums.enums import DirectionEnum
 from scud_lgtu.application.handlers.common import handle_credential_common
 import logging
 import asyncio

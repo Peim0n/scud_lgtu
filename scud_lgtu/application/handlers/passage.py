@@ -11,10 +11,9 @@ PassageTracker. Поддерживает различные направлени
 -------
 - handle_passage_detected: обработать событие обнаружения прохода
 """
-from scud_lgtu.domain.events import PassageDetected
-from scud_lgtu.domain.events import OutputCommandsGenerated
-from scud_lgtu.domain.models import Passage
-from scud_lgtu.domain.enums import ResultEnum, DirectionEnum
+from scud_lgtu.domain.common.events.events import PassageDetected, OutputCommandsGenerated
+from scud_lgtu.domain.common.models.models import Passage
+from scud_lgtu.domain.common.enums.enums import ResultEnum, DirectionEnum
 import logging
 import asyncio
 

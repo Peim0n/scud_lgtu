@@ -13,8 +13,8 @@
 - __init__: инициализировать сервис контроля доступа с репозиторием
 - check_access: проверить, разрешены ли учётные данные
 """
-from scud_lgtu.domain.models import Credential, AccessDecision
-from scud_lgtu.domain.ports import AccessRepository
+from scud_lgtu.domain.common.models.models import Credential, AccessDecision
+from scud_lgtu.domain.access.ports.ports import AccessRepository
 
 
 class AccessService:

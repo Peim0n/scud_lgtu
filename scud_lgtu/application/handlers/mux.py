@@ -10,7 +10,7 @@
 -------
 - handle_mux_input_changed: обработать событие изменения входа мультиплексора
 """
-from scud_lgtu.domain.events import MuxInputChanged, ButtonPressed, AlarmChanged
+from scud_lgtu.domain.common.events.events import MuxInputChanged, ButtonPressed, AlarmChanged
 import logging
 
 logger = logging.getLogger(__name__)

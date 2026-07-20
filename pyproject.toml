@@ -13,15 +13,13 @@ authors = [
     {name = "Данил Сытников", email = "d.sytnikov@int-sys.ru"}
 ]
 dependencies = [
-    "gpiod>=2.0.0",
     "pyserial>=3.5",
     "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "ruff",
-    "mypy",
+hardware = [
+    "gpiod>=2.0.0",
 ]
 
 [tool.setuptools.packages.find]

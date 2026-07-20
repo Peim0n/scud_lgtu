@@ -26,8 +26,14 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict
 
 import serial
-import gpiod
-from gpiod.line import Value
+
+try:
+    import gpiod
+    from gpiod.line import Value
+    GPIOD_AVAILABLE = True
+except ImportError:
+    GPIOD_AVAILABLE = False
+    Value = None
 
 logger = logging.getLogger(__name__)
 
@@ -190,8 +196,8 @@ class OutputCommand:
     """Логический ID выхода (ключ из output_offsets)."""
     duration: float
     """Длительность включения (с). 0 — без автовыключения."""
-    value: Value = field(default=Value.ACTIVE)
-    """Целевое состояние линии."""
+    value: int = field(default=1)
+    """Целевое состояние линии (0 или 1)."""
 
 
 class OutputSignalWriter:
