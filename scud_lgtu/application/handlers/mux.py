@@ -19,9 +19,17 @@ logger = logging.getLogger(__name__)
 _button_states = {}
 
 
-def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
+def handle_mux_input_changed(event: MuxInputChanged, event_bus, turnstile=None) -> None:
     """Обработать событие изменения входа мультиплексора."""
     logger.debug(f"handle_mux_input_changed: {event}")
+
+    # Во время тревоги игнорируем кнопки и обрабатываем только вход тревоги (снятие)
+    if turnstile is not None and turnstile.is_alarm_active:
+        if event.input_name == "alarm":
+            alarm_event = AlarmChanged(active=event.state)
+            logger.debug(f"Publishing AlarmChanged: {alarm_event}")
+            event_bus.publish(alarm_event)
+        return
 
     # Обрабатываем только кнопки
     if event.input_name.startswith("button_"):

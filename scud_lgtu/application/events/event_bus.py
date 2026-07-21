@@ -100,10 +100,12 @@ class EventBus:
         """
         event_type = type(event).__name__
 
-        # Во время тревоги игнорировать все события кроме PassageDetected (датчики)
+        # Во время тревоги игнорировать входные события доступа и кнопки,
+        # но разрешить управление выходами, смену состояния тревоги,
+        # проходы (датчики) и события мультиплексора (для снятия тревоги).
         if self._turnstile and self._turnstile.is_alarm_active:
-            if event_type != "PassageDetected":
-                return  # Игнорировать все события кроме датчиков
+            if event_type in ("CardRead", "QrRead", "ButtonPressed"):
+                return  # Игнорировать доступ и кнопки
 
         with self._lock:
             handlers = self._subscribers.get(event_type, []).copy()
