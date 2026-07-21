@@ -82,6 +82,27 @@ class ModuleResolver:
         self._cache[name] = result
         return result
 
+    def resolve_reference(self, name: str) -> Any:
+        """
+        Разрешить имя в текущем модуле без рекурсивного следования по ссылкам.
+
+        Возвращает первое найденное значение (например, строку ``module.local``).
+        Полезно, когда вызывающий хочет сам разобрать ссылку.
+        """
+        if self._current_module is None:
+            raise ValueError(
+                f"Name not found: {name} (no context set, use set_context() or use 'module.name' format)"
+            )
+
+        config = self._get_module_config(self._current_module)
+        result = self._find_in_config(config, name)
+        if result is None:
+            raise ValueError(
+                f"Name not found: {name} (context: {self._current_module}, "
+                f"available keys: {list(config.keys()) if config else []})"
+            )
+        return result
+
     def _resolve_impl(self, name: str) -> Any:
         """Внутренняя реализация разрешения без кэширования."""
         # Явный мапинг с точкой: "module.local_name"

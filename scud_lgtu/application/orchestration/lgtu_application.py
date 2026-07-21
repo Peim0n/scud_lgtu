@@ -288,8 +288,9 @@ class LGTUApplication:
         logger.debug("Initializing button states")
         try:
             from scud_lgtu.application.handlers.mux import _button_states
-            # Инициализировать все кнопки значением None, чтобы первое событие считалось начальным состоянием
-            button_names = ["button_1", "button_2", "button_3"]
+            # Инициализировать все кнопки из конфига, чтобы первое событие считалось начальным состоянием
+            mux_inputs = self._config.get("mux", {}).get("inputs", {})
+            button_names = [name for name in mux_inputs.keys() if name.startswith("button_")]
             for name in button_names:
                 _button_states[name] = None
             logger.debug(f"Initialized button states: {_button_states}")

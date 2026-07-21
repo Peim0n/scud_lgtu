@@ -10,7 +10,7 @@
 -------
 - handle_mux_input_changed: обработать событие изменения входа мультиплексора
 """
-from scud_lgtu.domain.common.events.events import MuxInputChanged, ButtonPressed
+from scud_lgtu.domain.common.events.events import MuxInputChanged, ButtonPressed, AlarmChanged
 import logging
 
 logger = logging.getLogger(__name__)
@@ -39,3 +39,9 @@ def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
             event_bus.publish(button_event)
         elif prev_state is None:
             logger.debug(f"Button {event.input_name} initial state: {event.state}")
+
+    # Обрабатываем тревогу
+    elif event.input_name == "alarm":
+        alarm_event = AlarmChanged(active=event.state)
+        logger.debug(f"Publishing AlarmChanged: {alarm_event}")
+        event_bus.publish(alarm_event)

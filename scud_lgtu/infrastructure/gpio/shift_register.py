@@ -176,7 +176,7 @@ class ShiftRegister:
         if self._resolver is not None:
             try:
                 self._resolver.set_context("mappings")
-                resolved = self._resolver.resolve(name)
+                resolved = self._resolver.resolve_reference(name)
 
                 # Если результат - строка с точкой, возвращаем её (это прямой мапинг)
                 if isinstance(resolved, str) and '.' in resolved:
