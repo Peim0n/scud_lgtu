@@ -31,7 +31,7 @@ from typing import Any, Optional
 from scud_lgtu.domain.turnstile.services.turnstile import TurnstileState
 from scud_lgtu.domain.access.ports.ports import Actuator
 from scud_lgtu.domain.access.services.services import AccessPolicy, PassageTracker
-from scud_lgtu.domain.common.events.events import QrRead, CardRead, MuxInputChanged, PassageDetected, PassageStarted, PassageSensorsCleared
+from scud_lgtu.domain.common.events.events import QrRead, CardRead, MuxInputChanged, PassageDetected, PassageStarted, PassageSensorsCleared, OutputCommandsGenerated
 from scud_lgtu.domain.common.models.models import Credential, OutputCommand
 from scud_lgtu.domain.common.enums.enums import TokenTypeEnum
 from scud_lgtu.application.events.event_bus import EventBus
