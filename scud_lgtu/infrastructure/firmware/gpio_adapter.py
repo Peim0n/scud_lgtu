@@ -10,23 +10,23 @@ from scud_lgtu.infrastructure.firmware.device_abstraction import GPIOFirmware
 
 class GpiodAdapter(GPIOFirmware):
     """Адаптер GpiodPinController к GPIOFirmware интерфейсу."""
-    
+
     def __init__(self, controller: GpiodPinController):
         """
         Инициализировать адаптер с контроллером GPIO.
-        
+
         Parameters
         ----------
         controller : GpiodPinController
             Инициализированный контроллер GPIO
         """
         self._controller = controller
-    
+
     def initialize(self) -> bool:
         """Инициализировать устройство."""
         # Контроллер уже инициализирован при создании
         return True
-    
+
     def reset(self) -> bool:
         """Сбросить устройство в начальное состояние."""
         try:
@@ -37,7 +37,7 @@ class GpiodAdapter(GPIOFirmware):
             return True
         except Exception:
             return False
-    
+
     def get_status(self) -> dict:
         """Получить статус устройства."""
         try:
@@ -52,7 +52,7 @@ class GpiodAdapter(GPIOFirmware):
                 "healthy": False,
                 "error": str(e)
             }
-    
+
     def is_healthy(self) -> bool:
         """Проверить здоровье устройства."""
         try:
@@ -60,7 +60,7 @@ class GpiodAdapter(GPIOFirmware):
             return True
         except Exception:
             return False
-    
+
     def configure_pin(self, pin_name: str, mode: str, pull_up: bool = False) -> bool:
         """Сконфигурировать пин."""
         try:
@@ -70,11 +70,11 @@ class GpiodAdapter(GPIOFirmware):
             return True
         except Exception:
             return False
-    
+
     def read_pin(self, pin_name: str) -> int:
         """Прочитать пин (0 или 1)."""
         return self._controller.read_pin(pin_name)
-    
+
     def write_pin(self, pin_name: str, value: int) -> None:
         """Записать значение в пин (0 или 1)."""
         self._controller.write_pin(pin_name, value)

@@ -169,12 +169,12 @@ class ModuleResolver:
 
     def get_timing(self, module_name: str, timing_name: str, default: Any = None) -> Any:
         """
-        Получить тайминг из секции timings модуля.
+        Получить тайминг из единой корневой секции timings.
 
         Parameters
         ----------
         module_name : str
-            Имя модуля
+            Имя модуля (устаревший параметр, оставлен для совместимости)
         timing_name : str
             Имя тайминга
         default : Any, optional
@@ -185,8 +185,7 @@ class ModuleResolver:
         Any
             Значение тайминга или default
         """
-        module_config = self._get_module_config(module_name)
-        timings = module_config.get('timings', {})
+        timings = self._config.get('timings', {})
         return timings.get(timing_name, default)
 
     def get_pin(self, module_name: str, pin_name: str) -> str:

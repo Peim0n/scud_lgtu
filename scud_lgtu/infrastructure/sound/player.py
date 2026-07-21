@@ -28,17 +28,14 @@ class SoundPlayer:
         Для mp3 можно использовать "mpg123" или "ffplay".
     """
 
-    def __init__(self, sound_dir: str = "sounds", player_cmd: str = "aplay", timings: dict = None):
+    def __init__(self, sound_dir: str, player_cmd: str, sound_queue_maxsize: int):
         """Инициализировать проигрыватель."""
         self.sound_dir = sound_dir
         self.player_cmd = player_cmd
-        
-        if timings is None:
-            timings = {}
-        
+
         # Очередь для звуковых эффектов
-        self._queue: Queue = Queue(maxsize=timings.get("sound_queue_maxsize", 20))
-        
+        self._queue: Queue = Queue(maxsize=sound_queue_maxsize)
+
         # Событие остановки
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None

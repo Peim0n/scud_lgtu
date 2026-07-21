@@ -1,1 +1,1 @@
-"""Event handlers for application layer."""
+"""Пакет scud_lgtu.application.handlers."""

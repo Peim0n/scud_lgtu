@@ -1,1 +1,1 @@
-"""Interfaces layer - entry points."""
+"""Пакет scud_lgtu.interfaces."""

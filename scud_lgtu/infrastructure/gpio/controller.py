@@ -34,7 +34,7 @@
 
 import threading
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 from queue import Queue
 
 try:
@@ -51,35 +51,29 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Таблица: имя пина (из config.yml) → (chip_path, line_offset)
-# Платформа: Orange Pi Zero (Allwinner H2+/H3)
-#   gpiochip0 — банки PA, PG
-#   gpiochip1 — банк PL (R_PIO)
+# Мапинг имён пинов (PA/PG/PL) на (chip_path, offset) для Orange Pi Zero LTS.
 # ---------------------------------------------------------------------------
-PIN_MAP: Dict[str, Tuple[str, int]] = {
-    # ── PORT A (gpiochip0, base offset = A * 32) ──
-    "PA0":  ("/dev/gpiochip0",  0),
-    "PA1":  ("/dev/gpiochip0",  1),
-    "PA3":  ("/dev/gpiochip0",  3),
-    "PA6":  ("/dev/gpiochip0",  6),
-    "PA7":  ("/dev/gpiochip0",  7),
-    "PA8":  ("/dev/gpiochip0",  8),
-    "PA9":  ("/dev/gpiochip0",  9),
-    "PA10": ("/dev/gpiochip0", 10),
-    "PA11": ("/dev/gpiochip0", 11),
-    "PA12": ("/dev/gpiochip0", 12),
-    "PA13": ("/dev/gpiochip0", 13),
-    "PA14": ("/dev/gpiochip0", 14),
-    "PA18": ("/dev/gpiochip0", 18),
-    "PA19": ("/dev/gpiochip0", 19),
-    "PA20": ("/dev/gpiochip0", 20),
-    "PA21": ("/dev/gpiochip0", 21),
-    # ── PORT G (gpiochip0, base offset = 6 * 32 = 192) ──
-    "PG6":  ("/dev/gpiochip0", 198),
-    "PG7":  ("/dev/gpiochip0", 199),
-    # ── PORT L (gpiochip1, R_PIO) ──
-    "PL11": ("/dev/gpiochip1", 11),
-}
+import re
+
+_PIN_RE = re.compile(r"^(PA|PG|PL)(\d+)$", re.IGNORECASE)
+
+
+def build_pin_map(pin_names: Iterable[str]) -> Dict[str, Tuple[str, int]]:
+    """Собрать pin_map для GpiodPinController из имён вида PA<N>, PG<N>, PL<N>."""
+    result: Dict[str, Tuple[str, int]] = {}
+    for name in pin_names:
+        match = _PIN_RE.match(name)
+        if not match:
+            raise ValueError(f"Некорректное имя пина: {name}")
+        bank = match.group(1).upper()
+        offset = int(match.group(2))
+        if bank == "PA":
+            result[name] = ("/dev/gpiochip0", offset)
+        elif bank == "PG":
+            result[name] = ("/dev/gpiochip0", 192 + offset)
+        elif bank == "PL":
+            result[name] = ("/dev/gpiochip1", offset)
+    return result
 
 # gpiod Value для уровней 0/1
 if GPIOD_AVAILABLE:
@@ -100,23 +94,23 @@ class GpiodPinController:
 
     Parameters
     ----------
-    pin_map : dict, optional
+    pin_map : dict
         Таблица ``{pin_name: (chip_path, offset)}``.
-        По умолчанию используется модульная константа ``PIN_MAP``.
+        Передаётся из конфигурации через ``build_pin_map``.
 
     Notes
     -----
     Контроллер необходимо инициализировать вызовом :meth:`open` перед
     использованием. Рекомендуется использовать как контекстный менеджер::
 
-        with GpiodPinController() as ctrl:
+        with GpiodPinController(pin_map=...) as ctrl:
             ctrl.open({...})
             ...
     """
 
-    def __init__(self, pin_map: Optional[Dict[str, Tuple[str, int]]] = None):
+    def __init__(self, pin_map: Dict[str, Tuple[str, int]]):
         """Инициализировать контроллер GPIO. Открытие линий — в open()."""
-        self._pin_map: Dict[str, Tuple[str, int]] = pin_map or PIN_MAP
+        self._pin_map: Dict[str, Tuple[str, int]] = pin_map
         # chip_path → {offset: LineSettings}
         self._chip_configs: Dict[str, Dict[int, gpiod.LineSettings]] = {}
         # chip_path → LineRequest
@@ -143,7 +137,7 @@ class GpiodPinController:
         """
         if not GPIOD_AVAILABLE:
             raise RuntimeError("gpiod не установлен. Установите gpiod для работы с GPIO.")
-        
+
         pull_up_set = set(pull_ups or [])
 
         # Группируем пины по chip
@@ -619,8 +613,8 @@ class PinControllerThread:
         self._timings = timings
 
         # Публичные очереди (доступны из главного потока сразу после __init__)
-        self.shift_input_queue: Queue = Queue(maxsize=timings.get("shift_queue_maxsize", 50))
-        self.mux_output_queue: Queue = Queue(maxsize=timings.get("mux_queue_maxsize", 100))
+        self.shift_input_queue: Queue = Queue(maxsize=self._timings["shift_queue_maxsize"])
+        self.mux_output_queue: Queue = Queue(maxsize=self._timings["mux_queue_maxsize"])
 
         # Единый лок — используется воркерами и может быть передан снаружи
         # (главный поток тоже должен брать этот лок при прямой работе с GPIO)
@@ -660,7 +654,7 @@ class PinControllerThread:
             poll_interval=self._mux_poll_interval,
             addr_settle_s=self._mux_addr_settle_s,
             event_queue=self._event_queue,
-            config=self._config,
+            resolver=self._resolver,
         )
         shift = ShiftRegister(
             controller=self._controller,

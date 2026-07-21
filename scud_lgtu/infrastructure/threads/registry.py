@@ -1,55 +1,55 @@
-"""Thread registry."""
+"""Реестр потоков пакета scud_lgtu.infrastructure.threads."""
 from typing import Dict, Optional, Protocol
 
 
 class Stoppable(Protocol):
-    """Protocol for stoppable threads."""
-    
+    """Протокол для останавливаемых потоков."""
+
     def start(self) -> None:
-        """Start the thread."""
+        """Запустить поток."""
         ...
-    
+
     def stop(self) -> None:
-        """Stop the thread."""
+        """Остановить поток."""
         ...
-    
+
     def is_alive(self) -> bool:
-        """Check if thread is alive."""
+        """Проверить, жив ли поток."""
         ...
 
 
 class ThreadRegistry:
-    """Registry for managing all threads."""
-    
+    """Реестр для управления всеми потоками."""
+
     def __init__(self):
-        """Initialize thread registry."""
+        """Инициализировать реестр потоков."""
         self._threads: Dict[str, Stoppable] = {}
-    
+
     def register(self, name: str, thread: Stoppable) -> None:
-        """Register a thread."""
+        """Зарегистрировать поток."""
         self._threads[name] = thread
-    
+
     def unregister(self, name: str) -> None:
-        """Unregister a thread."""
+        """Удалить поток из реестра."""
         if name in self._threads:
             del self._threads[name]
-    
+
     def get(self, name: str) -> Optional[Stoppable]:
-        """Get a thread by name."""
+        """Получить поток по имени."""
         return self._threads.get(name)
-    
+
     def start_all(self) -> None:
-        """Start all registered threads."""
+        """Запустить все зарегистрированные потоки."""
         for thread in self._threads.values():
             thread.start()
-    
+
     def stop_all(self, timeout: float = 5.0) -> None:
-        """Stop all registered threads."""
+        """Остановить все зарегистрированные потоки."""
         for thread in self._threads.values():
             thread.stop()
-    
+
     def is_healthy(self) -> bool:
-        """Check if all threads are healthy."""
+        """Проверить, что все потоки здоровы."""
         for thread in self._threads.values():
             if not thread.is_alive():
                 return False

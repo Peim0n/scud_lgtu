@@ -4,12 +4,12 @@ from scud_lgtu.domain.access.ports.ports import SoundOutput
 
 
 class SoundOutputAdapter:
-    """Adapter for SoundPlayer to implement SoundOutput."""
-    
+    """Адаптер SoundPlayer для реализации SoundOutput."""
+
     def __init__(self, player: SoundPlayer):
-        """Initialize adapter with player."""
+        """Инициализировать адаптер с плеером."""
         self._player = player
-    
+
     def play(self, effect: str) -> None:
-        """Play sound effect."""
+        """Воспроизвести звуковой эффект."""
         self._player.play_effect(effect)

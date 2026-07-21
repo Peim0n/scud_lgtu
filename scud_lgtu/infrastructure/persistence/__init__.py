@@ -1,1 +1,1 @@
-"""Persistence infrastructure."""
+"""Пакет scud_lgtu.infrastructure.persistence."""

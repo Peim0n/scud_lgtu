@@ -1,60 +1,28 @@
 """
 Обработчик событий кнопок системы СКУД.
 
-Этот модуль реализует обработчик событий нажатия кнопок управления турникетом.
-Кнопки работают на LOW: 1 = покой, 0 = нажатие. При нажатии (state=False) открываем
-турникет и обновляем таймер закрытия на 2 секунды. Обработчик использует
-конфигурацию устройств для динамического определения реле и времени открытия.
+Обработчик делегирует управление турникетом TurnstileState.
+Конфигурация кнопок задаёт действие (open_entry, open_exit, close).
+Время до закрытия после отжатия определяется TurnstileState.
 
 Функции
 -------
-- handle_button_pressed: обработать событие нажатия кнопки
+- handle_button_pressed: обработать событие нажатия/отжатия кнопки
 """
-from scud_lgtu.domain.common.events.events import ButtonPressed, OutputCommandsGenerated, OutputCommand
+from scud_lgtu.domain.common.events.events import ButtonPressed, OutputCommandsGenerated
 import logging
-import time
-import threading
 
 logger = logging.getLogger(__name__)
 
-# Глобальный словарь для хранения таймеров закрытия кнопок
-_button_timers = {}
-_button_locks = threading.Lock()
-
-
-def _schedule_close(button_id: str, relay_name: str, duration: float, event_bus) -> None:
-    """Запланировать закрытие реле через указанное время."""
-    def close_relay():
-        commands = [OutputCommand(name=relay_name, state=False)]
-        commands_event = OutputCommandsGenerated(commands=commands)
-        event_bus.publish(commands_event)
-        logger.info(f"Кнопка {button_id}: реле {relay_name} закрыто по таймеру")
-        with _button_locks:
-            if button_id in _button_timers:
-                del _button_timers[button_id]
-
-    with _button_locks:
-        # Отменяем предыдущий таймер если есть
-        if button_id in _button_timers:
-            _button_timers[button_id].cancel()
-
-        # Создаем новый таймер
-        timer = threading.Timer(duration, close_relay)
-        _button_timers[button_id] = timer
-        timer.start()
-        logger.debug(f"Кнопка {button_id}: таймер закрытия {relay_name} на {duration}с запущен")
-
 
 def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: dict) -> None:
-    """Обработать событие нажатия кнопки."""
+    """Обработать событие нажатия/отжатия кнопки через TurnstileState."""
     logger.info(f"Button event: button_id={event.button_id}, state={event.state}")
 
-    # Получаем конфигурацию кнопок из devices
     buttons = devices.get("buttons", {})
 
-    # Находим конфигурацию кнопки по label
     button_config = None
-    for button_name, button_cfg in buttons.items():
+    for button_cfg in buttons.values():
         if button_cfg.get("label") == event.button_id:
             button_config = button_cfg
             break
@@ -63,28 +31,29 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
         logger.error(f"Кнопка не найдена в конфиге: {event.button_id}")
         return
 
-    relay_name = button_config.get("relay")
-    open_duration = button_config.get("open_duration", 2.0)
-
-    if not relay_name:
-        logger.error(f"Кнопка {event.button_id} не имеет конфигурации реле")
+    action = button_config.get("action")
+    if not action:
+        logger.error(f"Кнопка {event.button_id} не имеет action")
         return
 
     if event.state:
-        # Нажатие (state=True) - открываем реле, отменяем таймер если есть
-        logger.info(f"Кнопка {event.button_id}: НАЖАТИЕ (state=True), открываем реле {relay_name}")
-        commands = [OutputCommand(name=relay_name, state=True)]
-        commands_event = OutputCommandsGenerated(commands=commands)
-        event_bus.publish(commands_event)
-        logger.info(f"Кнопка {event.button_id}: реле {relay_name} открыто")
+        commands = []
+        if action == "open_entry":
+            commands = turnstile.open_entry(start_timer=False)
+            logger.info(f"Кнопка {event.button_id}: открытие входа")
+        elif action == "open_exit":
+            commands = turnstile.open_exit(start_timer=False)
+            logger.info(f"Кнопка {event.button_id}: открытие выхода")
+        elif action == "close":
+            commands = turnstile.close()
+            logger.info(f"Кнопка {event.button_id}: закрытие турникета")
+        else:
+            logger.error(f"Кнопка {event.button_id}: неизвестное действие {action}")
+            return
 
-        # Отменяем таймер если он был запущен
-        with _button_locks:
-            if event.button_id in _button_timers:
-                _button_timers[event.button_id].cancel()
-                del _button_timers[event.button_id]
-                logger.debug(f"Кнопка {event.button_id}: таймер отменен при нажатии")
+        if commands:
+            event_bus.publish(OutputCommandsGenerated(commands=commands))
     else:
-        # Отжатие (state=False) - запускаем таймер закрытия
-        logger.info(f"Кнопка {event.button_id}: ОТЖАТИЕ (state=False), запускаем таймер закрытия")
-        _schedule_close(event.button_id, relay_name, open_duration, event_bus)
+        if action in ("open_entry", "open_exit"):
+            turnstile.start_open_timer()
+            logger.info(f"Кнопка {event.button_id}: отжатие, запущен таймер закрытия")

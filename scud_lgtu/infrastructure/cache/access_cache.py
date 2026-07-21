@@ -110,7 +110,7 @@ class LocalAccessCache:
                 self._user_by_token[h] = uid
                 self._users[uid][id_type] = value
 
-        # Legacy формат: {"cardid": ["..."], "maxid": ["..."]}
+        # Устаревший формат: {"cardid": ["..."], "maxid": ["..."]}
         for id_type, values in data.items():
             if id_type == "users":
                 continue

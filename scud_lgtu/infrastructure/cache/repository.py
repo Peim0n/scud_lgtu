@@ -5,20 +5,24 @@ from scud_lgtu.domain.common.models.models import Credential, AccessDecision
 
 
 class AccessRepositoryAdapter:
-    """Adapter for LocalAccessCache to implement AccessRepository."""
-    
+    """Адаптер LocalAccessCache для реализации AccessRepository."""
+
     def __init__(self, cache: LocalAccessCache):
-        """Initialize adapter with cache."""
+        """Инициализировать адаптер с кэшем."""
         self._cache = cache
-    
+
     def is_allowed(self, credential: Credential) -> AccessDecision:
-        """Check if credential is allowed."""
+        """Проверить, разрешена ли учётная запись."""
         allowed, user_id = self._cache.is_allowed(
             credential.token_type.value,
             credential.value
         )
-        
+
         if allowed:
             return AccessDecision(allowed=True, user_id=user_id)
         else:
             return AccessDecision(allowed=False, reason="Credential not in cache")
+
+    def update(self, data: dict) -> None:
+        """Обновить разрешённые идентификаторы из данных бэкенда."""
+        self._cache.update(data)

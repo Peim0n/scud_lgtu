@@ -16,8 +16,7 @@ from typing import Optional
 
 # Импорты для работы с системы
 from scud_lgtu.infrastructure.bootstrap import build_application
-from scud_lgtu.infrastructure.cache.access_cache import LocalAccessCache
-from scud_lgtu.infrastructure.serial.qr_codec import QRDecoder
+from scud_lgtu.application.commands import ScudCommand
 
 
 class ScudCLI:
@@ -27,21 +26,19 @@ class ScudCLI:
         """Инициализировать CLI с конфигурацией."""
         self.config_path = config_path
         self.application = None
-        self.cache = None
 
     def start_engine(self) -> None:
         """Запустить движок СКУД."""
         print("Запуск движка СКУД...")
         self.application = build_application(self.config_path)
-        self.application._engine.start()
-        self.cache = self.application._cache
+        self.application.start()
         print("✓ Движок запущен")
 
     def stop_engine(self) -> None:
         """Остановить движок СКУД."""
         if self.application:
             print("Остановка движка СКУД...")
-            self.application._engine.stop()
+            self.application.shutdown()
             print("✓ Движок остановлен")
 
     def check_health(self) -> None:
@@ -50,36 +47,8 @@ class ScudCLI:
             print("❌ Движок не запущен")
             return
 
-        healthy = self.application._engine.is_healthy()
+        healthy = self.application.is_healthy()
         print(f"Состояние системы: {'✓ Здоров' if healthy else '❌ Нездоров'}")
-
-    def view_cache(self) -> None:
-        """Просмотреть локальный кэш разрешений."""
-        if not self.cache:
-            print("❌ Кэш не инициализирован")
-            return
-
-        print(f"Локальный кэш: {self.cache.count()} записей")
-
-    def add_identifier(self, identifier: str) -> None:
-        """Добавить идентификатор в локальный кэш."""
-        if not self.cache:
-            print("❌ Кэш не инициализирован")
-            return
-
-        self.cache.update({
-            "id": [{"type": "maxid", "list": [identifier]}],
-            "users": {"1": {"maxid": identifier}}
-        })
-        print(f"✓ Идентификатор {identifier} добавлен")
-
-    def remove_identifier(self, identifier: str) -> None:
-        """Удалить идентификатор из локального кэша."""
-        if not self.cache:
-            print("❌ Кэш не инициализирован")
-            return
-
-        print(f"✓ Идентификатор {identifier} удален")
 
     def generate_qr(self, key_id: int, timestamp: int, max_id: int) -> None:
         """Сгенерировать тестовый QR код."""
@@ -89,7 +58,7 @@ class ScudCLI:
 
     def send_command(self, target: str, action: str, payload: dict) -> None:
         """Отправить команду в систему."""
-        if not self.engine:
+        if not self.application:
             print("❌ Движок не запущен")
             return
 
@@ -98,7 +67,7 @@ class ScudCLI:
             action=action,
             payload=payload,
         )
-        self.engine.cmd_queue.put_nowait(cmd)
+        self.application.send_command(cmd)
         print(f"✓ Команда отправлена: {target}.{action}")
 
     def interactive_menu(self) -> None:
@@ -106,37 +75,26 @@ class ScudCLI:
         while True:
             print("\n=== SCUD CLI ===")
             print("1. Проверить состояние")
-            print("2. Просмотреть кэш")
-            print("3. Добавить идентификатор")
-            print("4. Удалить идентификатор")
-            print("5. Сгенерировать QR")
-            print("6. Открыть турникет")
-            print("7. Записать shift")
-            print("8. Выход")
+            print("2. Сгенерировать QR")
+            print("3. Открыть турникет")
+            print("4. Записать shift")
+            print("5. Выход")
 
             choice = input("Выберите действие: ").strip()
 
             if choice == "1":
                 self.check_health()
             elif choice == "2":
-                self.view_cache()
-            elif choice == "3":
-                identifier = input("Введите идентификатор: ").strip()
-                self.add_identifier(identifier)
-            elif choice == "4":
-                identifier = input("Введите идентификатор: ").strip()
-                self.remove_identifier(identifier)
-            elif choice == "5":
                 key_id = int(input("Введите key_id: ").strip())
                 timestamp = int(input("Введите timestamp: ").strip())
                 max_id = int(input("Введите max_id: ").strip())
                 self.generate_qr(key_id, timestamp, max_id)
-            elif choice == "6":
+            elif choice == "3":
                 self.send_command("output", "set_output", {"output_id": 0, "duration": 1.5})
-            elif choice == "7":
+            elif choice == "4":
                 value = int(input("Введите значение shift: ").strip())
                 self.send_command("shift", "write_shift", {"value": value})
-            elif choice == "8":
+            elif choice == "5":
                 print("Выход...")
                 break
             else:

@@ -29,13 +29,12 @@ import queue
 from typing import Any, Optional
 
 from scud_lgtu.infrastructure.persistence.event_store import ScudEvent, ScudCommand, EventType, EventSource, CommandTarget, CommandAction
-from scud_lgtu.infrastructure.config import load as load_config
-from scud_lgtu.infrastructure.gpio.controller import GpiodPinController, PinControllerThread
-from scud_lgtu.infrastructure.serial.wiegand_reader import WeigandReader, CardData
-from scud_lgtu.infrastructure.serial.reader import BackgroundSerialReader
-from scud_lgtu.infrastructure.gpio.signal_reader import InputSignalReader, InputData
 from scud_lgtu.infrastructure.persistence.passage_detector import PassageDetector
+from scud_lgtu.infrastructure.config import load as load_config
 from scud_lgtu.infrastructure.config.module_resolver import ModuleResolver
+from scud_lgtu.infrastructure.gpio.controller import GpiodPinController, PinControllerThread, build_pin_map
+from scud_lgtu.infrastructure.serial.reader import BackgroundSerialReader
+from scud_lgtu.infrastructure.serial.wiegand_reader import WeigandReader
 
 logger = logging.getLogger(__name__)
 
@@ -130,26 +129,26 @@ class ScudEngine:
             self._cfg = config
 
         if timings is None:
-            self._timings: dict[str, float] = self._cfg.get("timings", {})
+            self._timings: dict[str, float] = self._cfg["timings"]
         else:
             self._timings = timings
 
         # Инициализация ModuleResolver для новой архитектуры
         self._resolver = ModuleResolver(self._cfg)
 
-        self._event_queue: queue.Queue = queue.Queue(maxsize=self._timings.get("event_queue_maxsize", 1000))
-        self._cmd_queue: queue.Queue = queue.Queue(maxsize=self._timings.get("command_queue_maxsize", 100))
+        self._event_queue: queue.Queue = queue.Queue(maxsize=self._timings["event_queue_maxsize"])
+        self._cmd_queue: queue.Queue = queue.Queue(maxsize=self._timings["command_queue_maxsize"])
 
         self._stop_event = threading.Event()
-        self._ctrl: Optional[GpiodPinController] = None
-        self._pct: Optional[PinControllerThread] = None
+        self._ctrl: Optional[Any] = None
+        self._pct: Optional[Any] = None
 
         self._threads: dict[str, threading.Thread] = {}
-        self._serial_readers: list[BackgroundSerialReader] = []
+        self._serial_readers: list[Any] = []
         self._wiegand_events: list[threading.Event] = []
         self._signal_events: list[threading.Event] = []
         self._signal_detector_thread: Optional[threading.Thread] = None
-        self._passage_detectors: dict[str, PassageDetector] = {}
+        self._passage_detectors: dict[str, Any] = {}
 
         self._command_thread: Optional[threading.Thread] = None
         self._watchdog: Optional[Watchdog] = None
@@ -192,7 +191,7 @@ class ScudEngine:
         logger.info("ScudEngine: остановка…")
         self._stop_event.set()
 
-        timeout = self._timings.get("thread_join_timeout_s", 5.0)
+        timeout = self._timings["thread_join_timeout_s"]
 
         # Останавливаем command loop
         if self._command_thread is not None and self._command_thread.is_alive():
@@ -213,11 +212,11 @@ class ScudEngine:
         for ev in self._wiegand_events:
             ev.clear()
 
-        # Signals
+        # Сигналы
         for ev in self._signal_events:
             ev.clear()
 
-        # Output writer
+        # Писатель выходов
         if self._output_writer is not None:
             self._output_writer.running.clear()
 
@@ -225,21 +224,19 @@ class ScudEngine:
         if self._pct is not None:
             self._pct.stop(timeout=timeout)
 
-        # GPIO controller
+        # GPIO-контроллер
         if self._ctrl is not None:
             self._ctrl.close()
 
         logger.info("ScudEngine: остановлен")
 
     def is_healthy(self) -> bool:
-        """True, если все hardware-потоки живы."""
+        """True, если все аппаратные потоки живы."""
         for t in self._threads.values():
             if t is None:
                 continue
-            if isinstance(t, BackgroundSerialReader):
-                if not t._thread or not t._thread.is_alive():
-                    return False
-            elif not t.is_alive():
+            thread = getattr(t, "_thread", t)
+            if not thread or not thread.is_alive():
                 return False
         return True
 
@@ -262,7 +259,8 @@ class ScudEngine:
         for p in all_outputs:
             modes[p] = "output"
 
-        self._ctrl = GpiodPinController()
+        pin_map = build_pin_map(set(all_outputs + [mux_input]))
+        self._ctrl = GpiodPinController(pin_map=pin_map)
         self._ctrl.open(modes, pull_ups=[mux_input])
         self._ctrl.set_output_states(dict.fromkeys(all_outputs, 0))
         logger.info("GpiodPinController инициализирован")
@@ -279,9 +277,6 @@ class ScudEngine:
         mux_a2 = self._resolver.resolve("mux_a2")
         mux_input = self._resolver.resolve("mux_input")
 
-        timings = self._cfg.get("timings", {})
-        config = self._cfg.get("config", {})
-
         self._pct = PinControllerThread(
             controller=self._ctrl,
             mux_input=mux_input,
@@ -289,11 +284,11 @@ class ScudEngine:
             shift_ser_data=shift_data,
             shift_ser_clk=shift_clk,
             shift_ser_latch=shift_latch,
-            shift_reg_len=16,
-            mux_poll_interval=timings.get("mux_poll_interval_s", 0.02),
-            mux_addr_settle_s=timings.get("mux_addr_settle_s", 500e-6),
+            shift_reg_len=self._cfg["shift_register"]["reg_len"],
+            mux_poll_interval=self._timings["mux_poll_interval_s"],
+            mux_addr_settle_s=self._timings["mux_addr_settle_s"],
             event_queue=self._event_queue,
-            config=config,
+            timings=self._timings,
             resolver=self._resolver,
         )
         self._pct.start()
@@ -308,7 +303,8 @@ class ScudEngine:
             reader = BackgroundSerialReader(
                 s["port"],
                 s["baud"],
-                retry_delay=self._timings.get("serial_retry_delay_s", 1.0),
+                timeout=s["timeout"],
+                retry_delay=self._timings["serial_retry_delay_s"],
             )
 
             q = reader.start()
@@ -320,7 +316,7 @@ class ScudEngine:
 
     def _serial_queue_loop(self, q: queue.Queue, name: str) -> None:
         """Передать строки из Serial-очереди в общую event_queue."""
-        timeout = self._timings.get("serial_queue_timeout_s", 0.2)
+        timeout = self._timings["serial_queue_timeout_s"]
 
         def _loop() -> None:
             while not self._stop_event.is_set():
@@ -348,11 +344,11 @@ class ScudEngine:
                 d0=w["d0"],
                 d1=w["d1"],
                 wiegand_type=w["type"],
-                encrypted=w.get("encrypted", False),
+                encrypted=w["encrypted"],
                 decrypt_key=w.get("decrypt_key"),
-                bit_timeout=self._timings.get("wiegand_bit_timeout_s", 0.025),
-                wait_timeout=self._timings.get("wiegand_wait_timeout_s", 0.005),
-                ignore_after_valid=self._timings.get("wiegand_ignore_after_valid_s", 0.05),
+                bit_timeout=self._timings["wiegand_bit_timeout_s"],
+                wait_timeout=self._timings["wiegand_wait_timeout_s"],
+                ignore_after_valid=self._timings["wiegand_ignore_after_valid_s"],
             )
             name = f"wiegand_{w['label']}"
             self._wiegand_events.append(ev)
@@ -362,12 +358,12 @@ class ScudEngine:
 
     def _wiegand_queue_loop(self, q: queue.Queue, name: str) -> None:
         """Передать CardData из Wiegand-очереди в общую event_queue."""
-        timeout = self._timings.get("event_queue_timeout_s", 0.2)
+        timeout = self._timings["event_queue_timeout_s"]
 
         def _loop() -> None:
             while not self._stop_event.is_set():
                 try:
-                    data: CardData = q.get(timeout=timeout)
+                    data = q.get(timeout=timeout)
                     self._event_queue.put(
                         ScudEvent(
                             type=EventType.CARD_READ,
@@ -396,18 +392,18 @@ class ScudEngine:
             logger.info("ScudEngine: зоны прохода не настроены")
             return
 
-        # Получаем маппинг mux_inputs для проверки имен
-        mux_inputs = self._cfg.get("config", {}).get("mux_inputs", {})
+        # Получаем список именованных входов мультиплексора для проверки зон
+        mux_inputs = self._cfg.get("mux", {}).get("inputs", {})
 
         for zone in zones:
             inner_name = zone.get("inner")
             outer_name = zone.get("outer")
 
-            if inner_name not in mux_inputs.values():
-                logger.error(f"ScudEngine: датчик {inner_name} не найден в mux_inputs")
+            if inner_name not in mux_inputs:
+                logger.error(f"ScudEngine: датчик {inner_name} не найден в mux.inputs")
                 continue
-            if outer_name not in mux_inputs.values():
-                logger.error(f"ScudEngine: датчик {outer_name} не найден в mux_inputs")
+            if outer_name not in mux_inputs:
+                logger.error(f"ScudEngine: датчик {outer_name} не найден в mux.inputs")
                 continue
 
             detector = PassageDetector(
@@ -415,8 +411,8 @@ class ScudEngine:
                 inner_name=inner_name,
                 outer_name=outer_name,
                 event_queue=self._event_queue,
-                passage_timeout=self._timings.get("passage_timeout_s", 2.0),
-                blockage_timeout=self._timings.get("passage_blockage_timeout_s", 5.0),
+                passage_timeout=self._timings["passage_timeout_s"],
+                blockage_timeout=self._timings["passage_blockage_timeout_s"],
             )
             self._passage_detectors[zone["label"]] = detector
             logger.info(
@@ -424,7 +420,7 @@ class ScudEngine:
                 zone["label"], inner_name, outer_name
             )
 
-        timeout = self._timings.get("mux_queue_timeout_s", 0.1)
+        timeout = self._timings["mux_queue_timeout_s"]
 
         def _loop() -> None:
             while not self._stop_event.is_set():
@@ -452,7 +448,7 @@ class ScudEngine:
 
     def _start_command_loop(self) -> None:
         """Запустить поток обработки команд для ScudEngine."""
-        timeout = self._timings.get("command_queue_timeout_s", 0.2)
+        timeout = self._timings["command_queue_timeout_s"]
 
         def _loop() -> None:
             while not self._stop_event.is_set():
@@ -506,38 +502,13 @@ class ScudEngine:
                 )
             )
 
-    def run_lgtu_controller(self) -> None:
-        """Запуск контроллера ЛГТУ."""
-        from scud_lgtu.application.controllers.lgtu_controller import LGTUController
-        from scud_lgtu.infrastructure.cache.access_cache import LocalAccessCache
-        from scud_lgtu.infrastructure.backend.client import BackendClient
-        from scud_lgtu.infrastructure.persistence.event_store import EventStore
-        import os
-        
-        # Создаем необходимые компоненты для контроллера
-        # Указываем путь к local_access.json для загрузки локального кэша
-        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        cache_path = os.path.join(script_dir, "cache", "local_access.json")
-        cache = LocalAccessCache(path=cache_path)
-        store = EventStore()
-        backend = BackendClient()
-        
-        controller = LGTUController(
-            engine=self,
-            cache=cache,
-            store=store,
-            backend_client=backend,
-            config=self._cfg
-        )
-        controller.run()
-
     def _start_watchdog(self) -> None:
         """Запустить Watchdog для мониторинга всех потоков."""
         self._watchdog = Watchdog(
             self._threads,
             self._event_queue,
             self._stop_event,
-            check_interval=self._timings.get("watchdog_check_interval_s", 2.0),
-            stop_timeout=self._timings.get("watchdog_stop_timeout_s", 2.0),
+            check_interval=self._timings["watchdog_check_interval_s"],
+            stop_timeout=self._timings["watchdog_stop_timeout_s"],
         )
         self._watchdog.start()

@@ -1,1 +1,1 @@
-"""Infrastructure layer - adapters for external systems."""
+"""Пакет scud_lgtu.infrastructure."""

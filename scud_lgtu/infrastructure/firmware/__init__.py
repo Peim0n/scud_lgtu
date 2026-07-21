@@ -1,1 +1,1 @@
-"""Firmware layer - device-specific firmware operations and abstractions."""
+"""Пакет scud_lgtu.infrastructure.firmware."""

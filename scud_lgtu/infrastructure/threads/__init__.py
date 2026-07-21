@@ -1,1 +1,1 @@
-"""Threads infrastructure."""
+"""Пакет scud_lgtu.infrastructure.threads."""

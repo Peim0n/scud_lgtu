@@ -64,9 +64,9 @@ class PassageDetector:
         zone_label: str,
         inner_name: str,
         outer_name: str,
-        event_queue: Optional[Queue] = None,
-        passage_timeout: float = 2.0,
-        blockage_timeout: float = 5.0,
+        event_queue: Queue,
+        passage_timeout: float,
+        blockage_timeout: float,
     ):
         """Инициализировать детектор прохода для одной зоны."""
         self._zone = zone_label
@@ -106,15 +106,15 @@ class PassageDetector:
             self._update_sensor("outer", self._outer, outer_val, timestamp)
 
     def _update_sensor(self, sensor: str, state: SensorState, value: int, timestamp: float) -> None:
-        """Обновить состояние одного датчика (rising/falling)."""
+        """Обновить состояние одного датчика (нарастающий/спадающий фронт)."""
         # Инвертированная логика: 1 = нет сигнала, 0 = есть сигнал
         if not value and not state.active:
-            # Rising — начало импульса (датчик сработал)
+            # Нарастающий фронт — начало импульса (датчик сработал)
             state.active = True
             state.start_time = timestamp
             self._maybe_start(sensor, timestamp)
         elif value and state.active:
-            # Falling — конец импульса (датчик перестал срабатывать)
+            # Спадающий фронт — конец импульса (датчик перестал срабатывать)
             state.active = False
             self._check_completion(sensor, timestamp)
 

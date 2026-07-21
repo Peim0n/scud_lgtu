@@ -43,16 +43,6 @@ shift_register:
     pult_l1: {offset: 7, inverted: false}
     od1: {offset: 12, inverted: false}
     od2: {offset: 13, inverted: false}
-    # Исторические имена для совместимости (те же offset)
-    w1_beep: {offset: 3, inverted: false}
-    w2_beep: {offset: 11, inverted: false}
-    buz: {offset: 8, inverted: false}
-    w1_green: {offset: 1, inverted: false}
-    w1_red: {offset: 2, inverted: false}
-    w2_green: {offset: 9, inverted: false}
-    w2_red: {offset: 10, inverted: false}
-  timings:
-    shift_queue_maxsize: 50
 
 # Секция mux: конфигурация для класса Multiplexer
 mux:
@@ -70,14 +60,10 @@ mux:
     button_1: {addr: 5}
     alarm: {addr: 6}
     button_2: {addr: 7}
-  timings:
-    mux_poll_interval_s: 0.05
-    mux_addr_settle_s: 0.0003
-    mux_queue_maxsize: 100
 
-# ── Бизнес-секция (приложение) ──
-# Мапинг бизнес-имен на аппаратные секции
-business:
+# ── Единый каскад мапингов ──
+# Бизнес-имена → module.local_name
+mappings:
   # Биперы
   entry_beeper: "shift_register.beep1"
   exit_beeper: "shift_register.beep2"
@@ -100,23 +86,11 @@ business:
   entry_sensor: "mux.sensor_1"
   exit_sensor: "mux.sensor_2"
 
-  timings:
-    auth_timeout_s: 5.0
-    relay_open_duration_s: 2.0
-    indicator_duration_s: 2.0
-    beep_signal_duration_s: 0.05
-    beep_signal_pause_s: 0.1
-    deny_beep_duration_s: 0.1
-    deny_beep_pause_s: 0.1
-    deny_beep_count: 3
-    open_beep_duration_s: 0.1
-    alarm_beep_on_duration_s: 0.5
-    alarm_beep_off_duration_s: 0.5
-    button_timer_duration_s: 2.0
-    passage_timeout_s: 2.0
-    passage_blockage_timeout_s: 5.0
-    sensor_debounce_s: 0.5
-    sensor_event_timeout_s: 0.1
+  # Мапинг полных имён считывателей на логические
+  wiegand_Wiegand-1: entry_card_reader
+  wiegand_Wiegand-2: exit_card_reader
+  serial_Serial-1: entry_qr_reader
+  serial_Serial-2: exit_qr_reader
 
 # ── Wiegand-считыватели ──
 wiegand:
@@ -138,122 +112,57 @@ serial:
   - label: Serial-1
     port: /dev/ttyS1
     baud: 115200     # Скорость передачи (baud)
+    timeout: 0.05
 
   - label: Serial-2
     port: /dev/ttyS2
     baud: 115200     # Скорость передачи (baud)
+    timeout: 0.05
 
-serial_timings:
-  serial_queue_timeout_s: 0.2
-  serial_retry_delay_s: 1.0
-
-# ── Устройства (старая секция для обратной совместимости) ──
-# Описание физических устройств и их ролей в системе
-devices:
-  # Мапинг полных имен reader из engine к логическим именам устройств
-  reader_names:
-    wiegand_Wiegand-1: entry_card_reader
-    wiegand_Wiegand-2: exit_card_reader
-    serial_Serial-1: entry_qr_reader
-    serial_Serial-2: exit_qr_reader
-
-  # Считыватели (Wiegand и Serial/QR)
-  readers:
-    entry_card_reader:
-      label: "Wiegand-1"        # Ссылка на wiegand label
-      type: "wiegand"           # Тип: wiegand или serial
-      direction: "entry"        # Сторона: entry (вход) или exit (выход)
-      indicator_success: "w1_green"  # Индикатор успеха (shift pin name)
-      indicator_fail: "w1_red"       # Индикатор отказа (shift pin name)
-      buzzer: "w1_beep"         # Бипер считывателя (shift pin name)
-
-    exit_card_reader:
-      label: "Wiegand-2"        # Ссылка на wiegand label
-      type: "wiegand"           # Тип: wiegand или serial
-      direction: "exit"         # Сторона: entry (вход) или exit (выход)
-      indicator_success: "w2_green"  # Индикатор успеха (shift pin name)
-      indicator_fail: "w2_red"       # Индикатор отказа (shift pin name)
-      buzzer: "w2_beep"         # Бипер считывателя (shift pin name)
-
-    entry_qr_reader:
-      label: "Serial-1"         # Ссылка на serial label
-      type: "serial"            # Тип: wiegand или serial
-      direction: "entry"        # Сторона: entry (вход) или exit (выход)
-      indicator_success: "w1_green"  # Индикатор успеха (shift pin name)
-      indicator_fail: "w1_red"       # Индикатор отказа (shift pin name)
-      buzzer: "w1_beep"         # Бипер считывателя (shift pin name)
-
-    exit_qr_reader:
-      label: "Serial-2"         # Ссылка на serial label
-      type: "serial"            # Тип: wiegand или serial
-      direction: "exit"         # Сторона: entry (вход) или exit (выход)
-      indicator_success: "w2_green"  # Индикатор успеха (shift pin name)
-      indicator_fail: "w2_red"       # Индикатор отказа (shift pin name)
-      buzzer: "w2_beep"         # Бипер считывателя (shift pin name)
-
-  # Датчики прохода
-  sensors:
-    entry_sensor:
-      label: "sensor_1"        # Имя из mux_inputs
-      direction: "entry"        # Роль: entry (вход) или exit (выход)
-
-    exit_sensor:
-      label: "sensor_2"        # Имя из mux_inputs
-      direction: "exit"         # Роль: entry (вход) или exit (выход)
-
-# ── Функциональные устройства (новая секция) ──
+# ── Функциональные устройства ──
 # Конфигурация считывателей с ссылками на бизнес-секцию
 devices:
-  # Мапинг полных имен reader из engine к логическим именам устройств
-  reader_names:
-    wiegand_Wiegand-1: entry_card_reader
-    wiegand_Wiegand-2: exit_card_reader
-    serial_Serial-1: entry_qr_reader
-    serial_Serial-2: exit_qr_reader
-
   readers:
     entry_card_reader:
       label: "Wiegand-1"
       type: "wiegand"
       direction: "entry"
-      beeper: "business.entry_beeper"
-      indicator_success: "business.inner_indicator_success"
-      indicator_fail: "business.inner_indicator_fail"
+      beeper: "entry_beeper"
+      indicator_success: "inner_indicator_success"
+      indicator_fail: "inner_indicator_fail"
 
     exit_card_reader:
       label: "Wiegand-2"
       type: "wiegand"
       direction: "exit"
-      beeper: "business.exit_beeper"
-      indicator_success: "business.outer_indicator_success"
-      indicator_fail: "business.outer_indicator_fail"
+      beeper: "exit_beeper"
+      indicator_success: "outer_indicator_success"
+      indicator_fail: "outer_indicator_fail"
 
     entry_qr_reader:
       label: "Serial-1"
       type: "serial"
       direction: "entry"
-      beeper: "business.entry_beeper"
-      indicator_success: "business.inner_indicator_success"
-      indicator_fail: "business.inner_indicator_fail"
+      beeper: "entry_beeper"
+      indicator_success: "inner_indicator_success"
+      indicator_fail: "inner_indicator_fail"
 
     exit_qr_reader:
       label: "Serial-2"
       type: "serial"
       direction: "exit"
-      beeper: "business.exit_beeper"
-      indicator_success: "business.outer_indicator_success"
-      indicator_fail: "business.outer_indicator_fail"
+      beeper: "exit_beeper"
+      indicator_success: "outer_indicator_success"
+      indicator_fail: "outer_indicator_fail"
 
   buttons:
     entry_button:
       label: "button_1"
-      input: "business.entry_button"
-      relay: "shift_register.rel1"
+      action: "open_entry"
 
     exit_button:
       label: "button_2"
-      input: "business.exit_button"
-      relay: "shift_register.rel2"
+      action: "open_exit"
 
 # ── Зоны прохода ──
 passage:
@@ -262,71 +171,6 @@ passage:
       inner: "sensor_1"  # Внутренний датчик (вход)
       outer: "sensor_2"  # Внешний датчик (выход)
 
-  # Кнопки управления
-  buttons:
-    entry_button:
-      label: "button_1"         # Имя из mux_inputs
-      action: "open_entry"      # Действие: open_entry, open_exit
-      relay: "rel1"             # Реле для открытия
-      open_duration: 2.0        # Время открытия в секундах
-
-    exit_button:
-      label: "button_2"         # Имя из mux_inputs
-      action: "open_exit"       # Действие: open_entry, open_exit
-      relay: "rel2"             # Реле для открытия
-      open_duration: 2.0        # Время открытия в секундах
-
-    close_button:
-      label: "button_3"         # Имя из mux_inputs
-      action: "close"           # Действие: close (пока не используется)
-      relay: "rel1"             # Реле для закрытия
-      open_duration: 2.0        # Время открытия в секундах
-
-  # Реле турникета
-  relays:
-    entry_relay:
-      label: "rel1"             # Имя из shift_pins
-      direction: "entry"        # Роль: entry (вход) или exit (выход)
-
-    exit_relay:
-      label: "rel2"             # Имя из shift_pins
-      direction: "exit"         # Роль: entry (вход) или exit (выход)
-
-  # Общие биперы
-  buzzers:
-    main_buzzer:
-      label: "buz"              # Имя из shift_pins
-
-# ── Мапинг входов мультиплексора и пинов сдвигового регистра ──
-# Бизнес-логика использует эти имена для работы с датчиками и выходами
-config:
-  # Входы мультиплексора (0-7)
-  mux_inputs:
-    0: "input_0"
-    1: "button_3"
-    2: "sensor_2"
-    3: "input_3"
-    4: "sensor_1"
-    5: "button_1"
-    6: "alarm"
-    7: "button_2"
-  # Пины сдвигового регистра (номер бита, инверсия)
-  shift_pins:
-    w1_green: {pin: 1, inverted: false}
-    w1_red: {pin: 2, inverted: false}
-    w1_beep: {pin: 3, inverted: false}
-    pult_buzz: {pin: 4, inverted: false}
-    pult_l3: {pin: 5, inverted: false}
-    pult_l2: {pin: 6, inverted: false}
-    pult_l1: {pin: 7, inverted: false}
-    buz: {pin: 8, inverted: false}
-    w2_green: {pin: 9, inverted: false}
-    w2_red: {pin: 10, inverted: false}
-    w2_beep: {pin: 11, inverted: false}
-    od1: {pin: 12, inverted: false}
-    od2: {pin: 13, inverted: false}
-    rel1: {pin: 14, inverted: false}
-    rel2: {pin: 15, inverted: false}
 
 # ── Параметры доступа ──
 # STATIC_KEY — уникален для точки доступа (16 байт в hex).
@@ -335,152 +179,75 @@ access:
   static_key: "0123456789abcdef0123456789abcdef"
   dynamic_key: "fedcba9876543210fedcba9876543210"
 
+# ── QR декодер ──
+qr_decoder:
+  keys_dir: "infrastructure/keys"
+
+# ── Бэкенд ──
+backend:
+  base_url: "https://api.pass.lipetsk.ru"
+
+# ── Звук ──
+sound:
+  sound_dir: "sounds"
+  player_cmd: "aplay"
+
 # ── Общие системные тайминги ──
 timings:
-  watchdog_check_interval_s: 2.0
-  watchdog_stop_timeout_s: 2.0
-  backend_sync_interval_s: 600
-  event_queue_timeout_s: 0.2
-  command_queue_timeout_s: 0.2
-  thread_join_timeout_s: 5.0
-  event_queue_maxsize: 1000
-  command_queue_maxsize: 100
-  sound_queue_maxsize: 20
-
-# ── Тайминги (старая секция для обратной совместимости) ──
-# Все задержки в секундах.
-timings_old:
-  # Интервал опроса входов мультиплексора в PinControllerThread.
-  # Определяет, как часто считываются состояния входных сигналов.
-  # Увеличено для снижения нагрузки на CPU (было 0.02)
+  # GPIO / multiplexer
   mux_poll_interval_s: 0.05
-
-  # Время установления адреса на мультиплексоре после переключения.
-  # Задержка перед чтением входа после выставления адресных пинов.
-  # Минимально необходимое время для стабилизации сигнала
   mux_addr_settle_s: 0.0003
-
-  # Максимальный интервал между двумя последовательными Wiegand-битами.
-  # Если пауза больше — текущий кадр сбрасывается и начинается новый.
-  wiegand_bit_timeout_s: 0.025
-
-  # Таймаут ожидания gpiod-события в Wiegand-читателе.
-  # Поток блокируется в ядре не дольше этого времени, затем проверяет таймаут кадра.
-  wiegand_wait_timeout_s: 0.005
-
-  # Таймаут ожидания данных из Serial-очереди в мостовом потоке.
-  # Используется в цикле передачи строк от BackgroundSerialReader в ScudEngine.
-  serial_queue_timeout_s: 0.2
-
-  # Таймаут ожидания данных из Wiegand-очереди в мостовом потоке.
-  # Используется в цикле передачи CardData от WeigandReader в ScudEngine.
-  event_queue_timeout_s: 0.2
-
-  # Таймаут ожидания команды в CommandLoop.
-  # Определяет, как часто проверяется очередь команд и событие остановки.
-  command_queue_timeout_s: 0.2
-
-  # Таймаут ожидания данных из mux-очереди в потоке датчиков прохода.
-  # Если данных нет — поток проверяет таймауты проходов.
   mux_queue_timeout_s: 0.1
+  mux_queue_maxsize: 100
+  shift_queue_maxsize: 50
 
-  # Интервал проверки Watchdog.
-  # Период, с которым мониторятся потоки и состояние оборудования.
-  watchdog_check_interval_s: 2.0
-
-  # Таймаут остановки Watchdog.
-  # Время ожидания завершения Watchdog-потока при остановке.
-  watchdog_stop_timeout_s: 2.0
-
-  # Интервал синхронизации с бэкендом.
-  # Период, с которым AccessController запрашивает обновления с сервера.
-  backend_sync_interval_s: 600
-
-  # Время ожидания завершения прохода по двум датчикам.
-  # Если второй датчик не сработал за это время — фиксируется разворот.
-  passage_timeout_s: 2.0
-
-  # Время фиксации заслона (оба датчика активны одновременно).
-  # Если оба датчика держатся дольше этого времени — событие blockage.
-  passage_blockage_timeout_s: 5.0
-
-  # Время действия успешной авторизации.
-  # После разрешения прохода человек должен пройти не позднее этого таймаута.
-  auth_timeout_s: 5.0
-
-  # Время открытия реле турникета.
-  # Если человек не прошёл за это время — реле выключается по таймауту.
-  relay_open_duration_s: 2.0
-
-  # Длительность индикатора (секунды).
-  # Индикатор (GREEN/RED) горит это время после включения.
-  indicator_duration_s: 2.0
-
-  # Длительность одного сигнала пищалки (секунды).
-  # Каждый сигнал в последовательности длится это время.
-  beep_signal_duration_s: 0.05
-
-  # Пауза между сигналами пищалки (секунды).
-  # Интервал между сигналами в последовательности.
-  beep_signal_pause_s: 0.1
-
-  # Длительность короткого писка при отказе в доступе (секунды).
-  deny_beep_duration_s: 0.1
-
-  # Пауза между короткими писками при отказе в доступе (секунды).
-  deny_beep_pause_s: 0.1
-
-  # Количество коротких писков при отказе в доступе.
-  deny_beep_count: 3
-
-  # Длительность бипера при открытии турникета (секунды).
-  open_beep_duration_s: 0.1
-
-  # Периодический бипер при тревоге - длительность ON (секунды).
-  alarm_beep_on_duration_s: 0.5
-
-  # Периодический бипер при тревоге - длительность OFF (секунды).
-  alarm_beep_off_duration_s: 0.5
-
-  # Защита от шума после валидной карты (секунды).
-  # Wiegand reader игнорирует события это время после успешного чтения.
+  # Wiegand
+  wiegand_bit_timeout_s: 0.025
+  wiegand_wait_timeout_s: 0.005
   wiegand_ignore_after_valid_s: 0.05
 
-  # Задержка при ошибках Serial-порта (секунды).
-  # Время ожидания перед повторной попыткой чтения при ошибке.
+  # Serial
+  serial_queue_timeout_s: 0.2
   serial_retry_delay_s: 1.0
 
-  # Таймаут join для потоков при остановке ScudEngine.
-  # Время ожидания завершения всех рабочих потоков.
-  thread_join_timeout_s: 5.0
+  # Generic event/command loops
+  event_queue_timeout_s: 0.2
+  command_queue_timeout_s: 0.2
+  event_queue_maxsize: 1000
+  command_queue_maxsize: 100
 
-  # Длительность таймера кнопки (секунды).
-  # Время, после которого турникет закрывается после отжатия кнопки.
+  # Passage detection
+  passage_timeout_s: 2.0
+  passage_blockage_timeout_s: 5.0
+
+  # Turnstile / UI
+  auth_timeout_s: 5.0
+  relay_open_duration_s: 2.0
+  indicator_duration_s: 2.0
   button_timer_duration_s: 2.0
+  beep_signal_duration_s: 0.05
+  beep_signal_pause_s: 0.1
+  open_beep_duration_s: 0.1
+  deny_beep_duration_s: 0.1
+  deny_beep_pause_s: 0.1
+  deny_beep_count: 3
+  alarm_beep_on_duration_s: 0.5
+  alarm_beep_off_duration_s: 0.5
 
-  # Время стабилизации адреса на мультиплексоре (секунды).
-  # Задержка перед чтением входа после выставления адресных пинов.
-  mux_addr_settle_s: 0.0005
-
-  # Время подавления дребезга при инициализации датчиков (секунды).
-  # Первые N мс после старта игнорируются.
+  # Sensors
   sensor_debounce_s: 0.5
-
-  # Таймаут ожидания событий датчиков (секунды).
-  # Ждём события не дольше этого времени, чтобы проверять running_event.
   sensor_event_timeout_s: 0.1
 
-  # Размеры очередей
-  # Максимальный размер очереди событий
-  event_queue_maxsize: 1000
-  # Максимальный размер очереди команд
-  command_queue_maxsize: 100
-  # Максимальный размер очереди shift register
-  shift_queue_maxsize: 50
-  # Максимальный размер очереди мультиплексора
-  mux_queue_maxsize: 100
-  # Максимальный размер очереди звука
+  # System / watchdog / sync / threads
+  watchdog_check_interval_s: 2.0
+  watchdog_stop_timeout_s: 2.0
+  backend_sync_interval_s: 600
+  thread_join_timeout_s: 5.0
+
+  # Queue sizes
   sound_queue_maxsize: 20
+  shift_queue_maxsize: 50
+  mux_queue_maxsize: 100
 
 # ── Логирование ──
 # Уровни: DEBUG, INFO, WARNING, ERROR, CRITICAL

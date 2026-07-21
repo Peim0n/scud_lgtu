@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class BackendClient:
-    def __init__(self, base_url: str = "https://api.pass.lipetsk.ru") -> None:
+    def __init__(self, base_url: str) -> None:
         self._base_url = base_url
 
     def is_online(self) -> bool:
@@ -35,7 +35,8 @@ class BackendClient:
         logger.warning("BackendClient.get_access_list: заглушка")
         return {}
 
-    def send_events(self, events: list[PassageEvent]) -> None:
+    def send_events(self, events: list[PassageEvent]) -> bool:
         if not events:
-            return
+            return True
         logger.warning("BackendClient.send_events: заглушка, %d событий", len(events))
+        return True

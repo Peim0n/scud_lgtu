@@ -12,6 +12,7 @@ import sys
 import time
 import os
 from scud_lgtu.infrastructure.serial.qr_codec import encode_qr
+from scud_lgtu.infrastructure.config import load as load_config
 
 
 def main():
@@ -23,8 +24,11 @@ def main():
     max_id = int(sys.argv[1])
     key_id = int(sys.argv[2]) if len(sys.argv) > 2 else 13
 
-    # Загружаем ключи
-    keys_dir = "scud_lgtu/key"
+    # Загружаем ключи из конфига
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, "scud_lgtu", "config.yml")
+    config = load_config(config_path)
+    keys_dir = config["software"]["qr_decoder"]["args"]["keys_dir"]
     private_key_path = os.path.join(keys_dir, f"private_key.{key_id}")
     shared_key_path = os.path.join(keys_dir, f"shared_key.{key_id}")
 

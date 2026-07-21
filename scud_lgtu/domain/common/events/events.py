@@ -1,8 +1,12 @@
-"""Domain events - события доменной области."""
+"""Доменные события (domain events) системы СКУД LGTU.
+
+Этот модуль содержит неизменяемые dataclass-события, которые генерируются
+инфраструктурными слоями и обрабатываются прикладными слоями через EventBus.
+"""
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
+
 from scud_lgtu.domain.common.models.models import Credential, OutputCommand
-from scud_lgtu.domain.common.enums.enums import DirectionEnum
 
 
 @dataclass

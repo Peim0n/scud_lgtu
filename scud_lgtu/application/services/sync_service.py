@@ -15,16 +15,17 @@
 - tick: периодический тик для синхронизации
 - _sync: выполнить синхронизацию (выгрузка событий и обновление списка доступа)
 """
-from scud_lgtu.domain.access.ports.ports import BackendGateway, EventLog
+from scud_lgtu.domain.access.ports.ports import BackendGateway, EventLog, AccessRepository
 from scud_lgtu.domain.common.models.models import Passage
 from typing import List
 import time
 
 
 class SyncService:
-    def __init__(self, backend: BackendGateway, event_log: EventLog, sync_interval: float = 60.0):
+    def __init__(self, backend: BackendGateway, event_log: EventLog, access_repository: AccessRepository, sync_interval: float):
         self._backend = backend
         self._event_log = event_log
+        self._access_repository = access_repository
         self._sync_interval = sync_interval
         self._last_sync = 0.0
 
@@ -44,4 +45,5 @@ class SyncService:
         # Обновление списка доступа если бэкенд доступен
         if self._backend.is_online():
             access_list = self._backend.get_access_list()
-            # Обновление кэша новым списком доступа (для реализации)
+            if access_list:
+                self._access_repository.update(access_list)

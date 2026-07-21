@@ -1,4 +1,4 @@
-"""Domain enums."""
+"""Перечисления пакета scud_lgtu.domain.common.enums."""
 from enum import Enum
 
 

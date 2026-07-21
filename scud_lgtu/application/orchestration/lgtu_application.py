@@ -26,20 +26,15 @@ import logging
 import queue
 import threading
 import time
-from typing import Optional
-from scud_lgtu.infrastructure.core.engine import ScudEngine
-from scud_lgtu.infrastructure.serial.qr_codec import QRDecoder
-from scud_lgtu.infrastructure.persistence.event_store import EventStore, PassageEvent, EventType, EventSource
-from scud_lgtu.infrastructure.cache.access_cache import LocalAccessCache
-from scud_lgtu.infrastructure.backend.client import BackendClient
-from scud_lgtu.infrastructure.sound.player import SoundPlayer
+from enum import Enum
+from typing import Any, Optional
 from scud_lgtu.domain.turnstile.services.turnstile import TurnstileState
+from scud_lgtu.domain.access.ports.ports import Actuator
 from scud_lgtu.domain.access.services.services import AccessPolicy, PassageTracker
-from scud_lgtu.domain.common.events.events import QrRead, CardRead, MuxInputChanged
-from scud_lgtu.domain.common.models.models import Credential, Passage
-from scud_lgtu.domain.common.enums.enums import TokenTypeEnum, DirectionEnum, ResultEnum
+from scud_lgtu.domain.common.events.events import QrRead, CardRead, MuxInputChanged, PassageDetected
+from scud_lgtu.domain.common.models.models import Credential, OutputCommand
+from scud_lgtu.domain.common.enums.enums import TokenTypeEnum
 from scud_lgtu.application.events.event_bus import EventBus
-from scud_lgtu.application.services.access_service import AccessService
 from scud_lgtu.application.services.passage_service import PassageService
 from scud_lgtu.application.services.sync_service import SyncService
 from scud_lgtu.application.handlers.credential import handle_credential
@@ -56,72 +51,69 @@ class LGTUApplication:
 
     def __init__(
         self,
-        engine: ScudEngine,
-        cache: LocalAccessCache,
-        store: EventStore,
-        backend: BackendClient,
+        event_source: Any,
+        turnstile: TurnstileState,
+        access_policy: AccessPolicy,
+        passage_tracker: PassageTracker,
+        event_bus: EventBus,
+        passage_service: PassageService,
+        sync_service: SyncService,
+        actuator: Actuator,
         config: dict,
-        devices: dict = None
+        devices: dict = None,
+        qr_decoder: Any = None,
     ):
         """
         Инициализировать приложение LGTU.
 
         Parameters
         ----------
-        engine : ScudEngine
-            Движок для управления оборудованием
-        cache : LocalAccessCache
-            Кэш доступа
-        store : EventStore
-            Хранилище событий
-        backend : BackendClient
-            Клиент бэкенда
+        event_source : Any
+            Источник событий и управления оборудованием (ScudEngine)
+        turnstile : TurnstileState
+            Состояние турникета
+        access_policy : AccessPolicy
+            Политика доступа
+        passage_tracker : PassageTracker
+            Трекер проходов
+        event_bus : EventBus
+            Шина событий
+        passage_service : PassageService
+            Сервис журналирования проходов
+        sync_service : SyncService
+            Сервис синхронизации с бэкендом
+        actuator : Actuator
+            Порт актуатора выходов
         config : dict
             Конфигурация
         devices : dict, optional
             Мапинг устройств из конфига
+        qr_decoder : Any, optional
+            Декодер QR-кодов
         """
-        self._engine = engine
+        self._event_source = event_source
         self._config = config
         self._devices = devices or {}
         self._running = False
+        self._qr_decoder = qr_decoder
+        self._turnstile = turnstile
+        self._access_policy = access_policy
+        self._passage_tracker = passage_tracker
+        self._event_bus = event_bus
+        self._passage_service = passage_service
+        self._sync_service = sync_service
+        self._actuator = actuator
 
-        # QR decoder (опционально, если установлен cryptography)
-        self._qr_decoder = None
-        try:
-            keys_dir = config.get("qr_keys_dir", "scud_lgtu/infrastructure/keys")
-            self._qr_decoder = QRDecoder(keys_dir=keys_dir)
-            logger.info("QR decoder инициализирован")
-        except ImportError as e:
-            logger.warning(f"QR decoder не инициализирован: {e}. QR коды не будут декодироваться.")
-
-        # Domain components
-        timings = config.get("timings", {})
-        auth_timeout = timings.get("auth_timeout_s", 5.0)
-        passage_devices = devices.get("passage", {})
-        self._turnstile = TurnstileState(auth_timeout=auth_timeout, timings=timings, devices=passage_devices)
-        self._access_policy = AccessPolicy(cache=cache)
-        self._passage_tracker = PassageTracker()
-
-        # Infrastructure adapters
-        self._sound_player = SoundPlayer()
-
-        # Application services
-        self._event_bus = EventBus(turnstile=self._turnstile)
-        self._access_service = AccessService(cache)
-        self._passage_service = PassageService(store)
-        self._sync_service = SyncService(backend, store, sync_interval=timings.get("backend_sync_interval_s", 60.0))
-
-        # Event loop for async operations
+        # Цикл событий для асинхронных операций
         self._loop = None
         self._loop_thread = None
 
-        # Register handlers
+        # Зарегистрировать обработчики
         self._register_handlers()
-    
+
     def _register_handlers(self) -> None:
-        """Register event handlers."""
-        # Register domain event handlers
+        """Зарегистрировать обработчики событий."""
+        # Зарегистрировать обработчики доменных событий
         self._event_bus.subscribe("QrRead", lambda e: handle_credential(
             e, self._turnstile, self._access_policy, self._passage_tracker, self._event_bus, self._devices, token_prefix="maxid"
         ))
@@ -135,7 +127,7 @@ class LGTUApplication:
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe("ButtonPressed", lambda e: handle_button_pressed(e, self._turnstile, self._event_bus, self._devices))
         self._event_bus.subscribe("OutputCommandsGenerated", lambda e: self._handle_output_commands(e))
-    
+
     def _handle_output_commands(self, event) -> None:
         """Обработать событие с командами для выхода."""
         from scud_lgtu.domain.common.events.events import OutputCommandsGenerated
@@ -145,34 +137,35 @@ class LGTUApplication:
             for cmd in event.commands:
                 output_states[cmd.name] = cmd.state
 
-            # Отправляем состояния в сдвиговый регистр через публичный интерфейс engine
-            if output_states:
-                try:
-                    self._engine.set_output_mask(output_states)
-                except Exception as e:
-                    logger.error(f"Error sending to shift register: {e}")
-    
+            # Отправляем состояния в сдвиговый регистр через порт Actuator
+            if output_states and self._actuator is not None:
+                for cmd in event.commands:
+                    try:
+                        self._actuator.apply(cmd)
+                    except Exception as e:
+                        logger.error(f"Error sending to shift register: {e}")
+
     def _start_event_loop(self) -> None:
-        """Start asyncio event loop in separate thread."""
+        """Запустить цикл событий asyncio в отдельном потоке."""
         def run_loop():
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
             self._event_bus.set_event_loop(self._loop)
             self._loop.run_forever()
-        
+
         self._loop_thread = threading.Thread(target=run_loop, daemon=True)
         self._loop_thread.start()
-    
+
     def _stop_event_loop(self) -> None:
-        """Stop asyncio event loop."""
+        """Остановить цикл событий asyncio."""
         if self._loop and self._loop.is_running():
             self._loop.call_soon_threadsafe(self._loop.stop)
         if self._loop_thread and self._loop_thread.is_alive():
             self._loop_thread.join(timeout=2.0)
-    
+
     def _get_reader_id(self, reader: str) -> str:
         """Получить reader_id из мапинга reader_names."""
-        reader_names = self._devices.get("reader_names", {})
+        reader_names = self._config.get("mappings", {})
         return reader_names.get(reader, reader)
 
     def _decode_qr_credential(self, data: str) -> Optional[Credential]:
@@ -203,12 +196,14 @@ class LGTUApplication:
             )
 
     def _convert_scud_event_to_domain(self, scud_event) -> Optional:
-        """Convert ScudEvent to domain event."""
-        from scud_lgtu.infrastructure.persistence.event_store import EventType, EventSource
-
+        """Преобразовать ScudEvent в доменное событие."""
         logger.debug(f"Converting ScudEvent: type={scud_event.type}, source={scud_event.source}, payload={scud_event.payload}")
 
-        if scud_event.type == EventType.QR_READ:
+        event_type = scud_event.type
+        if isinstance(event_type, Enum):
+            event_type = event_type.value
+
+        if event_type == "qr_read":
             credential = Credential(
                 token_type=TokenTypeEnum.MAXID,
                 value=str(scud_event.payload.get("max_id", "")),
@@ -222,7 +217,7 @@ class LGTUApplication:
             )
             logger.info(f"QR Read event: {event}")
             return event
-        elif scud_event.type == EventType.CARD_READ:
+        elif event_type == "card_read":
             credential = Credential(
                 token_type=TokenTypeEnum.CARDID,
                 value=str(scud_event.payload.get("card_data", "")),
@@ -236,7 +231,7 @@ class LGTUApplication:
             )
             logger.info(f"Card Read event: {event}")
             return event
-        elif scud_event.type == EventType.MUX_CHANGED:
+        elif event_type == "mux_changed":
             # Обработка изменений мультиплексора - payload содержит словарь states
             states = scud_event.payload.get("states", {})
             events = []
@@ -253,7 +248,7 @@ class LGTUApplication:
                 logger.debug(f"Mux Input Changed event: {event}")
                 events.append(event)
             return events if events else None
-        elif scud_event.type == EventType.SERIAL_DATA:
+        elif event_type == "serial_data":
             # Обработка данных из serial порта (QR-код)
             data = scud_event.payload.get("data", "")
             if data:
@@ -269,9 +264,8 @@ class LGTUApplication:
                 )
                 logger.info(f"Serial QR Read event: {event}")
                 return event
-        elif scud_event.type == EventType.INPUT_SIGNAL:
+        elif event_type == "input_signal":
             # Обработка событий от датчиков прохода
-            from scud_lgtu.domain.common.events.events import PassageDetected
             zone = scud_event.payload.get("zone")
             direction = scud_event.payload.get("direction")
             duration = scud_event.payload.get("duration")
@@ -285,75 +279,60 @@ class LGTUApplication:
                 )
                 logger.info(f"Passage Detected event: {event}")
                 return event
-        
+
         logger.debug(f"Unknown event type: {scud_event.type}")
         return None
-    
+
     def _initialize_button_states(self) -> None:
-        """Initialize button states to avoid false edge detection."""
+        """Инициализировать состояния кнопок, чтобы избежать ложного срабатывания."""
         logger.debug("Initializing button states")
         try:
             from scud_lgtu.application.handlers.mux import _button_states
-            # Initialize all buttons to None so first event is treated as initial state
+            # Инициализировать все кнопки значением None, чтобы первое событие считалось начальным состоянием
             button_names = ["button_1", "button_2", "button_3"]
             for name in button_names:
                 _button_states[name] = None
             logger.debug(f"Initialized button states: {_button_states}")
         except Exception as e:
             logger.error(f"Error initializing button states: {e}")
-    
+
     def _initialize_outputs(self) -> None:
-        """Initialize all outputs to safe state (relays closed)."""
+        """Инициализировать все настроенные выходы сдвигового регистра в безопасное (выключенное) состояние."""
         logger.debug("Initializing outputs to safe state")
         try:
-            # Set all relays to closed (False) через публичный интерфейс
-            safe_states = {
-                "rel1": False,
-                "rel2": False,
-                "w1_green": False,
-                "w1_red": False,
-                "w2_green": False,
-                "w2_red": False,
-                "w1_beep": False,
-                "w2_beep": False,
-                "buz": False,
-                "pult_buzz": False,
-                "pult_l1": False,
-                "pult_l2": False,
-                "pult_l3": False,
-                "od1": False,
-                "od2": False,
-            }
-            self._engine.set_output_mask(safe_states)
-            logger.debug(f"Initialized outputs to safe state: {safe_states}")
+            shift_cfg = self._config.get("shift_register", {})
+            pins_cfg = shift_cfg.get("pins", {})
+            for name in pins_cfg:
+                self._actuator.apply(OutputCommand(name=name, state=False))
+            logger.debug(f"Initialized outputs to safe state: {list(pins_cfg)}")
         except Exception as e:
             logger.error(f"Error initializing outputs: {e}")
-    
+
     def run(self) -> None:
-        """Run the main application loop."""
+        """Запустить главный цикл приложения."""
         logger.info("LGTUApplication: starting")
         self._running = True
-        
-        # Start event loop for async operations
+
+        # Запустить цикл событий для асинхронных операций
         self._start_event_loop()
-        
-        # Initialize outputs to safe state (all relays closed)
+
+        # Инициализировать выходы в безопасное состояние (все реле закрыты)
         self._initialize_outputs()
-        
-        # Initialize button states to avoid false edge detection
+
+        # Инициализировать состояния кнопок, чтобы избежать ложного срабатывания
         self._initialize_button_states()
-        
-        # Get event queue from engine
-        event_queue = self._engine.get_event_queue()
-        
+
+        # Получить очередь событий от источника
+        event_queue = self._event_source.get_event_queue()
+
         try:
             while self._running:
-                # Process events from engine
+                # Обрабатывать события от движка
                 try:
                     scud_event = event_queue.get(timeout=0.1)
                     logger.debug(f"Received ScudEvent from engine: {scud_event}")
                     domain_events = self._convert_scud_event_to_domain(scud_event)
-                    
+
                     # Обработка списка событий или одного события
                     if domain_events:
                         if isinstance(domain_events, list):
@@ -366,38 +345,67 @@ class LGTUApplication:
                     pass
                 except Exception as e:
                     logger.error(f"Error processing event: {e}")
-                
-                # Tick turnstile state machine
+
+                # Тактировать конечный автомат турникета
                 now = time.time()
                 commands = self._turnstile.tick(now)
-                # Apply commands to shift register
+                # Применить команды к сдвиговому регистру
                 if commands:
                     # Собираем все команды в словарь состояний для сдвигового регистра
                     output_states = {}
                     for cmd in commands:
                         output_states[cmd.name] = cmd.state
 
-                    # Отправляем состояния в сдвиговый регистр через PinControllerThread
-                    if output_states:
-                        try:
-                            # Получаем доступ к PinControllerThread через engine
-                            pct = self._engine._pct
-                            if pct:
-                                pct.set_mask(output_states)
-                        except Exception as e:
-                            logger.error(f"Error sending to shift register: {e}")
-                
-                # Tick sync service
+                    # Отправляем состояния в сдвиговый регистр через порт Actuator
+                    if output_states and self._actuator is not None:
+                        for cmd in commands:
+                            try:
+                                self._actuator.apply(cmd)
+                            except Exception as e:
+                                logger.error(f"Error sending to shift register: {e}")
+
+                # Периодический вызов сервиса синхронизации
                 self._sync_service.tick(now)
-                
+
         except KeyboardInterrupt:
             logger.info("LGTUApplication: interrupted")
         finally:
             self.stop()
-    
+
+    def start(self) -> None:
+        """Запустить источник событий (hardware)."""
+        logger.info("LGTUApplication: starting event source")
+        self._event_source.start()
+        logger.info("LGTUApplication: event source started")
+
     def stop(self) -> None:
-        """Stop the application."""
+        """Остановить приложение."""
         logger.info("LGTUApplication: stopping")
         self._running = False
         self._stop_event_loop()
         logger.info("LGTUApplication: stopped")
+
+    def shutdown(self) -> None:
+        """Остановить приложение и источник событий."""
+        self.stop()
+        if self._event_source is not None:
+            self._event_source.stop()
+
+    def is_healthy(self) -> bool:
+        """Проверить здоровье источника событий."""
+        if self._event_source is None:
+            return False
+        if hasattr(self._event_source, "is_healthy"):
+            return self._event_source.is_healthy()
+        return True
+
+    def get_event_queue(self) -> queue.Queue:
+        """Вернуть очередь событий источника."""
+        return self._event_source.get_event_queue()
+
+    def send_command(self, command: Any) -> None:
+        """Отправить команду источнику событий."""
+        if self._event_source is not None and hasattr(self._event_source, "send_command"):
+            self._event_source.send_command(command)
+        else:
+            logger.warning("LGTUApplication: send_command не поддерживается источником событий")

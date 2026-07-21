@@ -1,1 +1,1 @@
-"""Mock devices for testing without hardware."""
+"""Пакет scud_lgtu.tests.mocks."""

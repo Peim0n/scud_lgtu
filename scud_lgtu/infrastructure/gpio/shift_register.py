@@ -145,12 +145,12 @@ class ShiftRegister:
             for name, state in masks.items():
                 # Резолвим бизнес-имена в прямые имена пинов
                 resolved_name = self._resolve_name(name)
-                
+
                 # Убираем префикс shift_register. если есть для поиска в _pin_masks
                 lookup_name = resolved_name
                 if lookup_name.startswith("shift_register."):
                     lookup_name = lookup_name.replace("shift_register.", "")
-                
+
                 if lookup_name not in self._pin_masks:
                     logger.warning(f"[ShiftRegister] Неизвестная маска: {lookup_name} (resolved: {resolved_name}, original: {name})")
                     continue
@@ -165,25 +165,25 @@ class ShiftRegister:
             self._input_queue.put(new_state, timeout=1.0)
             # Сразу обновляем last_sent_state, чтобы следующие команды видели новое состояние
             self._last_sent_state = new_state
-    
+
     def _resolve_name(self, name: str) -> str:
         """Разрешить бизнес-имя в прямое имя пина."""
         # Если имя содержит точку - это уже прямой мапинг
         if '.' in name:
             return name
-        
-        # Пытаемся разрешить через business секцию
+
+        # Пытаемся разрешить через mappings секцию
         if self._resolver is not None:
             try:
-                self._resolver.set_context("business")
+                self._resolver.set_context("mappings")
                 resolved = self._resolver.resolve(name)
-                
+
                 # Если результат - строка с точкой, возвращаем её (это прямой мапинг)
                 if isinstance(resolved, str) and '.' in resolved:
                     return resolved
             except Exception as e:
                 logger.debug(f"[ShiftRegister] Could not resolve name {name}: {e}")
-        
+
         # Возвращаем как есть
         return name
 
@@ -219,7 +219,7 @@ class ShiftRegister:
         wp(self._ser_latch_pin, 1)
         wp(self._ser_latch_pin, 0)
         logger.info(f"[ShiftRegister] _work_shift: written value={value:#06x}")
-        
+
         # Обновляем последнее отправленное состояние
         self._last_sent_state = value
 
@@ -240,7 +240,7 @@ class ShiftRegister:
                 # Ждём сообщение с таймаутом, чтобы проверять stop_event
                 msg = self._input_queue.get(timeout=0.1)
                 if msg is None:
-                    # None используется как sentinel для остановки
+                    # None используется как маркер остановки
                     continue
                 with self._lock:
                     self._work_shift(msg)

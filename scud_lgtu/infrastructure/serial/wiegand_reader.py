@@ -89,12 +89,6 @@ def _resolve_pin(pin: str | int) -> tuple[str, int]:
 # Константы
 # ---------------------------------------------------------------------------
 
-DEFAULT_BIT_TIMEOUT: float = 0.025
-"""Максимальный интервал между двумя последовательными битами (с)."""
-
-DEFAULT_WAIT_TIMEOUT: float = 0.005
-"""Таймаут ожидания события gpiod в основном цикле (с)."""
-
 MAX_BITS_SAFETY: int = 90
 """Максимальное число накопленных бит до принудительного сброса."""
 
@@ -155,10 +149,6 @@ class WeigandReader:
 
     Parameters
     ----------
-    chip_path : str
-        Путь к GPIO-chip, например ``'/dev/gpiochip0'``.
-        Используется только если ``d0``/``d1`` переданы как числовые offset.
-        Если пины переданы именами (PA<N>, PG<N>, PL<N>), chip определяется автоматически.
     d0 : str | int
         Имя пина (PA<N>, PG<N>, PL<N>) или offset для D0.
     d1 : str | int
@@ -180,18 +170,17 @@ class WeigandReader:
 
     def __init__(
         self,
-        d0: str | int = 11,
-        d1: str | int = 12,
-        chip_path: str = "/dev/gpiochip0",
-        wiegand_type: int = 26,
-        encrypted: bool = False,
-        decrypt_key: str | bytes | None = None,
-        output_queue: Optional[Queue] = None,
-        event_queue: Optional[Queue] = None,
-        running_event: Optional[threading.Event] = None,
-        bit_timeout: float = DEFAULT_BIT_TIMEOUT,
-        wait_timeout: float = DEFAULT_WAIT_TIMEOUT,
-        ignore_after_valid: float = 0.05,
+        d0: str | int,
+        d1: str | int,
+        wiegand_type: int | str,
+        encrypted: bool,
+        decrypt_key: str | bytes | None,
+        output_queue: Optional[Queue],
+        event_queue: Optional[Queue],
+        running_event: Optional[threading.Event],
+        bit_timeout: float,
+        wait_timeout: float,
+        ignore_after_valid: float,
     ):
         """Инициализировать Wiegand-читатель с пинами и форматом."""
         d0_chip, d0_offset = _resolve_pin(d0)
@@ -576,13 +565,12 @@ class WeigandReader:
         cls,
         d0: str | int,
         d1: str | int,
-        wiegand_type: int = 26,
-        chip_path: str = "/dev/gpiochip0",
-        encrypted: bool = False,
-        decrypt_key: str | bytes | None = None,
-        bit_timeout: float = DEFAULT_BIT_TIMEOUT,
-        wait_timeout: float = DEFAULT_WAIT_TIMEOUT,
-        ignore_after_valid: float = 0.05,
+        wiegand_type: int | str,
+        encrypted: bool,
+        decrypt_key: str | bytes | None,
+        bit_timeout: float,
+        wait_timeout: float,
+        ignore_after_valid: float,
     ):
         """
         Создать экземпляр, запустить в фоновом потоке и вернуть управляющие объекты.
@@ -619,11 +607,11 @@ class WeigandReader:
         reader = cls(
             d0=d0,
             d1=d1,
-            chip_path=chip_path,
             wiegand_type=wiegand_type,
             encrypted=encrypted,
             decrypt_key=decrypt_key,
             output_queue=q,
+            event_queue=None,
             running_event=ev,
             bit_timeout=bit_timeout,
             wait_timeout=wait_timeout,

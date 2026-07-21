@@ -1,34 +1,34 @@
-"""Domain layer - бизнес-логика системы СКУД."""
+"""Доменный слой — бизнес-логика системы СКУД."""
 
-# Common models
+# Общие модели
 from scud_lgtu.domain.common.models.models import Credential, AccessDecision, AuthSession, Passage, OutputCommand
 
-# Common enums
+# Общие перечисления
 from scud_lgtu.domain.common.enums.enums import DirectionEnum, TokenTypeEnum, ResultEnum, SeverityEnum, EventTypeEnum
 
-# Common events
+# Общие события
 from scud_lgtu.domain.common.events.events import CardRead, QrRead, MuxInputChanged, ButtonPressed, AlarmChanged, PassageDetected, OutputCommandsGenerated
 
-# Access services
+# Сервисы доступа
 from scud_lgtu.domain.access.services.services import AccessPolicy, PassageTracker, CredentialHasher
 
-# Access ports
+# Порты доступа
 from scud_lgtu.domain.access.ports.ports import AccessRepository, EventLog, Actuator, SoundOutput, BackendGateway, ConfigResolver
 
-# Turnstile services
+# Сервисы турникета
 from scud_lgtu.domain.turnstile.services.turnstile import TurnstileState, TurnstileStateEnum
 
 __all__ = [
-    # Common models
+    # Общие модели
     'Credential', 'AccessDecision', 'AuthSession', 'Passage', 'OutputCommand',
-    # Common enums
+    # Общие перечисления
     'DirectionEnum', 'TokenTypeEnum', 'ResultEnum', 'SeverityEnum', 'EventTypeEnum',
-    # Common events
+    # Общие события
     'CardRead', 'QrRead', 'MuxInputChanged', 'ButtonPressed', 'AlarmChanged', 'PassageDetected', 'OutputCommandsGenerated',
-    # Access services
+    # Сервисы доступа
     'AccessPolicy', 'PassageTracker', 'CredentialHasher',
-    # Access ports
+    # Порты доступа
     'AccessRepository', 'EventLog', 'Actuator', 'SoundOutput', 'BackendGateway', 'ConfigResolver',
-    # Turnstile services
+    # Сервисы турникета
     'TurnstileState', 'TurnstileStateEnum',
 ]

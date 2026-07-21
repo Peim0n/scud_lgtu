@@ -20,21 +20,21 @@ from scud_lgtu.domain.common.enums.enums import TokenTypeEnum, DirectionEnum
 class AccessPolicy:
     """
     Политика доступа для проверки учётных данных.
-    
-    Использует кэш доступа для проверки разрешений на основе учётных данных.
+
+    Использует порт AccessRepository для проверки разрешений на основе учётных данных.
     """
-    
-    def __init__(self, cache=None):
+
+    def __init__(self, repository=None):
         """
-        Инициализировать политику доступа с кэшем.
+        Инициализировать политику доступа с репозиторием.
 
         Parameters
         ----------
-        cache : AccessCache, optional
-            Кэш доступа для проверки разрешений. Если None, доступ всегда запрещен.
+        repository : AccessRepository, optional
+            Репозиторий доступа для проверки разрешений. Если None, доступ всегда запрещен.
         """
-        self._cache = cache
-    
+        self._repository = repository
+
     def check(self, credential: Credential) -> AccessDecision:
         """
         Проверить, разрешены ли учётные данные.
@@ -49,34 +49,26 @@ class AccessPolicy:
         AccessDecision
             Решение о доступе (разрешено/запрещено) с причиной и user_id
         """
-        if self._cache is None:
-            return AccessDecision(allowed=False, reason="No cache configured")
-        
-        # Делегировать проверку кэшу
-        allowed, user_id = self._cache.is_allowed(
-            credential.token_type.value,
-            credential.value
-        )
-        
-        if allowed:
-            return AccessDecision(allowed=True, user_id=user_id)
-        else:
-            return AccessDecision(allowed=False, reason="Credential not in cache")
+        if self._repository is None:
+            return AccessDecision(allowed=False, reason="No repository configured")
+
+        # Делегировать проверку репозиторию
+        return self._repository.is_allowed(credential)
 
 
 class PassageTracker:
     """
     Отслеживание проходов для предотвращения двойных проходов.
-    
+
     Хранит информацию о последних проходах для каждого токена (карты/QR-кода).
     Предотвращает повторный вход с тем же токеном до завершения прохода.
     """
-    
+
     def __init__(self):
         """Инициализировать отслеживание проходов."""
         # Формат: {token: {"direction": "in"/"out", "passed": bool}}
         self._last_passages = {}
-    
+
     def track(self, session: AuthSession) -> None:
         """
         Отследить новую сессию прохода.
@@ -90,7 +82,7 @@ class PassageTracker:
             "direction": session.direction.value,
             "passed": session.used
         }
-    
+
     def is_double_pass(self, token: str, direction: DirectionEnum) -> bool:
         """
         Проверить, является ли это двойным проходом.
@@ -109,15 +101,15 @@ class PassageTracker:
         """
         if token not in self._last_passages:
             return False
-        
+
         last_passage = self._last_passages[token]
-        
+
         # Двойной проход если направление совпадает и предыдущий проход завершен
         if last_passage["direction"] == direction.value and last_passage["passed"]:
             return True
-        
+
         return False
-    
+
     def mark_completed(self, token: str) -> None:
         """
         Отметить проход как завершённый.
@@ -129,7 +121,7 @@ class PassageTracker:
         """
         if token in self._last_passages:
             self._last_passages[token]["passed"] = True
-    
+
     def mark_passed(self, token: str) -> None:
         """
         Отметить проход как завершённый (синоним mark_completed).
@@ -145,11 +137,11 @@ class PassageTracker:
 class CredentialHasher:
     """
     Хеширование учётных данных для сравнения.
-    
+
     Использует HMAC-SHA256 для безопасного хеширования учётных данных
     с использованием статического и динамического ключей.
     """
-    
+
     @staticmethod
     def hash(value: str, static_key: str, dynamic_key: str) -> str:
         """

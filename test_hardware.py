@@ -49,7 +49,7 @@ class HardwareTester:
     def test_gpio_chip(self):
         """Тест 1: Проверка наличия GPIO чипа."""
         try:
-            chip_name = self.config.get("gpio", {}).get("chip", "gpiochip0")
+            chip_name = self.config["gpiod_controller"]["chip"]
             self.gpio_chip = Chip(chip_name)
             self.log_test("GPIO Chip", True, f"Found {chip_name}")
             return True
@@ -60,11 +60,11 @@ class HardwareTester:
     def test_shift_register_pins(self):
         """Тест 2: Проверка пинов сдвигового регистра."""
         try:
-            shift_config = self.config.get("shift", {})
+            shift_config = self.config["shift_register"]
             pins = [
-                shift_config.get("ser_data"),
-                shift_config.get("ser_clk"),
-                shift_config.get("ser_latch")
+                shift_config["ser_data"],
+                shift_config["ser_clk"],
+                shift_config["ser_latch"]
             ]
             
             for pin in pins:
@@ -86,9 +86,9 @@ class HardwareTester:
     def test_multiplexer_pins(self):
         """Тест 3: Проверка пинов мультиплексора."""
         try:
-            mux_config = self.config.get("mux", {})
-            addr_pins = list(mux_config.get("addr_pins", {}).values())
-            input_pin = mux_config.get("input_pin")
+            mux_config = self.config["mux"]
+            addr_pins = mux_config["addr_pins"]
+            input_pin = mux_config["input_pin"]
             
             # Тест адресных пинов
             for pin in addr_pins:
@@ -150,10 +150,10 @@ class HardwareTester:
         """Тест 7: Проверка последовательных портов."""
         try:
             import serial
-            serial_config = self.config.get("serial", {})
+            serial_config = self.config["serial"]
             
-            for port_name, port_config in serial_config.items():
-                port = port_config.get("port")
+            for port_config in serial_config:
+                port = port_config["port"]
                 if port:
                     try:
                         ser = serial.Serial(port, baudrate=115200, timeout=1)
@@ -186,7 +186,7 @@ class HardwareTester:
         """Тест 9: Проверка QR считывателя."""
         try:
             # Проверка конфигурации QR
-            qr_config = self.config.get("qr", {})
+            qr_config = self.config.get("software", {}).get("qr_decoder", {}).get("args", {})
             if qr_config:
                 self.log_test("QR Reader", True, "QR config OK (requires QR code to test)")
             else:
@@ -200,9 +200,10 @@ class HardwareTester:
         """Тест 10: Проверка кнопок."""
         try:
             # Проверка конфигурации кнопок
-            buttons_config = self.config.get("buttons", {})
-            if buttons_config:
-                self.log_test("Button Inputs", True, f"Button config OK ({len(buttons_config)} buttons)")
+            buttons_config = self.config["mux"]["inputs"]
+            button_count = sum(1 for name in buttons_config if name.startswith("button"))
+            if button_count:
+                self.log_test("Button Inputs", True, f"Button config OK ({button_count} buttons)")
             else:
                 self.log_test("Button Inputs", False, "No button config")
             return True
@@ -214,8 +215,11 @@ class HardwareTester:
         """Тест 11: Проверка датчиков."""
         try:
             # Проверка конфигурации датчиков
-            mux_inputs = self.config.get("mux_inputs", {})
-            sensor_count = sum(1 for name in mux_inputs.keys() if "sensor" in name.lower())
+            mux_inputs = self.config["mux"]["inputs"]
+            sensor_count = sum(
+                1 for name in mux_inputs
+                if not name.startswith("button") and name != "alarm"
+            )
             
             if sensor_count > 0:
                 self.log_test("Sensor Inputs", True, f"Sensor config OK ({sensor_count} sensors)")
@@ -230,7 +234,7 @@ class HardwareTester:
         """Тест 12: Проверка входа тревоги."""
         try:
             # Проверка конфигурации тревоги
-            alarm_config = self.config.get("alarm", {})
+            alarm_config = "alarm" in self.config["mux"]["inputs"]
             if alarm_config:
                 self.log_test("Alarm Input", True, "Alarm config OK")
             else:
@@ -244,7 +248,7 @@ class HardwareTester:
         """Тест 13: Проверка конфигурационного файла."""
         try:
             # Проверка наличия всех необходимых секций
-            required_sections = ["gpio", "shift", "mux", "timings", "access"]
+            required_sections = ["gpiod_controller", "shift_register", "mux", "timings", "access"]
             missing_sections = []
             
             for section in required_sections:

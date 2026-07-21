@@ -1,1 +1,1 @@
-"""Serial infrastructure."""
+"""Пакет scud_lgtu.infrastructure.serial."""

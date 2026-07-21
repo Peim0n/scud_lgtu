@@ -1,1 +1,1 @@
-"""GPIO infrastructure."""
+"""Пакет scud_lgtu.infrastructure.gpio."""

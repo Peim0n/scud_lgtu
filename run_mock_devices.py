@@ -56,24 +56,22 @@ class MockDeviceManager:
     def _init_from_config(self):
         """Инициализировать устройства из конфигурации."""
         # Инициализация Serial портов
-        serial_config = self.config.get("serial", [])
-        for serial_cfg in serial_config:
+        for serial_cfg in self.config["serial"]:
             if isinstance(serial_cfg, dict):
-                name = serial_cfg.get("label", f"serial_{len(self.serial_ports)}")
-                port = serial_cfg.get("port", "/dev/ttyUSB0")
-                baud = serial_cfg.get("baud", 9600)
+                name = serial_cfg["label"]
+                port = serial_cfg["port"]
+                baud = serial_cfg["baud"]
                 self.add_serial_port(name, port, baud)
         
         # Инициализация Wiegand считывателей
-        wiegand_config = self.config.get("wiegand", [])
-        for wiegand_cfg in wiegand_config:
+        for wiegand_cfg in self.config["wiegand"]:
             if isinstance(wiegand_cfg, dict):
-                name = wiegand_cfg.get("label", f"wiegand_{len(self.wiegand_readers)}")
-                d0 = wiegand_cfg.get("d0", "PA0")
-                d1 = wiegand_cfg.get("d1", "PA1")
+                name = wiegand_cfg["label"]
+                d0 = wiegand_cfg["d0"]
+                d1 = wiegand_cfg["d1"]
                 self.add_wiegand_reader(name, d0, d1)
     
-    def add_serial_port(self, name: str, port: str = "/dev/ttyUSB0", baudrate: int = 9600):
+    def add_serial_port(self, name: str, port: str, baudrate: int):
         """Добавить mock serial порт."""
         self.serial_ports[name] = MockSerialPort(port, baudrate)
         self.serial_ports[name].open()

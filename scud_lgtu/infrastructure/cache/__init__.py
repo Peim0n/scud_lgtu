@@ -1,1 +1,1 @@
-"""Cache infrastructure."""
+"""Пакет scud_lgtu.infrastructure.cache."""

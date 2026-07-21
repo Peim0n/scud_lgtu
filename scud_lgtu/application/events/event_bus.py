@@ -101,7 +101,7 @@ class EventBus:
         event_type = type(event).__name__
 
         # Во время тревоги игнорировать все события кроме PassageDetected (датчики)
-        if self._turnstile and self._turnstile._current_state == "ALARM":
+        if self._turnstile and self._turnstile.is_alarm_active:
             if event_type != "PassageDetected":
                 return  # Игнорировать все события кроме датчиков
 

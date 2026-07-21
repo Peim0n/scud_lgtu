@@ -6,15 +6,15 @@ from scud_lgtu.domain.common.enums.enums import ResultEnum, DirectionEnum
 
 
 class EventLogAdapter:
-    """Adapter for EventStore to implement EventLog."""
-    
+    """Адаптер EventStore для реализации EventLog."""
+
     def __init__(self, store: EventStore):
-        """Initialize adapter with store."""
+        """Инициализировать адаптер с хранилищем."""
         self._store = store
-    
+
     def append(self, passage: Passage) -> None:
-        """Append passage event to log."""
-        # Convert domain Passage to infrastructure PassageEvent
+        """Добавить событие прохода в журнал."""
+        # Преобразовать доменный Passage в инфраструктурный PassageEvent
         event = PassageEvent(
             direction=passage.direction.value,
             result=passage.result.value,
@@ -22,11 +22,11 @@ class EventLogAdapter:
             duration=passage.duration
         )
         self._store.append(event)
-    
+
     def flush(self) -> list[Passage]:
-        """Flush all events and return them."""
+        """Сбросить все события и вернуть их."""
         events = self._store.flush()
-        # Convert PassageEvent back to Passage
+        # Преобразовать PassageEvent обратно в Passage
         passages = []
         for event in events:
             passage = Passage(
@@ -37,9 +37,9 @@ class EventLogAdapter:
             )
             passages.append(passage)
         return passages
-    
+
     def log_passage(self, zone: str, direction: str, duration: float, result: str = "pass") -> None:
-        """Log passage event directly."""
+        """Записать событие прохода напрямую."""
         event = PassageEvent(
             direction=direction,
             result=result,

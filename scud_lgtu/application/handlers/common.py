@@ -53,9 +53,13 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         return
 
     # Получаем индикаторы, бипер и направление из конфига
-    indicator_success = reader_config.get("indicator_success", "w1_green")
-    indicator_fail = reader_config.get("indicator_fail", "w1_red")
-    direction = reader_config.get("direction", "entry")
+    indicator_success = reader_config.get("indicator_success")
+    indicator_fail = reader_config.get("indicator_fail")
+    direction = reader_config.get("direction")
+
+    if not indicator_success or not indicator_fail or not direction:
+        logger.error(f"Неполная конфигурация считывателя: {reader_id}")
+        return
 
     # Проверка доступа
     decision = access_policy.check(event.credential)
@@ -76,7 +80,7 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         logger.debug(f"Открытие турникета через async task (direction={direction})")
 
         # Включить зеленый индикатор на configured duration
-        asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_success, True, turnstile._indicator_duration))
+        asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_success, True, turnstile.indicator_duration))
     else:
         # Отказ в доступе - игнорируем, турникет не открыт
         logger.info(f"Отказ в доступе: {decision.reason}")

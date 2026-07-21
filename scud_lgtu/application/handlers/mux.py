@@ -22,13 +22,13 @@ _button_states = {}
 def handle_mux_input_changed(event: MuxInputChanged, event_bus) -> None:
     """Обработать событие изменения входа мультиплексора."""
     logger.debug(f"handle_mux_input_changed: {event}")
-    
+
     # Обрабатываем только кнопки
     if event.input_name.startswith("button_"):
         # Детектируем фронт нажатия (1 -> 0)
         prev_state = _button_states.get(event.input_name, None)
         _button_states[event.input_name] = event.state
-        
+
         # Публикуем событие только при изменении состояния, игнорируем инициализацию (None)
         if prev_state is not None and prev_state != event.state:
             button_event = ButtonPressed(

@@ -36,6 +36,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 from enum import Enum
 
+from scud_lgtu.application.commands import CommandTarget, CommandAction, ScudCommand
+
 
 # ============================================================================
 # Событийная модель ScudEngine
@@ -66,25 +68,6 @@ class EventSource(str, Enum):
     ENGINE = "engine"
 
 
-class CommandTarget(str, Enum):
-    """Цели команд от бизнес-логики."""
-    SHIFT = "shift"
-    GPIO = "gpio"
-    OUTPUT = "output"
-    ENGINE = "engine"
-
-
-class CommandAction(str, Enum):
-    """Действия команд."""
-    WRITE_SHIFT = "write_shift"
-    SET_PIN = "set_pin"
-    SET_OUTPUTS_BULK = "set_outputs_bulk"
-    SET_OUTPUT = "set_output"
-    RESET = "reset"
-    STOP = "stop"
-    GET_STATE = "get_state"
-
-
 @dataclass(slots=True)
 class ScudEvent:
     """Событие от hardware-модуля."""
@@ -99,22 +82,6 @@ class ScudEvent:
             self.type = self.type.value
         if isinstance(self.source, Enum):
             self.source = self.source.value
-
-
-@dataclass(slots=True)
-class ScudCommand:
-    """Команда от бизнес-логики к hardware-модулю."""
-    target: CommandTarget | str
-    action: CommandAction | str
-    payload: dict[str, Any] = field(default_factory=dict)
-    request_id: Optional[str] = None
-
-    def __post_init__(self) -> None:
-        """Приведение enum-значений к строкам для JSON-сериализации."""
-        if isinstance(self.target, Enum):
-            self.target = self.target.value
-        if isinstance(self.action, Enum):
-            self.action = self.action.value
 
 
 # ============================================================================

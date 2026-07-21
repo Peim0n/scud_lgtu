@@ -1,11 +1,11 @@
-"""Mock Wiegand reader for testing without gpiod hardware."""
+"""Мок wiegand пакета scud_lgtu.tests.mocks."""
 from typing import Optional, Callable
 from dataclasses import dataclass
 
 
 @dataclass
 class CardData:
-    """Mock card data."""
+    """Мок данных карты."""
     facility_code: int
     card_number: int
     bits: int
@@ -13,8 +13,8 @@ class CardData:
 
 
 class MockWiegandReader:
-    """Mock Wiegand reader that simulates gpiod behavior."""
-    
+    """Мок Wiegand-считывателя, имитирующий поведение gpiod."""
+
     def __init__(
         self,
         d0_pin: str,
@@ -24,30 +24,30 @@ class MockWiegandReader:
         wait_timeout: float = 0.005,
         max_bits: int = 64
     ):
-        """Initialize mock Wiegand reader."""
+        """Инициализировать мок Wiegand-считывателя."""
         self.d0_pin = d0_pin
         self.d1_pin = d1_pin
         self.format_type = format_type
         self.bit_timeout = bit_timeout
         self.wait_timeout = wait_timeout
         self.max_bits = max_bits
-        
+
         self._card_callback: Optional[Callable] = None
-    
+
     def set_card_callback(self, callback: Callable) -> None:
-        """Set callback for card events."""
+        """Установить callback для событий карты."""
         self._card_callback = callback
-    
+
     def start(self) -> None:
-        """Start the reader (no-op for mock)."""
+        """Запустить считыватель (no-op для мока)."""
         pass
-    
+
     def stop(self) -> None:
-        """Stop the reader (no-op for mock)."""
+        """Остановить считыватель (no-op для мока)."""
         pass
-    
+
     def inject_card(self, card_number: int, facility_code: int = 1) -> None:
-        """Inject a card read event for testing."""
+        """Внедрить событие чтения карты для тестирования."""
         import time
         card_data = CardData(
             facility_code=facility_code,
@@ -55,10 +55,10 @@ class MockWiegandReader:
             bits=26,  # Standard 26-bit Wiegand
             timestamp=time.time()
         )
-        
+
         if self._card_callback:
             self._card_callback(card_data)
-    
+
     def is_running(self) -> bool:
-        """Check if reader is running (always True for mock)."""
+        """Проверить, запущен ли считыватель (для мока всегда True)."""
         return True

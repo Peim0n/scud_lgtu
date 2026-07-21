@@ -64,7 +64,7 @@ class BackgroundSerialReader:
         Публичная очередь принятых строк.
     """
 
-    def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 115200, timeout: float = 0.05, retry_delay: float = 1.0):
+    def __init__(self, port: str, baudrate: int, timeout: float, retry_delay: float):
         """
         Инициализировать параметры Serial-порта.
 

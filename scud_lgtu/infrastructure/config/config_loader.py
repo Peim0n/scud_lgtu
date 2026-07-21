@@ -6,7 +6,21 @@
 """
 
 import os
+import copy
+from typing import Any
+
 import yaml
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Рекурсивно объединить override в копию base."""
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
 
 
 def load(config_path: str = None) -> dict:
@@ -31,6 +45,17 @@ def load(config_path: str = None) -> dict:
 
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+
+    if cfg is None:
+        cfg = {}
+
+    # Поддержка наследования от базового конфига
+    extends = cfg.pop("extends", None)
+    if extends:
+        if not os.path.isabs(extends):
+            extends = os.path.join(os.path.dirname(config_path), extends)
+        base_cfg = load(extends)
+        cfg = _deep_merge(base_cfg, cfg)
 
     # Нормализуем addr_pins: dict -> list, отсортированный по ключу (A0 < A1 < A2 ...)
     mux = cfg.get("mux", {})

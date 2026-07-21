@@ -22,18 +22,12 @@ import threading
 import logging
 import time
 from queue import Queue, Full
-from typing import Tuple, Optional
+from typing import Any, Tuple, Optional
 
 from scud_lgtu.infrastructure.gpio.controller import GpiodPinController
 from scud_lgtu.infrastructure.persistence.event_store import ScudEvent, EventType, EventSource
 
 logger = logging.getLogger(__name__)
-
-# Задержка по умолчанию между выставлением адреса и чтением входа.
-# Выбрана с запасом 1.5× относительно реального времени спада ~200 мкс.
-_DEFAULT_ADDR_SETTLE_S: float = 0.0005   # 500 мкс (будет переопределено из конфига)
-#_DEFAULT_ADDR_SETTLE_S: float = 0.1   # 100 мкс
-
 
 class Multiplexer:
     """
@@ -77,10 +71,10 @@ class Multiplexer:
         output_queue: Queue,
         lock: threading.Lock,
         stop_event: threading.Event,
-        poll_interval: float = 0.02,  # Дефолтное значение, будет переопределено из конфига
-        addr_settle_s: float = _DEFAULT_ADDR_SETTLE_S,  # Дефолтное значение, будет переопределено из конфига
+        poll_interval: float,
+        addr_settle_s: float,
         event_queue: Optional[Queue] = None,
-        config: Optional[dict] = None,
+        resolver: Optional[Any] = None,
     ):
         """
         Инициализировать воркер мультиплексора.
@@ -123,18 +117,24 @@ class Multiplexer:
         # Кэш предыдущего состояния для дельта-фильтрации
         self._prev_state: dict = {}
         self._overflow_logged = False
-        
+        self._resolver = resolver
+
         # Мапинг входов по номерам с именами (опционально)
         self._input_names = {}
-        if config:
-            self._load_input_names(config)
+        if resolver:
+            self._load_input_names_from_resolver()
 
-    def _load_input_names(self, config: dict) -> None:
-        """Загрузить мапинг входов из конфигурации."""
-        mux_inputs = config.get('mux_inputs', {})
-        for num, name in mux_inputs.items():
-            self._input_names[num] = name
-            logger.debug(f"[Multiplexer] Мапинг: вход {num} -> '{name}'")
+    def _load_input_names_from_resolver(self) -> None:
+        """Загрузить мапинг входов из ModuleResolver (mux.inputs)."""
+        try:
+            inputs = self._resolver.resolve("mux.inputs")
+            for name, cfg in inputs.items():
+                addr = cfg.get("addr")
+                if addr is not None:
+                    self._input_names[addr] = name
+                    logger.debug(f"[Multiplexer] Мапинг: вход {addr} -> '{name}'")
+        except Exception as e:
+            logger.warning(f"[Multiplexer] Не удалось загрузить мапинг входов: {e}")
 
     def _work_mux(self) -> None:
         """

@@ -1,1 +1,1 @@
-"""Application services."""
+"""Пакет scud_lgtu.application.services."""
