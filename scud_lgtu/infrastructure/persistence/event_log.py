@@ -24,7 +24,7 @@ class EventLogAdapter:
             duration=passage.duration,
             token=passage.token or "",
             user_id=passage.user_id,
-            stime=time(),
+            stime=time.time(),
         )
         self._store.append(event)
 

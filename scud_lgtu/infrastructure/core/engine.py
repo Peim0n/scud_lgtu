@@ -171,6 +171,18 @@ class ScudEngine:
         if self._pct is not None:
             self._pct.set_mask(masks)
 
+    def arm_passage_detectors(self, direction: str) -> None:
+        """Поставить все детекторы прохода на охрану в заданном направлении."""
+        for detector in self._passage_detectors.values():
+            detector.arm(direction)
+        logger.debug(f"ScudEngine: passage detectors armed for {direction}")
+
+    def disarm_passage_detectors(self) -> None:
+        """Снять все детекторы прохода с охраны."""
+        for detector in self._passage_detectors.values():
+            detector.disarm()
+        logger.debug("ScudEngine: passage detectors disarmed")
+
     def start(self) -> None:
         """Запустить все hardware-модули."""
         logger.info("ScudEngine: запуск…")

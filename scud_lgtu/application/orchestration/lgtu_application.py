@@ -138,6 +138,21 @@ class LGTUApplication:
             for cmd in event.commands:
                 output_states[cmd.name] = cmd.state
 
+            # Поставить/снять детекторы прохода в зависимости от открытого направления.
+            # Реагируем только на команды реле; служебные команды (например, выключение бипера) не трогают охрану.
+            if self._event_source is not None and hasattr(self._event_source, "arm_passage_detectors"):
+                entry_changed = self._turnstile.entry_relay in output_states
+                exit_changed = self._turnstile.exit_relay in output_states
+                entry_on = output_states.get(self._turnstile.entry_relay, False) if entry_changed else None
+                exit_on = output_states.get(self._turnstile.exit_relay, False) if exit_changed else None
+
+                if entry_on:
+                    self._event_source.arm_passage_detectors("in")
+                elif exit_on:
+                    self._event_source.arm_passage_detectors("out")
+                elif (entry_changed and entry_on is False) or (exit_changed and exit_on is False):
+                    self._event_source.disarm_passage_detectors()
+
             # Отправляем состояния в сдвиговый регистр через порт Actuator
             if output_states and self._actuator is not None:
                 for cmd in event.commands:

@@ -515,3 +515,13 @@ class TurnstileState:
     def current_user_id(self) -> Optional[int]:
         """user_id текущей сессии прохода."""
         return self._current_user_id
+
+    @property
+    def entry_relay(self) -> str:
+        """Бизнес-имя реле входа."""
+        return self._entry_relay
+
+    @property
+    def exit_relay(self) -> str:
+        """Бизнес-имя реле выхода."""
+        return self._exit_relay
