@@ -28,7 +28,7 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
             break
 
     if not button_config:
-        logger.error(f"Кнопка не найдена в конфиге: {event.button_id}")
+        logger.debug(f"Кнопка не найдена в конфиге: {event.button_id}")
         return
 
     action = button_config.get("action")

@@ -72,6 +72,7 @@ class TurnstileState:
 
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since: Optional[float] = None
+        self._open_timeout: float = auth_timeout
         self._alarm_since: Optional[float] = None
         self._auth_timeout = auth_timeout
         self._output_commands: List[OutputCommand] = []
@@ -101,6 +102,10 @@ class TurnstileState:
         self._deny_beep_total = self._resolver.get_timing("business", "deny_beep_count", timings["deny_beep_count"])
         self._open_beep_duration = self._resolver.get_timing("business", "open_beep_duration_s", timings["open_beep_duration_s"])
         self._indicator_duration = self._resolver.get_timing("business", "indicator_duration_s", timings["indicator_duration_s"])
+
+        # Отдельные таймауты закрытия: кнопка (после отжатия) и карта/QR (после открытия)
+        self._button_timeout = self._resolver.get_timing("business", "button_timer_duration_s", timings["button_timer_duration_s"])
+        self._relay_timeout = self._resolver.get_timing("business", "relay_open_duration_s", timings["relay_open_duration_s"])
 
         # Загрузка бизнес-имен (без резолвинга - это ответственность Infrastructure слоя)
         self._entry_relay = "entry_relay"
@@ -197,6 +202,7 @@ class TurnstileState:
         """Запустить таймер закрытия (при отжатии кнопки)."""
         if self._current_state in (TurnstileStateEnum.ENTRY_OPEN, TurnstileStateEnum.EXIT_OPEN):
             self._open_since = time()
+            self._open_timeout = self._button_timeout
 
     async def deny_beep_sequence(self, event_bus) -> None:
         """Асинхронная задача для выполнения 3 коротких писков."""
@@ -277,9 +283,10 @@ class TurnstileState:
             event_bus.publish(OutputCommandsGenerated(commands=commands))
             logger.debug(f"open_{direction.value}: beep off")
 
-            # Запустить таймер закрытия если нужно
+            # Запустить таймер закрытия если нужно (карта/QR - relay_open_duration)
             if start_timer:
-                self.start_open_timer()
+                self._open_since = time()
+                self._open_timeout = self._relay_timeout
 
         except asyncio.CancelledError:
             logger.debug(f"open_{direction.value}: task cancelled")
@@ -419,7 +426,7 @@ class TurnstileState:
         commands: List[OutputCommand] = []
 
         # Автоматическое закрытие после таймаута
-        if self._open_since and (now - self._open_since) > self._auth_timeout:
+        if self._open_since and (now - self._open_since) > self._open_timeout:
             commands.extend(self.close())
 
         # Автоматическое выключение бипера после длительности

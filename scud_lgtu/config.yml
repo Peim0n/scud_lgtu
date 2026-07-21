@@ -222,7 +222,7 @@ timings:
 
   # Turnstile / UI
   auth_timeout_s: 5.0
-  relay_open_duration_s: 2.0
+  relay_open_duration_s: 3.0
   indicator_duration_s: 2.0
   button_timer_duration_s: 2.0
   beep_signal_duration_s: 0.05

@@ -154,6 +154,8 @@ class PassageEvent:
     result: str = ResultEnum.DENIED.value    # pass | timeout | denied | oncoming | double | forced
     severity: str = SeverityEnum.INFO.value  # fatal | critical | error | warning | notice | info | debug
     description: str = ""
+    zone: Optional[str] = None               # зона прохода
+    duration: Optional[float] = None         # длительность прохода
 
 
 # ============================================================================
