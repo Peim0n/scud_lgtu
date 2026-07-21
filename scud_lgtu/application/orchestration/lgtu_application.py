@@ -258,12 +258,12 @@ class LGTUApplication:
             # Обработка изменений мультиплексора - payload содержит словарь states
             states = scud_event.payload.get("states", {})
             events = []
+            mux_inputs = self._config.get("mux", {}).get("inputs", {})
             for input_name, state in states.items():
-                # Кнопки - low active (0 = нажатие), alarm - high active (1 = тревога)
-                if input_name == "alarm":
-                    state_bool = state == 1  # 1 = тревога
-                else:
-                    state_bool = state == 0  # 0 = активный для кнопок и сенсоров
+                cfg = mux_inputs.get(input_name, {})
+                active_high = cfg.get("active_high", False)
+                # Кнопки и датчики — low active (0 = активно), тревога — high active (1 = активно)
+                state_bool = (state == 1) if active_high else (state == 0)
                 event = MuxInputChanged(
                     input_name=input_name,
                     state=state_bool

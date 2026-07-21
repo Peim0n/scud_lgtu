@@ -58,7 +58,7 @@ mux:
     input_3: {addr: 3}
     sensor_1: {addr: 4}
     button_1: {addr: 5}
-    alarm: {addr: 6}
+    alarm: {addr: 6, active_high: true}
     button_2: {addr: 7}
 
 # ── Единый каскад мапингов ──

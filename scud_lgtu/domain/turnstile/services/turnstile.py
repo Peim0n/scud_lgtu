@@ -243,6 +243,18 @@ class TurnstileState:
         self._current_user_id = None
         logger.debug("clear_current_session")
 
+    def _cancel_async_tasks(self) -> None:
+        """Отменить все отложенные async-задачи TurnstileState."""
+        for task in (self._open_task, self._indicator_task, self._deny_beep_task):
+            if task and not task.done():
+                try:
+                    task.cancel()
+                except Exception as e:
+                    logger.debug(f"_cancel_async_tasks: error cancelling task: {e}")
+        self._open_task = None
+        self._indicator_task = None
+        self._deny_beep_task = None
+
     async def deny_beep_sequence(self, event_bus) -> None:
         """Асинхронная задача для выполнения 3 коротких писков."""
         from scud_lgtu.domain.common.events.events import OutputCommandsGenerated
@@ -286,6 +298,11 @@ class TurnstileState:
         if not self.can_open(direction):
             return
 
+        # В режиме тревоги открытие управляется только set_alarm/clear_alarm
+        if self._current_state == TurnstileStateEnum.ALARM:
+            logger.debug(f"open_{direction.value}: ignored - alarm active")
+            return
+
         # Игнорировать новую задачу если предыдущая еще выполняется
         if self._open_task and not self._open_task.done():
             logger.debug(f"open_{direction.value}: ignored - previous task still running")
@@ -294,6 +311,11 @@ class TurnstileState:
         self._open_task = asyncio.current_task()
 
         try:
+            # Если за время запуска задачи сработала тревога — отменяем открытие
+            if self._current_state == TurnstileStateEnum.ALARM:
+                logger.debug(f"open_{direction.value}: aborting, alarm active")
+                return
+
             # Определяем пины в зависимости от направления
             if direction == DirectionEnum.IN:
                 self._current_state = TurnstileStateEnum.ENTRY_OPEN
@@ -318,6 +340,12 @@ class TurnstileState:
 
             # Выключить бипер через configured duration
             await asyncio.sleep(self._open_beep_duration)
+
+            # Если сработала тревога за время бипера — выходим
+            if self._current_state == TurnstileStateEnum.ALARM:
+                logger.debug(f"open_{direction.value}: aborting after beep, alarm active")
+                return
+
             commands = [OutputCommand(name=self._main_buzzer, state=False)]
             event_bus.publish(OutputCommandsGenerated(commands=commands))
             logger.debug(f"open_{direction.value}: beep off")
@@ -417,9 +445,18 @@ class TurnstileState:
         self._alarm_since = time()
         self._alarm_beep_since = time()
         self._alarm_beep_on = True
+        self._open_since = None
+        self._hold_until = None
+        self.clear_current_session()
+        # Прервать любые отложенные задачи открытия/индикации
+        self._cancel_async_tasks()
         self._output_commands = [
-            OutputCommand(name=self._exit_relay, state=True),  # Только выходное реле
-            OutputCommand(name=self._exit_red, state=True),     # Красный индикатор на выходе
+            OutputCommand(name=self._entry_relay, state=False),   # Закрыть вход
+            OutputCommand(name=self._exit_relay, state=True),     # Открыть выход (эвакуация)
+            OutputCommand(name=self._entry_green, state=False),
+            OutputCommand(name=self._exit_green, state=False),
+            OutputCommand(name=self._entry_red, state=False),
+            OutputCommand(name=self._exit_red, state=True),       # Красный индикатор на выходе
             OutputCommand(name=self._main_buzzer, state=True),
         ]
         return self._output_commands
@@ -433,9 +470,14 @@ class TurnstileState:
         self._alarm_since = None
         self._alarm_beep_since = None
         self._alarm_beep_on = False
+        self._cancel_async_tasks()
         self._output_commands = [
-            OutputCommand(name=self._exit_relay, state=False),  # Только выходное реле
-            OutputCommand(name=self._exit_red, state=False),     # Красный индикатор на выходе
+            OutputCommand(name=self._entry_relay, state=False),
+            OutputCommand(name=self._exit_relay, state=False),
+            OutputCommand(name=self._entry_green, state=False),
+            OutputCommand(name=self._exit_green, state=False),
+            OutputCommand(name=self._entry_red, state=False),
+            OutputCommand(name=self._exit_red, state=False),
             OutputCommand(name=self._main_buzzer, state=False),
         ]
         return self._output_commands
@@ -470,10 +512,11 @@ class TurnstileState:
         """Периодический тик для обработки таймаутов."""
         commands: List[OutputCommand] = []
 
-        # Автоматическое закрытие после таймаута, но только если нет удержания датчиками
-        if self._open_since and (now - self._open_since) > self._open_timeout:
-            if self._hold_until is None or now > self._hold_until:
-                commands.extend(self.close())
+        # Автоматическое закрытие после таймаута, только если дверь открыта и нет удержания датчиками
+        if self._current_state in (TurnstileStateEnum.ENTRY_OPEN, TurnstileStateEnum.EXIT_OPEN):
+            if self._open_since and (now - self._open_since) > self._open_timeout:
+                if self._hold_until is None or now > self._hold_until:
+                    commands.extend(self.close())
 
         # Автоматическое выключение бипера после длительности
         if self._beep_since and (now - self._beep_since) > self._beep_duration:
