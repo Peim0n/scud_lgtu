@@ -124,8 +124,8 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
     )
     passage_service.log_passage(passage)
 
-    # Отметить проход как завершённый в passage_tracker
-    # Это позволит снова зайти с той же картой (но только если направление изменилось)
+    # Отметить токен как использованный для любого исхода (проход, разворот, заслон),
+    # чтобы повторный вход по той же карте был запрещён до выхода.
     if event.token:
         passage_tracker.mark_passed(event.token)
 
