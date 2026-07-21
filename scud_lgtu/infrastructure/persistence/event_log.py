@@ -1,4 +1,6 @@
 """Адаптер журнала событий."""
+import time
+
 from scud_lgtu.infrastructure.persistence.event_store import EventStore, PassageEvent
 from scud_lgtu.domain.access.ports.ports import EventLog
 from scud_lgtu.domain.common.models.models import Passage
@@ -19,7 +21,10 @@ class EventLogAdapter:
             direction=passage.direction.value,
             result=passage.result.value,
             zone=passage.zone,
-            duration=passage.duration
+            duration=passage.duration,
+            token=passage.token or "",
+            user_id=passage.user_id,
+            stime=time(),
         )
         self._store.append(event)
 
@@ -33,7 +38,9 @@ class EventLogAdapter:
                 direction=DirectionEnum(event.direction),
                 result=ResultEnum(event.result),
                 zone=event.zone,
-                duration=event.duration
+                duration=event.duration,
+                token=event.token,
+                user_id=event.user_id,
             )
             passages.append(passage)
         return passages

@@ -50,6 +50,7 @@ class PassageDetected:
     zone: str
     duration: float
     token: Optional[str] = None
+    user_id: Optional[int] = None
 
 
 @dataclass

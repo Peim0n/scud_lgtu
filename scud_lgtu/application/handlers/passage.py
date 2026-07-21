@@ -79,7 +79,9 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
             direction=DirectionEnum.IN,  # blockage doesn't have a direction, use IN as default
             zone=zone,
             duration=duration,
-            result=ResultEnum.BLOCKAGE
+            result=ResultEnum.BLOCKAGE,
+            token=event.token,
+            user_id=event.user_id,
         )
         passage_service.log_passage(passage)
 
@@ -96,7 +98,9 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
             direction=DirectionEnum.IN,  # turnback doesn't have a direction, use IN as default
             zone=zone,
             duration=duration,
-            result=ResultEnum.TURNBACK
+            result=ResultEnum.TURNBACK,
+            token=event.token,
+            user_id=event.user_id,
         )
         passage_service.log_passage(passage)
 
@@ -114,7 +118,9 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         direction=direction_enum,
         zone=zone,
         duration=duration,
-        result=ResultEnum.PASS
+        result=ResultEnum.PASS,
+        token=event.token,
+        user_id=event.user_id,
     )
     passage_service.log_passage(passage)
 

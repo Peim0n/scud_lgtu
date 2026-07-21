@@ -69,8 +69,21 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         # Обновляем user_id в сессии
         session.user_id = decision.user_id
 
+        direction_enum = DirectionEnum.IN if direction == "entry" else DirectionEnum.OUT
+
+        # Проверка на двойной проход в том же направлении
+        if passage_tracker.is_double_pass(session.token, direction_enum):
+            logger.warning(f"Двойной проход: {session.token}, direction={direction}")
+            asyncio.create_task(turnstile.deny_beep_sequence(event_bus))
+            if indicator_fail:
+                asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_fail, True, turnstile.indicator_duration))
+            return
+
         # Отслеживание прохода
         passage_tracker.track(session)
+
+        # Привязать токен/пользователя к текущему открытию для логирования
+        turnstile.set_current_session(session.token, session.user_id)
 
         # Открытие турникета через background task (таймер запускается сразу)
         if direction == "entry":

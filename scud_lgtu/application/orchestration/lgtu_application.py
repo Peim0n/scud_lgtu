@@ -273,6 +273,9 @@ class LGTUApplication:
             token = scud_event.payload.get("token")
             signal_event = scud_event.payload.get("event", "completed")
             if zone and direction and duration is not None:
+                # Если детектор не знает токен, берём его из текущей сессии турникета
+                current_token = token or self._turnstile.current_token
+                current_user_id = self._turnstile.current_user_id
                 if signal_event == "started":
                     event = PassageStarted(
                         zone=zone,
@@ -285,7 +288,8 @@ class LGTUApplication:
                         direction=direction,
                         zone=zone,
                         duration=duration,
-                        token=token
+                        token=current_token,
+                        user_id=current_user_id
                     )
                     logger.info(f"Passage Detected event: {event}")
                 return event

@@ -79,6 +79,8 @@ class TurnstileState:
         self._beep_since: Optional[float] = None
         self._resolver = resolver
         self._hold_until: Optional[float] = None  # удержание открытым по датчикам
+        self._current_token: Optional[str] = None
+        self._current_user_id: Optional[int] = None
 
         self._load_from_resolver(timings)
 
@@ -194,6 +196,7 @@ class TurnstileState:
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since = None
         self._hold_until = None
+        self.clear_current_session()
         self._output_commands = [
             OutputCommand(name=self._entry_relay, state=False),
             OutputCommand(name=self._exit_relay, state=False),
@@ -227,6 +230,18 @@ class TurnstileState:
         """Разрешить автоматическое закрытие по таймеру."""
         self._hold_until = None
         logger.debug("release_open: hold released")
+
+    def set_current_session(self, token: Optional[str], user_id: Optional[int] = None) -> None:
+        """Привязать текущий проход к токену/пользователю для логирования."""
+        self._current_token = token
+        self._current_user_id = user_id
+        logger.debug(f"set_current_session: token={token}, user_id={user_id}")
+
+    def clear_current_session(self) -> None:
+        """Очистить привязку текущего прохода."""
+        self._current_token = None
+        self._current_user_id = None
+        logger.debug("clear_current_session")
 
     async def deny_beep_sequence(self, event_bus) -> None:
         """Асинхронная задача для выполнения 3 коротких писков."""
@@ -371,6 +386,7 @@ class TurnstileState:
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since = None
         self._hold_until = None
+        self.clear_current_session()
         logger.debug("close_async: turnstile closed")
 
     async def _close_after_timeout(self, event_bus, timeout: float) -> None:
@@ -489,3 +505,13 @@ class TurnstileState:
     def indicator_duration(self) -> float:
         """Получить длительность индикации."""
         return self._indicator_duration
+
+    @property
+    def current_token(self) -> Optional[str]:
+        """Токен текущей сессии прохода."""
+        return self._current_token
+
+    @property
+    def current_user_id(self) -> Optional[int]:
+        """user_id текущей сессии прохода."""
+        return self._current_user_id

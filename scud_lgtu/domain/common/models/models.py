@@ -57,6 +57,8 @@ class Passage:
     zone: str
     duration: float
     result: ResultEnum
+    token: Optional[str] = None
+    user_id: Optional[int] = None
 
 
 @dataclass
