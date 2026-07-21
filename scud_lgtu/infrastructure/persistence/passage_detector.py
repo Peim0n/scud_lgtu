@@ -119,10 +119,12 @@ class PassageDetector:
             self._check_completion(sensor, timestamp)
 
     def _maybe_start(self, sensor: str, timestamp: float) -> None:
-        """Запомнить первый сработавший датчик."""
+        """Запомнить первый сработавший датчик и сообщить о начале прохода."""
         if self._first_sensor is None:
             self._first_sensor = sensor
             self._first_time = timestamp
+            direction = "out" if sensor == "inner" else "in"
+            self._emit("started", direction, 0.0)
 
     def _check_completion(self, sensor: str, timestamp: float) -> None:
         """Проверить завершение прохода по второму датчику."""
@@ -132,7 +134,7 @@ class PassageDetector:
         if sensor != self._first_sensor:
             direction = "out" if self._first_sensor == "inner" else "in"
             duration = timestamp - self._first_time
-            self._emit(direction, duration)
+            self._emit("completed", direction, duration)
             self._reset()
 
     def check_timeouts(self, now: float) -> None:
@@ -144,12 +146,12 @@ class PassageDetector:
             elapsed = now - self._first_time
 
             if self._inner.active and self._outer.active and elapsed > self._blockage_timeout:
-                self._emit("blockage", now - self._first_time)
+                self._emit("completed", "blockage", now - self._first_time)
                 self._reset()
                 return
 
             if elapsed > self._passage_timeout and not self._second_active():
-                self._emit("turnback", now - self._first_time)
+                self._emit("completed", "turnback", now - self._first_time)
                 self._reset()
 
     def _second_active(self) -> bool:
@@ -163,9 +165,9 @@ class PassageDetector:
         self._first_sensor = None
         self._first_time = 0.0
 
-    def _emit(self, direction: str, duration: float) -> None:
+    def _emit(self, event_type: str, direction: str, duration: float) -> None:
         """Опубликовать событие прохода в event_queue."""
-        logger.info("[%s] Проход: %s, %.3f с", self._zone, direction, duration)
+        logger.info("[%s] Проход %s: %s, %.3f с", self._zone, event_type, direction, duration)
         if self._event_queue is None:
             return
         try:
@@ -174,6 +176,7 @@ class PassageDetector:
                     type=EventType.INPUT_SIGNAL,
                     source=EventSource.SIGNAL,
                     payload={
+                        "event": event_type,
                         "zone": self._zone,
                         "direction": direction,
                         "duration": duration,

@@ -53,6 +53,14 @@ class PassageDetected:
 
 
 @dataclass
+class PassageStarted:
+    """Событие начала прохода (первый датчик сработал)."""
+    zone: str
+    direction: str
+    first_sensor: str
+
+
+@dataclass
 class OutputCommandsGenerated:
     """Событие генерации команд управления."""
     commands: List[OutputCommand]

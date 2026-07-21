@@ -78,6 +78,7 @@ class TurnstileState:
         self._output_commands: List[OutputCommand] = []
         self._beep_since: Optional[float] = None
         self._resolver = resolver
+        self._hold_until: Optional[float] = None  # удержание открытым по датчикам
 
         self._load_from_resolver(timings)
 
@@ -143,6 +144,7 @@ class TurnstileState:
             return []
 
         self._current_state = TurnstileStateEnum.ENTRY_OPEN
+        self._hold_until = None  # сбросить удержание от предыдущих проходов
         if start_timer:
             self._open_since = time()
         else:
@@ -170,6 +172,7 @@ class TurnstileState:
         if self._current_state != TurnstileStateEnum.ALARM:
             self._current_state = TurnstileStateEnum.EXIT_OPEN
 
+        self._hold_until = None  # сбросить удержание от предыдущих проходов
         if start_timer:
             self._open_since = time()
         else:
@@ -190,6 +193,7 @@ class TurnstileState:
 
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since = None
+        self._hold_until = None
         self._output_commands = [
             OutputCommand(name=self._entry_relay, state=False),
             OutputCommand(name=self._exit_relay, state=False),
@@ -203,6 +207,26 @@ class TurnstileState:
         if self._current_state in (TurnstileStateEnum.ENTRY_OPEN, TurnstileStateEnum.EXIT_OPEN):
             self._open_since = time()
             self._open_timeout = self._button_timeout
+
+    def hold_open(self, duration: Optional[float] = None) -> None:
+        """Удерживать турникет открытым пока активны датчики прохода.
+
+        Parameters
+        ----------
+        duration : float, optional
+            Абсолютное время в секундах до которого удерживать открытым.
+            Если None, удерживать до явного release_open.
+        """
+        if duration is None:
+            self._hold_until = float("inf")
+        else:
+            self._hold_until = time() + duration
+        logger.debug(f"hold_open: hold_until={self._hold_until}")
+
+    def release_open(self) -> None:
+        """Разрешить автоматическое закрытие по таймеру."""
+        self._hold_until = None
+        logger.debug("release_open: hold released")
 
     async def deny_beep_sequence(self, event_bus) -> None:
         """Асинхронная задача для выполнения 3 коротких писков."""
@@ -336,13 +360,17 @@ class TurnstileState:
         # Закрыть реле, выключить индикаторы
         commands = [
             OutputCommand(name=self._entry_relay, state=False),
+            OutputCommand(name=self._exit_relay, state=False),
             OutputCommand(name=self._entry_green, state=False),
+            OutputCommand(name=self._exit_green, state=False),
             OutputCommand(name=self._entry_red, state=False),
+            OutputCommand(name=self._exit_red, state=False),
         ]
         event_bus.publish(OutputCommandsGenerated(commands=commands))
 
         self._current_state = TurnstileStateEnum.IDLE
         self._open_since = None
+        self._hold_until = None
         logger.debug("close_async: turnstile closed")
 
     async def _close_after_timeout(self, event_bus, timeout: float) -> None:
@@ -425,9 +453,10 @@ class TurnstileState:
         """Периодический тик для обработки таймаутов."""
         commands: List[OutputCommand] = []
 
-        # Автоматическое закрытие после таймаута
+        # Автоматическое закрытие после таймаута, но только если нет удержания датчиками
         if self._open_since and (now - self._open_since) > self._open_timeout:
-            commands.extend(self.close())
+            if self._hold_until is None or now > self._hold_until:
+                commands.extend(self.close())
 
         # Автоматическое выключение бипера после длительности
         if self._beep_since and (now - self._beep_since) > self._beep_duration:

@@ -11,7 +11,7 @@ PassageTracker. Поддерживает различные направлени
 -------
 - handle_passage_detected: обработать событие обнаружения прохода
 """
-from scud_lgtu.domain.common.events.events import PassageDetected, OutputCommandsGenerated
+from scud_lgtu.domain.common.events.events import PassageDetected, PassageStarted, OutputCommandsGenerated
 from scud_lgtu.domain.common.models.models import Passage
 from scud_lgtu.domain.common.enums.enums import ResultEnum, DirectionEnum
 import logging
@@ -52,6 +52,9 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
     duration = event.duration
 
     logger.info(f"Проход: {zone}, направление={direction}, длительность={duration:.3f}s")
+
+    # Снять удержание открытым по датчикам — таймер автозакрытия снова работает
+    turnstile.release_open()
 
     # Получаем конфигурацию зон прохода из devices
     passage_zones = devices.get("passage_zones", {})
@@ -119,3 +122,9 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
     # Это позволит снова зайти с той же картой (но только если направление изменилось)
     if event.token:
         passage_tracker.mark_passed(event.token)
+
+
+def handle_passage_started(event: PassageStarted, turnstile) -> None:
+    """Обработать начало прохода (первый датчик сработал)."""
+    logger.debug(f"Passage started: {event.zone} direction={event.direction}")
+    turnstile.hold_open()
