@@ -254,3 +254,111 @@ LGTU Controller — это система контроля доступа (СК�
 - **Импорты**: группируются в порядке: стандартная библиотека, сторонние пакеты, внутренние модули `scud_lgtu`.
 - **Типизация**: используется `typing` (`Optional`, `Any`, `dict`, `list` и т.д.), требуется Python 3.10+.
 - **Стилистика**: проект ориентирован на `ruff` для линтинга и форматирования.
+
+---
+
+## 10. Как и где менять бизнес-логику приложения
+
+Бизнес-логика — это всё, что определяет *поведение* СКУД: когда открывать турникет, на какое время, что делать при тревоге, как обрабатывать проходы и т.д. Она сосредоточена в **доменном** и **прикладном** слоях. Инфраструктурный слой (GPIO, сеть, звук) трогать обычно не нужно.
+
+### 10.1. Основные точки изменений
+
+| Что меняешь | Где править | Что именно |
+|-------------|-------------|------------|
+| **Время открытия турникета** после карты/QR | `scud_lgtu/config.yml` → `timings.relay_open_duration_s` | Время в секундах, пока реле остаётся открытым |
+| **Время открытия турникета** после отжатия кнопки | `scud_lgtu/config.yml` → `timings.button_timer_duration_s` | Время до автоматического закрытия после отпускания кнопки |
+| **Логика открытия/закрытия, индикация, тревога** | `scud_lgtu/domain/turnstile/services/turnstile.py` | Класс `TurnstileState`: методы `open_entry`, `open_exit`, `close`, `set_alarm`, `clear_alarm`, `tick` |
+| **Правила доступа** (кто проходит, кто нет) | `scud_lgtu/domain/access/services/services.py` | Класс `AccessPolicy`, метод `check`. Источник данных — `AccessRepository` (`cache/repository.py`) |
+| **Реакция на кнопки** | `scud_lgtu/application/handlers/button.py` + `scud_lgtu/config.yml` → `devices.buttons` | Сопоставление `label` → `action` (`open_entry`, `open_exit`, `close`) |
+| **Реакция на тревогу** | `scud_lgtu/application/handlers/alarm.py` | Вызов `turnstile.set_alarm()` / `clear_alarm()` и публикация команд |
+| **Обработка проходов** (логирование, закрытие после прохода) | `scud_lgtu/application/handlers/passage.py` | `handle_passage_detected` |
+| **Преобразование событий оборудования в доменные** | `scud_lgtu/application/orchestration/lgtu_application.py` | Метод `_convert_scud_event_to_domain` |
+| **Добавить новое событие** | `scud_lgtu/domain/common/events/events.py` + `scud_lgtu/application/handlers/` + `LGTUApplication._register_handlers` | Определить dataclass события, обработчик, зарегистрировать подписку |
+| **Тайминги, мапинги пинов, устройства** | `scud_lgtu/config.yml` | Секции `timings`, `mappings`, `devices`, `mux`, `shift_register` |
+
+### 10.2. Принцип: доменный слой не зависит от инфраструктуры
+
+- `TurnstileState` и `AccessPolicy` **не импортируют** GPIO, HTTP, базы данных.
+- Вместо этого они работают с моделями (`Passage`, `Credential`, `OutputCommand`) и портами (`AccessRepository`, `EventLog`).
+- Если нужно изменить, *как* включается реле (инверсия, длительность импульса), править надо в инфраструктуре (`ShiftRegister`, `GpiodPinController`).
+- Если нужно изменить, *когда* включается реле (по какому событию, на сколько), править в домене/приложении.
+
+### 10.3. Типовые сценарии
+
+#### Изменить действие кнопки
+
+1. Открыть `scud_lgtu/config.yml`.
+2. Найти секцию `devices.buttons`:
+
+   ```yaml
+   devices:
+     buttons:
+       entry:
+         label: "button_1"
+         action: "open_entry"
+       exit:
+         label: "button_2"
+         action: "open_exit"
+   ```
+
+3. Изменить `action` на одно из: `open_entry`, `open_exit`, `close`.
+4. Если нужно новое действие (например, блокировка), расширить `scud_lgtu/application/handlers/button.py` и добавить метод в `TurnstileState`.
+
+#### Изменить поведение при тревоге
+
+1. Открыть `scud_lgtu/domain/turnstile/services/turnstile.py`.
+2. Найти методы `set_alarm()` и `clear_alarm()`.
+3. Изменить список `OutputCommand`, который они возвращают:
+
+   ```python
+   OutputCommand(name=self._exit_relay, state=True),   # открыть выход
+   OutputCommand(name=self._main_buzzer, state=True),  # включить бипер
+   OutputCommand(name=self._exit_red, state=True),     # красный индикатор
+   ```
+
+4. При необходимости добавить новые бизнес-имена в `mappings` конфига.
+
+#### Изменить время автозакрытия после карты
+
+1. Открыть `scud_lgtu/config.yml`.
+2. Изменить:
+
+   ```yaml
+   timings:
+     relay_open_duration_s: 3.0
+   ```
+
+3. `TurnstileState._load_from_resolver()` подхватит значение автоматически.
+
+#### Добавить новый обработчик события
+
+1. Определить событие в `scud_lgtu/domain/common/events/events.py`:
+
+   ```python
+   @dataclass
+   class MyEvent:
+       payload: str
+   ```
+
+2. Создать обработчик в `scud_lgtu/application/handlers/my_handler.py`:
+
+   ```python
+   def handle_my_event(event: MyEvent, turnstile, event_bus):
+       ...
+   ```
+
+3. Зарегистрировать в `scud_lgtu/application/orchestration/lgtu_application.py`:
+
+   ```python
+   self._event_bus.subscribe("MyEvent", lambda e: handle_my_event(e, self._turnstile, self._event_bus))
+   ```
+
+4. Убедиться, что событие публикуется где-то в `_convert_scud_event_to_domain` или другом обработчике.
+
+### 10.4. Что трогать не нужно
+
+- `scud_lgtu/infrastructure/gpio/` — драйверы GPIO/мультиплексора/сдвигового регистра.
+- `scud_lgtu/infrastructure/serial/` и `wiegand_reader.py` — низкоуровневое чтение карт/QR.
+- `scud_lgtu/infrastructure/backend/` — HTTP-клиент к серверу.
+
+Изменения в этих модулях требуются только при смене железа или протокола.
