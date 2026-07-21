@@ -191,15 +191,23 @@ class LGTUApplication:
         reader_names = self._config.get("mappings", {})
         return reader_names.get(reader, reader)
 
-    def _decode_qr_credential(self, data: str) -> Optional[Credential]:
-        """Декодировать QR код в Credential."""
+    def _decode_qr_credential(self, data: str) -> Credential:
+        """Декодировать QR код в Credential.
+
+        При любой ошибке декодирования возвращает Credential с самим QR-данными,
+        чтобы доступ был явно запрещён через access_policy, а не игнорировался.
+        """
         if self._qr_decoder is not None:
             try:
                 qr_fields = self._qr_decoder.decode_url(data)
                 max_id = qr_fields.get("max_id")
                 if max_id is None:
                     logger.error(f"QR код не содержит max_id: {data}")
-                    return None
+                    return Credential(
+                        token_type=TokenTypeEnum.MAXID,
+                        value=str(data),
+                        encrypted=False
+                    )
 
                 return Credential(
                     token_type=TokenTypeEnum.MAXID,
@@ -208,7 +216,11 @@ class LGTUApplication:
                 )
             except Exception as e:
                 logger.error(f"Ошибка декодирования QR кода: {e}")
-                return None
+                return Credential(
+                    token_type=TokenTypeEnum.MAXID,
+                    value=str(data),
+                    encrypted=False
+                )
         else:
             # Если decoder недоступен, используем URL как есть
             logger.warning("QR decoder недоступен, используется URL как credential value")
@@ -276,8 +288,6 @@ class LGTUApplication:
             data = scud_event.payload.get("data", "")
             if data:
                 credential = self._decode_qr_credential(data)
-                if credential is None:
-                    return None
 
                 reader = scud_event.payload.get("reader", "unknown")
                 reader_id = self._get_reader_id(reader)
