@@ -106,9 +106,10 @@ class TurnstileState:
         self._open_beep_duration = self._resolver.get_timing("business", "open_beep_duration_s", timings["open_beep_duration_s"])
         self._indicator_duration = self._resolver.get_timing("business", "indicator_duration_s", timings["indicator_duration_s"])
 
-        # Отдельные таймауты закрытия: кнопка (после отжатия) и карта/QR (после открытия)
+        # Отдельные таймауты закрытия: кнопка (после отжатия), карта/QR (после открытия) и задержка после заслона
         self._button_timeout = self._resolver.get_timing("business", "button_timer_duration_s", timings["button_timer_duration_s"])
         self._relay_timeout = self._resolver.get_timing("business", "relay_open_duration_s", timings["relay_open_duration_s"])
+        self._post_blockage_safety = self._resolver.get_timing("business", "post_blockage_safety_s", timings.get("post_blockage_safety_s", 1.0))
 
         # Загрузка бизнес-имен (без резолвинга - это ответственность Infrastructure слоя)
         self._entry_relay = "entry_relay"
@@ -217,13 +218,16 @@ class TurnstileState:
         Parameters
         ----------
         duration : float, optional
-            Абсолютное время в секундах до которого удерживать открытым.
+            Время в секундах, на которое продлить удержание.
             Если None, удерживать до явного release_open.
         """
         if duration is None:
             self._hold_until = float("inf")
         else:
             self._hold_until = time() + duration
+            # Запускаем/продлеваем таймер автозакрытия, чтобы tick мог закрыть после удержания
+            self._open_since = time()
+            self._open_timeout = duration
         logger.debug(f"hold_open: hold_until={self._hold_until}")
 
     def release_open(self) -> None:

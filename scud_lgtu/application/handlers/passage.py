@@ -112,6 +112,6 @@ def handle_passage_started(event: PassageStarted, turnstile) -> None:
 
 async def handle_passage_cleared(event: PassageSensorsCleared, turnstile, event_bus) -> None:
     """Обработать освобождение датчиков после заслона — закрыть турникет."""
-    logger.info(f"Passage sensors cleared: {event.zone}, closing turnstile")
-    await turnstile.close_async(event_bus)
-    logger.info(f"Passage sensors cleared: {event.zone}, close command sent")
+    safety = getattr(turnstile, "_post_blockage_safety", 1.0)
+    logger.info(f"Passage sensors cleared: {event.zone}, safety hold {safety}s")
+    turnstile.hold_open(duration=safety)

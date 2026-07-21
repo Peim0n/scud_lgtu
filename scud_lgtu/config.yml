@@ -225,6 +225,7 @@ timings:
   relay_open_duration_s: 3.0
   indicator_duration_s: 2.0
   button_timer_duration_s: 2.0
+  post_blockage_safety_s: 1.0
   beep_signal_duration_s: 0.05
   beep_signal_pause_s: 0.1
   open_beep_duration_s: 0.1
