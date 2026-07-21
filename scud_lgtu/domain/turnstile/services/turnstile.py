@@ -372,6 +372,7 @@ class TurnstileState:
         """Асинхронное закрытие турникета."""
         from scud_lgtu.domain.common.events.events import OutputCommandsGenerated
 
+        logger.info(f"close_async: closing turnstile, current_state={self._current_state}")
         # Закрыть реле, выключить индикаторы
         commands = [
             OutputCommand(name=self._entry_relay, state=False),
@@ -387,7 +388,7 @@ class TurnstileState:
         self._open_since = None
         self._hold_until = None
         self.clear_current_session()
-        logger.debug("close_async: turnstile closed")
+        logger.info("close_async: close command published")
 
     async def _close_after_timeout(self, event_bus, timeout: float) -> None:
         """Асинхронная задача для закрытия через таймаут."""

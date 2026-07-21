@@ -160,6 +160,8 @@ class LGTUApplication:
 
             # Отправляем состояния в сдвиговый регистр через порт Actuator
             if output_states and self._actuator is not None:
+                if not output_states.get(self._turnstile.entry_relay, True) and not output_states.get(self._turnstile.exit_relay, True):
+                    logger.info(f"Applying turnstile close commands: {output_states}")
                 for cmd in event.commands:
                     try:
                         self._actuator.apply(cmd)
