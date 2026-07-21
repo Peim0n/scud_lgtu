@@ -81,12 +81,10 @@ class PassageDetector:
         self._first_sensor: Optional[str] = None
         self._first_time: float = 0.0
 
-        # Ожидаемое направление прохода ("in" | "out" | None)
-        self._armed_direction: Optional[str] = None
-        # Датчики, которые были активны в момент постановки на охрану — игнорировать их первый спадающий фронт
-        self._ignore_falling: set[str] = set()
-        # Флаг ожидания освобождения датчиков после заслона
-        self._await_clear: bool = False
+        # Ожидаемое направление прохода ("in" | "out" | None — любое)
+        self._expected_direction: Optional[str] = None
+        # Флаг: уже сообщили о заслоне, ждём освобождения датчиков
+        self._blockage_reported: bool = False
 
         self._lock = threading.Lock()
 
@@ -112,7 +110,7 @@ class PassageDetector:
             self._update_sensor("inner", self._inner, inner_val, timestamp)
             self._update_sensor("outer", self._outer, outer_val, timestamp)
 
-            if self._await_clear and not self._inner.active and not self._outer.active:
+            if self._blockage_reported and not self._inner.active and not self._outer.active:
                 self._emit("cleared", "cleared", 0.0)
                 self._reset()
                 self._disarm_nolock()
@@ -125,26 +123,16 @@ class PassageDetector:
             state.active = True
             state.start_time = timestamp
 
-            # Первый нарастающий фронт датчика, который был активен при постановке на охрану,
-            # просто снимает флаг игнорирования (это не начало нового прохода).
-            if sensor in self._ignore_falling:
-                self._ignore_falling.discard(sensor)
-                return
-
-            # Если задано направление, реагировать только на датчик того же направления
-            if self._armed_direction is not None:
+            # Если задано направление, игнорировать датчики «не той» стороны
+            if self._expected_direction is not None:
                 sensor_dir = "out" if sensor == "inner" else "in"
-                if sensor_dir != self._armed_direction:
+                if sensor_dir != self._expected_direction:
                     return
 
             self._maybe_start(sensor, timestamp)
         elif value and state.active:
             # Спадающий фронт — конец импульса (датчик перестал срабатывать)
             state.active = False
-            # Игнорировать первый спадающий фронт датчиков, активных при постановке на охрану
-            if sensor in self._ignore_falling:
-                self._ignore_falling.discard(sensor)
-                return
             self._check_completion(sensor, timestamp)
 
     def _maybe_start(self, sensor: str, timestamp: float) -> None:
@@ -155,20 +143,24 @@ class PassageDetector:
             direction = "out" if sensor == "inner" else "in"
             self._emit("started", direction, 0.0)
 
+    def _passage_direction(self, first_sensor: str) -> str:
+        """Направление прохода по первому сработавшему датчику."""
+        return "out" if first_sensor == "inner" else "in"
+
     def _check_completion(self, sensor: str, timestamp: float) -> None:
         """Проверить завершение прохода по второму датчику."""
-        if self._first_sensor is None:
+        if self._first_sensor is None or sensor == self._first_sensor:
             return
 
-        if sensor != self._first_sensor:
-            direction = "out" if self._first_sensor == "inner" else "in"
-            if self._armed_direction is not None and direction != self._armed_direction:
-                self._reset()
-                return
-            duration = timestamp - self._first_time
-            self._emit("completed", direction, duration)
+        direction = self._passage_direction(self._first_sensor)
+        if self._expected_direction is not None and direction != self._expected_direction:
             self._reset()
-            self._disarm_nolock()
+            return
+
+        duration = timestamp - self._first_time
+        self._emit("completed", direction, duration)
+        self._reset()
+        self._disarm_nolock()
 
     def check_timeouts(self, now: float) -> None:
         """Проверить таймауты: разворот или заслон."""
@@ -176,8 +168,8 @@ class PassageDetector:
             if self._first_sensor is None:
                 return
 
-            direction = "out" if self._first_sensor == "inner" else "in"
-            if self._armed_direction is not None and direction != self._armed_direction:
+            direction = self._passage_direction(self._first_sensor)
+            if self._expected_direction is not None and direction != self._expected_direction:
                 self._reset()
                 return
 
@@ -186,7 +178,7 @@ class PassageDetector:
             if self._inner.active and self._outer.active and elapsed > self._blockage_timeout:
                 self._emit("completed", "blockage", now - self._first_time)
                 self._reset()
-                self._await_clear = True
+                self._blockage_reported = True
                 return
 
             if elapsed > self._passage_timeout and not self._second_active():
@@ -206,29 +198,23 @@ class PassageDetector:
         self._first_time = 0.0
 
     def _arm_nolock(self, direction: Optional[str] = None) -> None:
-        self._armed_direction = direction
+        self._expected_direction = direction
         self._first_sensor = None
         self._first_time = 0.0
-        self._await_clear = False
-        self._ignore_falling = {
-            "inner" if self._inner.active else None,
-            "outer" if self._outer.active else None,
-        }
-        self._ignore_falling.discard(None)
+        self._blockage_reported = False
 
     def arm(self, direction: Optional[str] = None) -> None:
-        """Вооружить детектор на проход в заданном направлении (None — любое направление)."""
+        """Установить ожидаемое направление прохода (None — любое направление)."""
         with self._lock:
             self._arm_nolock(direction)
-        logger.debug(f"[PassageDetector {self._zone}] armed for {direction}, ignore_falling={self._ignore_falling}")
+        logger.debug(f"[PassageDetector {self._zone}] expected_direction={direction}")
 
     def _disarm_nolock(self) -> None:
-        self._armed_direction = None
-        self._ignore_falling = set()
-        self._await_clear = False
+        self._expected_direction = None
+        self._blockage_reported = False
 
     def disarm(self) -> None:
-        """Снять с охраны."""
+        """Снять ожидание направления."""
         with self._lock:
             self._disarm_nolock()
         logger.debug(f"[PassageDetector {self._zone}] disarmed")

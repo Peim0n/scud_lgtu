@@ -67,22 +67,20 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         logger.error(f"Зона прохода не найдена в конфиге: {zone}")
         return
 
-    if direction == "blockage":
-        # Заслон - держать реле открытым, пока датчики не освободятся
-        logger.warning(f"Заслон: {zone}, длительность={duration:.3f}s")
-
-        # Логировать заслон
+    def _log_passage(result: ResultEnum, direction_enum: DirectionEnum = DirectionEnum.IN):
         passage = Passage(
-            direction=DirectionEnum.IN,  # blockage doesn't have a direction, use IN as default
+            direction=direction_enum,
             zone=zone,
             duration=duration,
-            result=ResultEnum.BLOCKAGE,
+            result=result,
             token=event.token,
             user_id=event.user_id,
         )
         passage_service.log_passage(passage)
 
-        # Продолжать удерживать дверь открытой до освобождения датчиков
+    if direction == "blockage":
+        logger.warning(f"Заслон: {zone}, длительность={duration:.3f}s")
+        _log_passage(ResultEnum.BLOCKAGE)
         turnstile.hold_open()
         return
 
@@ -90,39 +88,15 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
     turnstile.release_open()
 
     if direction == "turnback":
-        # Разворот - закрыть реле
         logger.info(f"Разворот: {zone}, длительность={duration:.3f}s")
-
-        # Логировать разворот
-        passage = Passage(
-            direction=DirectionEnum.IN,  # turnback doesn't have a direction, use IN as default
-            zone=zone,
-            duration=duration,
-            result=ResultEnum.TURNBACK,
-            token=event.token,
-            user_id=event.user_id,
-        )
-        passage_service.log_passage(passage)
-
-        # Закрыть реле
+        _log_passage(ResultEnum.TURNBACK)
         await turnstile.close_async(event_bus)
         return
 
     # Нормальный проход (in/out)
-    # Закрыть реле
     await turnstile.close_async(event_bus)
-
-    # Логировать проход
     direction_enum = DirectionEnum.IN if direction == "in" else DirectionEnum.OUT
-    passage = Passage(
-        direction=direction_enum,
-        zone=zone,
-        duration=duration,
-        result=ResultEnum.PASS,
-        token=event.token,
-        user_id=event.user_id,
-    )
-    passage_service.log_passage(passage)
+    _log_passage(ResultEnum.PASS, direction_enum)
 
     # Отметить токен как использованный для любого исхода (проход, разворот, заслон),
     # чтобы повторный вход по той же карте был запрещён до выхода.
