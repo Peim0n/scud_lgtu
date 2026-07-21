@@ -123,16 +123,18 @@ class PassageDetector:
             state.active = True
             state.start_time = timestamp
 
-            # Если задано направление, игнорировать датчики «не той» стороны
             if self._expected_direction is not None:
                 sensor_dir = "out" if sensor == "inner" else "in"
                 if sensor_dir != self._expected_direction:
+                    logger.debug(f"[{self._zone}] {sensor} ignored: expected {self._expected_direction}, got {sensor_dir}")
                     return
 
+            logger.debug(f"[{self._zone}] {sensor} rising")
             self._maybe_start(sensor, timestamp)
         elif value and state.active:
             # Спадающий фронт — конец импульса (датчик перестал срабатывать)
             state.active = False
+            logger.debug(f"[{self._zone}] {sensor} falling, first={self._first_sensor}")
             self._check_completion(sensor, timestamp)
 
     def _maybe_start(self, sensor: str, timestamp: float) -> None:

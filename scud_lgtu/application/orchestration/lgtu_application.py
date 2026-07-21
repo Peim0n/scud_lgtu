@@ -152,10 +152,15 @@ class LGTUApplication:
                 has_session = self._turnstile.current_token is not None
 
                 if entry_on:
-                    self._event_source.arm_passage_detectors("in" if has_session else None)
+                    direction = "in" if has_session else None
+                    logger.debug(f"Arming passage detectors for entry, direction={direction}, has_session={has_session}")
+                    self._event_source.arm_passage_detectors(direction)
                 elif exit_on:
-                    self._event_source.arm_passage_detectors("out" if has_session else None)
+                    direction = "out" if has_session else None
+                    logger.debug(f"Arming passage detectors for exit, direction={direction}, has_session={has_session}")
+                    self._event_source.arm_passage_detectors(direction)
                 elif (entry_changed and entry_on is False) or (exit_changed and exit_on is False):
+                    logger.debug("Disarming passage detectors after close")
                     self._event_source.disarm_passage_detectors()
 
             # Отправляем состояния в сдвиговый регистр через порт Actuator
@@ -399,20 +404,9 @@ class LGTUApplication:
                 # Тактировать конечный автомат турникета
                 now = time.time()
                 commands = self._turnstile.tick(now)
-                # Применить команды к сдвиговому регистру
+                # Пропускаем команды через единый обработчик для arming/disarming и актуатора
                 if commands:
-                    # Собираем все команды в словарь состояний для сдвигового регистра
-                    output_states = {}
-                    for cmd in commands:
-                        output_states[cmd.name] = cmd.state
-
-                    # Отправляем состояния в сдвиговый регистр через порт Actuator
-                    if output_states and self._actuator is not None:
-                        for cmd in commands:
-                            try:
-                                self._actuator.apply(cmd)
-                            except Exception as e:
-                                logger.error(f"Error sending to shift register: {e}")
+                    self._handle_output_commands(OutputCommandsGenerated(commands=commands))
 
                 # Периодический вызов сервиса синхронизации
                 self._sync_service.tick(now)
