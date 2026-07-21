@@ -198,8 +198,8 @@ class PassageDetector:
         self._first_sensor = None
         self._first_time = 0.0
 
-    def arm(self, direction: str) -> None:
-        """Вооружить детектор на проход в заданном направлении."""
+    def arm(self, direction: Optional[str] = None) -> None:
+        """Вооружить детектор на проход в заданном направлении (None — любое направление)."""
         with self._lock:
             self._armed_direction = direction
             self._first_sensor = None

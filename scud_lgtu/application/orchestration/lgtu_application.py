@@ -146,10 +146,14 @@ class LGTUApplication:
                 entry_on = output_states.get(self._turnstile.entry_relay, False) if entry_changed else None
                 exit_on = output_states.get(self._turnstile.exit_relay, False) if exit_changed else None
 
+                # Если открытие было по кнопке — у нас нет активной сессии, разрешаем любое направление.
+                # При открытии картой/QR ожидаем направление соответствующего считывателя.
+                has_session = self._turnstile.current_token is not None
+
                 if entry_on:
-                    self._event_source.arm_passage_detectors("in")
+                    self._event_source.arm_passage_detectors("in" if has_session else None)
                 elif exit_on:
-                    self._event_source.arm_passage_detectors("out")
+                    self._event_source.arm_passage_detectors("out" if has_session else None)
                 elif (entry_changed and entry_on is False) or (exit_changed and exit_on is False):
                     self._event_source.disarm_passage_detectors()
 
