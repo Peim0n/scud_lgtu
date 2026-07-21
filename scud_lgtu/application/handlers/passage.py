@@ -11,7 +11,7 @@ PassageTracker. Поддерживает различные направлени
 -------
 - handle_passage_detected: обработать событие обнаружения прохода
 """
-from scud_lgtu.domain.common.events.events import PassageDetected, PassageStarted, OutputCommandsGenerated
+from scud_lgtu.domain.common.events.events import PassageDetected, PassageStarted, PassageSensorsCleared, OutputCommandsGenerated
 from scud_lgtu.domain.common.models.models import Passage
 from scud_lgtu.domain.common.enums.enums import ResultEnum, DirectionEnum
 import logging
@@ -53,9 +53,6 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
 
     logger.info(f"Проход: {zone}, направление={direction}, длительность={duration:.3f}s")
 
-    # Снять удержание открытым по датчикам — таймер автозакрытия снова работает
-    turnstile.release_open()
-
     # Получаем конфигурацию зон прохода из devices
     passage_zones = devices.get("passage_zones", {})
 
@@ -71,7 +68,7 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         return
 
     if direction == "blockage":
-        # Заслон - держать реле открытым
+        # Заслон - держать реле открытым, пока датчики не освободятся
         logger.warning(f"Заслон: {zone}, длительность={duration:.3f}s")
 
         # Логировать заслон
@@ -85,9 +82,12 @@ async def handle_passage_detected(event: PassageDetected, turnstile, passage_tra
         )
         passage_service.log_passage(passage)
 
-        # Держать реле открытым (не закрывать)
-        # Реле уже открыто при проходе, просто не закрываем его
+        # Продолжать удерживать дверь открытой до освобождения датчиков
+        turnstile.hold_open()
         return
+
+    # Снять удержание открытым по датчикам — таймер автозакрытия снова работает
+    turnstile.release_open()
 
     if direction == "turnback":
         # Разворот - закрыть реле
@@ -134,3 +134,9 @@ def handle_passage_started(event: PassageStarted, turnstile) -> None:
     """Обработать начало прохода (первый датчик сработал)."""
     logger.debug(f"Passage started: {event.zone} direction={event.direction}")
     turnstile.hold_open()
+
+
+async def handle_passage_cleared(event: PassageSensorsCleared, turnstile, event_bus) -> None:
+    """Обработать освобождение датчиков после заслона — закрыть турникет."""
+    logger.debug(f"Passage sensors cleared: {event.zone}")
+    await turnstile.close_async(event_bus)

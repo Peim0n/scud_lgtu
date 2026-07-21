@@ -85,6 +85,8 @@ class PassageDetector:
         self._armed_direction: Optional[str] = None
         # Датчики, которые были активны в момент постановки на охрану — игнорировать их первый спадающий фронт
         self._ignore_falling: set[str] = set()
+        # Флаг ожидания освобождения датчиков после заслона
+        self._await_clear: bool = False
 
         self._lock = threading.Lock()
 
@@ -109,6 +111,11 @@ class PassageDetector:
         with self._lock:
             self._update_sensor("inner", self._inner, inner_val, timestamp)
             self._update_sensor("outer", self._outer, outer_val, timestamp)
+
+            if self._await_clear and not self._inner.active and not self._outer.active:
+                self._emit("cleared", "cleared", 0.0)
+                self._reset()
+                self.disarm()
 
     def _update_sensor(self, sensor: str, state: SensorState, value: int, timestamp: float) -> None:
         """Обновить состояние одного датчика (нарастающий/спадающий фронт)."""
@@ -179,7 +186,7 @@ class PassageDetector:
             if self._inner.active and self._outer.active and elapsed > self._blockage_timeout:
                 self._emit("completed", "blockage", now - self._first_time)
                 self._reset()
-                self.disarm()
+                self._await_clear = True
                 return
 
             if elapsed > self._passage_timeout and not self._second_active():
@@ -204,6 +211,7 @@ class PassageDetector:
             self._armed_direction = direction
             self._first_sensor = None
             self._first_time = 0.0
+            self._await_clear = False
             self._ignore_falling = {
                 "inner" if self._inner.active else None,
                 "outer" if self._outer.active else None,
@@ -216,6 +224,7 @@ class PassageDetector:
         with self._lock:
             self._armed_direction = None
             self._ignore_falling = set()
+            self._await_clear = False
         logger.debug(f"[PassageDetector {self._zone}] disarmed")
 
     def _emit(self, event_type: str, direction: str, duration: float) -> None:

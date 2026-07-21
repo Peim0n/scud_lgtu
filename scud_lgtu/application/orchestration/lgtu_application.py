@@ -31,14 +31,14 @@ from typing import Any, Optional
 from scud_lgtu.domain.turnstile.services.turnstile import TurnstileState
 from scud_lgtu.domain.access.ports.ports import Actuator
 from scud_lgtu.domain.access.services.services import AccessPolicy, PassageTracker
-from scud_lgtu.domain.common.events.events import QrRead, CardRead, MuxInputChanged, PassageDetected, PassageStarted
+from scud_lgtu.domain.common.events.events import QrRead, CardRead, MuxInputChanged, PassageDetected, PassageStarted, PassageSensorsCleared
 from scud_lgtu.domain.common.models.models import Credential, OutputCommand
 from scud_lgtu.domain.common.enums.enums import TokenTypeEnum
 from scud_lgtu.application.events.event_bus import EventBus
 from scud_lgtu.application.services.passage_service import PassageService
 from scud_lgtu.application.services.sync_service import SyncService
 from scud_lgtu.application.handlers.credential import handle_credential
-from scud_lgtu.application.handlers.passage import handle_passage_detected, handle_passage_started
+from scud_lgtu.application.handlers.passage import handle_passage_detected, handle_passage_started, handle_passage_cleared
 from scud_lgtu.application.handlers.mux import handle_mux_input_changed
 from scud_lgtu.application.handlers.alarm import handle_alarm_changed
 from scud_lgtu.application.handlers.button import handle_button_pressed
@@ -124,6 +124,7 @@ class LGTUApplication:
             e, self._turnstile, self._passage_tracker, self._event_bus, self._passage_service, self._devices
         ))
         self._event_bus.subscribe("PassageStarted", lambda e: handle_passage_started(e, self._turnstile))
+        self._event_bus.subscribe("PassageSensorsCleared", lambda e: handle_passage_cleared(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(e, self._event_bus, self._turnstile))
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe("ButtonPressed", lambda e: handle_button_pressed(e, self._turnstile, self._event_bus, self._devices))
@@ -302,6 +303,9 @@ class LGTUApplication:
                         first_sensor=scud_event.payload.get("outer_name") if direction == "in" else scud_event.payload.get("inner_name")
                     )
                     logger.info(f"Passage Started event: {event}")
+                elif signal_event == "cleared":
+                    event = PassageSensorsCleared(zone=zone)
+                    logger.info(f"Passage Sensors Cleared event: {event}")
                 else:
                     event = PassageDetected(
                         direction=direction,

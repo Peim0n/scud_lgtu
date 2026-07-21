@@ -62,6 +62,12 @@ class PassageStarted:
 
 
 @dataclass
+class PassageSensorsCleared:
+    """Событие освобождения датчиков прохода (после заслона)."""
+    zone: str
+
+
+@dataclass
 class OutputCommandsGenerated:
     """Событие генерации команд управления."""
     commands: List[OutputCommand]
