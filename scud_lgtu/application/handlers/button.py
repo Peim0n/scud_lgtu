@@ -41,8 +41,10 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
         logger.error(f"Кнопка {event.button_id} не имеет action")
         return
 
+    is_pressed = not event.state
+
     if action == "shift":
-        if event.state:
+        if is_pressed:
             _shift_state["pressed"] = True
             _shift_state["used"] = False
             _shift_state["press_time"] = time()
@@ -59,14 +61,13 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
             _shift_state["used"] = False
         return
 
-    if event.state:
+    if is_pressed:
         commands = _handle_button_press(action, turnstile)
         if commands:
             event_bus.publish(OutputCommandsGenerated(commands=commands))
-    else:
-        if action in ("open_entry", "open_exit"):
-            turnstile.start_open_timer()
-            logger.info(f"Кнопка {event.button_id}: отжатие, запущен таймер закрытия")
+    elif action in ("open_entry", "open_exit"):
+        turnstile.start_open_timer()
+        logger.info(f"Кнопка {event.button_id}: отжатие, запущен таймер закрытия")
 
 
 def _handle_button_press(action: str, turnstile) -> list:
