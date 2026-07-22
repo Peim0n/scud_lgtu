@@ -109,9 +109,10 @@ class TurnstileState:
             TurnstileStateEnum.UNLOCKED_EXIT,
         ):
             return True
-        if self._current_state == TurnstileStateEnum.ENTRY_OPEN and direction == DirectionEnum.IN:
-            return True
-        if self._current_state == TurnstileStateEnum.EXIT_OPEN and direction == DirectionEnum.OUT:
+        if self._current_state in (
+            TurnstileStateEnum.ENTRY_OPEN,
+            TurnstileStateEnum.EXIT_OPEN,
+        ):
             return True
         return False
 

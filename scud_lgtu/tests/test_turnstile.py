@@ -77,6 +77,22 @@ def test_close_from_entry_open(turnstile):
     assert any(cmd.name == "entry_relay" and not cmd.state for cmd in commands)
 
 
+def test_switch_from_entry_open_to_exit_open(turnstile):
+    turnstile.open_entry(start_timer=True)
+    commands = turnstile.open_exit(start_timer=False)
+    assert turnstile.current_state == TurnstileStateEnum.EXIT_OPEN
+    assert any(cmd.name == "entry_relay" and not cmd.state for cmd in commands)
+    assert any(cmd.name == "exit_relay" and cmd.state for cmd in commands)
+
+
+def test_switch_from_exit_open_to_entry_open(turnstile):
+    turnstile.open_exit(start_timer=True)
+    commands = turnstile.open_entry(start_timer=False)
+    assert turnstile.current_state == TurnstileStateEnum.ENTRY_OPEN
+    assert any(cmd.name == "exit_relay" and not cmd.state for cmd in commands)
+    assert any(cmd.name == "entry_relay" and cmd.state for cmd in commands)
+
+
 def test_auto_close_after_timeout(turnstile):
     turnstile.open_entry(start_timer=True)
     turnstile._open_since = 0.0
