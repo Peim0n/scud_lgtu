@@ -238,6 +238,7 @@ timings:
   relay_open_duration_s: 7.0
   indicator_duration_s: 2.0
   button_timer_duration_s: 7.0
+  button_debounce_s: 0.05
   shift_short_press_max_s: 0.5
   post_blockage_safety_s: 1.0
   beep_signal_duration_s: 0.05

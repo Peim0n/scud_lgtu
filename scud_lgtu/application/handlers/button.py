@@ -6,6 +6,8 @@
 - кнопку Shift (button_3) для перехода в разблокированные режимы;
 - короткое нажатие Shift для закрытия.
 """
+from time import monotonic
+
 from scud_lgtu.domain.common.events.events import ButtonPressed, OutputCommandsGenerated
 from scud_lgtu.domain.turnstile.services.turnstile import TurnstileStateEnum
 import logging
@@ -15,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Состояние Shift-кнопки между событиями нажатия/отжатия
 _shift_state = {"pressed": False, "used": False}
+_button_pressed_at: dict[str, float] = {}
 
 
 def _find_button_config(devices: dict, button_id: str):
@@ -25,7 +28,13 @@ def _find_button_config(devices: dict, button_id: str):
     return None
 
 
-def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: dict) -> None:
+def handle_button_pressed(
+    event: ButtonPressed,
+    turnstile,
+    event_bus,
+    devices: dict,
+    debounce_s: float,
+) -> None:
     """Обработать событие нажатия/отжатия кнопки через TurnstileState."""
     global _shift_state
     logger.info(f"Button event: button_id={event.button_id}, state={event.state}")
@@ -42,26 +51,36 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
 
     is_pressed = event.state
 
-    if action == "shift":
-        if is_pressed:
+    if is_pressed:
+        _button_pressed_at[event.button_id] = monotonic()
+        if action == "shift":
             _shift_state["pressed"] = True
             _shift_state["used"] = False
             logger.info(f"Кнопка {event.button_id}: Shift нажат")
-        else:
-            if _shift_state["pressed"] and not _shift_state["used"]:
-                commands = turnstile.close()
-                if commands:
-                    event_bus.publish(OutputCommandsGenerated(commands=commands))
-                    logger.info(f"Кнопка {event.button_id}: Shift — закрытие")
-            _shift_state["pressed"] = False
-            _shift_state["used"] = False
         return
 
-    if is_pressed:
-        commands = _handle_button_press(action, turnstile)
-        if commands:
-            event_bus.publish(OutputCommandsGenerated(commands=commands))
-    elif action in ("open_entry", "open_exit"):
+    pressed_at = _button_pressed_at.pop(event.button_id, None)
+    if pressed_at is None or monotonic() - pressed_at < debounce_s:
+        if action == "shift":
+            _shift_state["pressed"] = False
+            _shift_state["used"] = False
+        logger.debug(f"Кнопка {event.button_id}: импульс короче debounce_s={debounce_s}")
+        return
+
+    if action == "shift":
+        if _shift_state["pressed"] and not _shift_state["used"]:
+            commands = turnstile.close()
+            if commands:
+                event_bus.publish(OutputCommandsGenerated(commands=commands))
+                logger.info(f"Кнопка {event.button_id}: Shift — закрытие")
+        _shift_state["pressed"] = False
+        _shift_state["used"] = False
+        return
+
+    commands = _handle_button_press(action, turnstile)
+    if commands:
+        event_bus.publish(OutputCommandsGenerated(commands=commands))
+    if action in ("open_entry", "open_exit"):
         turnstile.start_open_timer()
         logger.info(f"Кнопка {event.button_id}: отжатие, запущен таймер закрытия")
 

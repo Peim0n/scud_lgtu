@@ -129,7 +129,16 @@ class LGTUApplication:
         self._event_bus.subscribe("PassageSensorsCleared", lambda e: handle_passage_cleared(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(e, self._event_bus, self._turnstile))
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile, self._event_bus))
-        self._event_bus.subscribe("ButtonPressed", lambda e: handle_button_pressed(e, self._turnstile, self._event_bus, self._devices))
+        self._event_bus.subscribe(
+            "ButtonPressed",
+            lambda e: handle_button_pressed(
+                e,
+                self._turnstile,
+                self._event_bus,
+                self._devices,
+                self._timings["button_debounce_s"],
+            ),
+        )
         self._event_bus.subscribe("AdminCommand", lambda e: handle_admin_command(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe("OutputCommandsGenerated", lambda e: self._handle_output_commands(e))
 
