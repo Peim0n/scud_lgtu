@@ -208,11 +208,9 @@ sound:
 # ── Общие системные тайминги ──
 timings:
   # GPIO / multiplexer
-  mux_poll_interval_s: 0.05
-  mux_addr_settle_s: 0.0003
+  mux_poll_interval_s: 0.02
+  mux_addr_settle_s: 0.0001
   mux_queue_timeout_s: 0.1
-  mux_queue_maxsize: 100
-  shift_queue_maxsize: 50
 
   # Wiegand
   wiegand_bit_timeout_s: 0.025
@@ -238,21 +236,16 @@ timings:
   relay_open_duration_s: 7.0
   indicator_duration_s: 2.0
   button_timer_duration_s: 7.0
-  button_debounce_s: 0.05
+  button_debounce_s: 0.025
   shift_short_press_max_s: 0.5
   post_blockage_safety_s: 1.0
   beep_signal_duration_s: 0.05
-  beep_signal_pause_s: 0.1
   open_beep_duration_s: 0.1
   deny_beep_duration_s: 0.1
   deny_beep_pause_s: 0.1
   deny_beep_count: 3
   alarm_beep_on_duration_s: 0.5
   alarm_beep_off_duration_s: 0.5
-
-  # Sensors
-  sensor_debounce_s: 0.5
-  sensor_event_timeout_s: 0.1
 
   # System / watchdog / sync / threads
   watchdog_check_interval_s: 2.0
