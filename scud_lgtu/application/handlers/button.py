@@ -6,7 +6,6 @@
 - кнопку Shift (button_3) для перехода в разблокированные режимы;
 - короткое нажатие Shift для закрытия.
 """
-from time import time
 from scud_lgtu.domain.common.events.events import ButtonPressed, OutputCommandsGenerated
 from scud_lgtu.domain.turnstile.services.turnstile import TurnstileStateEnum
 import logging
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 # Состояние Shift-кнопки между событиями нажатия/отжатия
-_shift_state = {"pressed": False, "used": False, "press_time": 0.0}
+_shift_state = {"pressed": False, "used": False}
 
 
 def _find_button_config(devices: dict, button_id: str):
@@ -47,16 +46,13 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
         if is_pressed:
             _shift_state["pressed"] = True
             _shift_state["used"] = False
-            _shift_state["press_time"] = time()
             logger.info(f"Кнопка {event.button_id}: Shift нажат")
         else:
             if _shift_state["pressed"] and not _shift_state["used"]:
-                duration = time() - _shift_state["press_time"]
-                if duration <= turnstile.shift_short_press_max:
-                    commands = turnstile.close()
-                    if commands:
-                        event_bus.publish(OutputCommandsGenerated(commands=commands))
-                        logger.info(f"Кнопка {event.button_id}: короткий Shift — закрытие")
+                commands = turnstile.close()
+                if commands:
+                    event_bus.publish(OutputCommandsGenerated(commands=commands))
+                    logger.info(f"Кнопка {event.button_id}: Shift — закрытие")
             _shift_state["pressed"] = False
             _shift_state["used"] = False
         return
