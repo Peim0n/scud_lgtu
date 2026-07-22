@@ -150,17 +150,13 @@ class LGTUApplication:
                 entry_on = output_states.get(self._turnstile.entry_relay, False) if entry_changed else None
                 exit_on = output_states.get(self._turnstile.exit_relay, False) if exit_changed else None
 
-                has_session = self._turnstile.current_token is not None
-
                 if state in ("entry_open", "exit_open"):
                     if entry_on:
-                        direction = "in" if has_session else None
-                        logger.debug(f"Arming passage detectors for entry, direction={direction}, has_session={has_session}")
-                        self._event_source.arm_passage_detectors(direction)
+                        logger.debug("Arming passage detectors for entry, direction=in")
+                        self._event_source.arm_passage_detectors("in")
                     elif exit_on:
-                        direction = "out" if has_session else None
-                        logger.debug(f"Arming passage detectors for exit, direction={direction}, has_session={has_session}")
-                        self._event_source.arm_passage_detectors(direction)
+                        logger.debug("Arming passage detectors for exit, direction=out")
+                        self._event_source.arm_passage_detectors("out")
                     elif (entry_changed and entry_on is False) or (exit_changed and exit_on is False):
                         logger.debug("Disarming passage detectors after close")
                         self._event_source.disarm_passage_detectors()
