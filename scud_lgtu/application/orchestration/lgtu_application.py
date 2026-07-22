@@ -94,6 +94,7 @@ class LGTUApplication:
         """
         self._event_source = event_source
         self._config = config
+        self._timings = config["timings"]
         self._devices = devices or {}
         self._running = False
         self._qr_decoder = qr_decoder
@@ -190,7 +191,7 @@ class LGTUApplication:
         if self._loop and self._loop.is_running():
             self._loop.call_soon_threadsafe(self._loop.stop)
         if self._loop_thread and self._loop_thread.is_alive():
-            self._loop_thread.join(timeout=2.0)
+            self._loop_thread.join(timeout=self._timings["thread_join_timeout_s"])
 
     def _get_reader_id(self, reader: str) -> str:
         """Получить reader_id из мапинга reader_names."""
@@ -385,7 +386,7 @@ class LGTUApplication:
             while self._running:
                 # Обрабатывать события от движка
                 try:
-                    scud_event = event_queue.get(timeout=0.1)
+                    scud_event = event_queue.get(timeout=self._timings["event_queue_timeout_s"])
                     logger.debug(f"Received ScudEvent from engine: {scud_event}")
                     domain_events = self._convert_scud_event_to_domain(scud_event)
 

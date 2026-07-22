@@ -79,21 +79,21 @@ class TurnstileState:
         self._deny_beep_total = int(self._resolver.get_timing("business", "deny_beep_count", timings["deny_beep_count"]))
         self._open_beep_duration = self._resolver.get_timing("business", "open_beep_duration_s", timings["open_beep_duration_s"])
         self._indicator_duration = self._resolver.get_timing("business", "indicator_duration_s", timings["indicator_duration_s"])
-        self._shift_short_press_max = self._resolver.get_timing("business", "shift_short_press_max_s", timings.get("shift_short_press_max_s", 0.5))
+        self._shift_short_press_max = self._resolver.get_timing("turnstile", "shift_short_press_max_s", timings["shift_short_press_max_s"])
 
         # Отдельные таймауты закрытия: кнопка (после отжатия), карта/QR (после открытия) и задержка после заслона
-        self._button_timeout = self._resolver.get_timing("business", "button_timer_duration_s", timings["button_timer_duration_s"])
-        self._relay_timeout = self._resolver.get_timing("business", "relay_open_duration_s", timings["relay_open_duration_s"])
-        self._post_blockage_safety = self._resolver.get_timing("business", "post_blockage_safety_s", timings.get("post_blockage_safety_s", 1.0))
+        self._button_timeout = self._resolver.get_timing("turnstile", "button_timer_duration_s", timings["button_timer_duration_s"])
+        self._relay_timeout = self._resolver.get_timing("turnstile", "relay_open_duration_s", timings["relay_open_duration_s"])
+        self._post_blockage_safety = self._resolver.get_timing("turnstile", "post_blockage_safety_s", timings["post_blockage_safety_s"])
 
-        # Загрузка бизнес-имен (без резолвинга - это ответственность Infrastructure слоя)
-        self._entry_relay = "entry_relay"
-        self._exit_relay = "exit_relay"
-        self._main_buzzer = "main_buzzer"
-        self._entry_green = "inner_indicator_success"
-        self._entry_red = "inner_indicator_fail"
-        self._exit_green = "outer_indicator_success"
-        self._exit_red = "outer_indicator_fail"
+        self._resolver.set_context("turnstile")
+        self._entry_relay = self._resolver.resolve("entry_relay")
+        self._exit_relay = self._resolver.resolve("exit_relay")
+        self._main_buzzer = self._resolver.resolve("main_buzzer")
+        self._entry_green = self._resolver.resolve("entry_green")
+        self._entry_red = self._resolver.resolve("entry_red")
+        self._exit_green = self._resolver.resolve("exit_green")
+        self._exit_red = self._resolver.resolve("exit_red")
 
         logger.info("[TurnstileState] Конфигурация загружена через ConfigResolver")
 

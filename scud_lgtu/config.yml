@@ -176,6 +176,15 @@ passage:
       outer: "sensor_2"  # Внешний датчик (выход)
 
 
+turnstile:
+  entry_relay: "entry_relay"
+  exit_relay: "exit_relay"
+  main_buzzer: "main_buzzer"
+  entry_green: "inner_indicator_success"
+  entry_red: "inner_indicator_fail"
+  exit_green: "outer_indicator_success"
+  exit_red: "outer_indicator_fail"
+
 # ── Параметры доступа ──
 # STATIC_KEY — уникален для точки доступа (16 байт в hex).
 # DYNAMIC_KEY — меняется ежедневно (16 байт в hex).
@@ -226,9 +235,9 @@ timings:
 
   # Turnstile / UI
   auth_timeout_s: 5.0
-  relay_open_duration_s: 3.0
+  relay_open_duration_s: 7.0
   indicator_duration_s: 2.0
-  button_timer_duration_s: 2.0
+  button_timer_duration_s: 7.0
   shift_short_press_max_s: 0.5
   post_blockage_safety_s: 1.0
   beep_signal_duration_s: 0.05
@@ -263,7 +272,7 @@ logging:
   level: INFO
   # Формат логов
   format: "%(asctime)s %(name)s [%(levelname)s] %(message)s"
-  
+
   # Детальная настройка по модулям - раскомментируйте для дебага
   loggers:
     # Инфраструктура (железо) - WARNING по умолчанию, DEBUG для дебага GPIO
@@ -273,23 +282,23 @@ logging:
     scud_lgtu.infrastructure.gpio.signal_reader: WARNING
     scud_lgtu.infrastructure.serial.wiegand_reader: WARNING
     scud_lgtu.infrastructure.serial.qr_codec: WARNING
-    
+
     # Доменный слой - INFO для бизнес-логики
     scud_lgtu.domain.turnstile: INFO
     scud_lgtu.domain.access: INFO
-    
+
     # Application слой - INFO для обработки событий
     scud_lgtu.application.orchestration: INFO
     scud_lgtu.application.handlers: INFO
     scud_lgtu.application.services: INFO
-    
+
     # Инфраструктура (кэш, бэкенд, хранилище) - WARNING
     scud_lgtu.infrastructure.cache: WARNING
     scud_lgtu.infrastructure.backend: WARNING
     scud_lgtu.infrastructure.persistence: WARNING
-    
+
     # ScudEngine - WARNING для внутреннего цикла
     scud_lgtu.infrastructure.core.engine: WARNING
-    
+
     # Системные логгеры
     asyncio: WARNING
