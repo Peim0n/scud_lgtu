@@ -131,13 +131,7 @@ class LGTUApplication:
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe(
             "ButtonPressed",
-            lambda e: handle_button_pressed(
-                e,
-                self._turnstile,
-                self._event_bus,
-                self._devices,
-                self._timings["button_debounce_s"],
-            ),
+            lambda e: handle_button_pressed(e, self._turnstile, self._event_bus, self._devices),
         )
         self._event_bus.subscribe("AdminCommand", lambda e: handle_admin_command(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe("OutputCommandsGenerated", lambda e: self._handle_output_commands(e))

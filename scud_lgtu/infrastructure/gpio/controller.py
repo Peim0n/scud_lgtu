@@ -653,6 +653,7 @@ class PinControllerThread:
             stop_event=self._stop_event,
             poll_interval=self._mux_poll_interval,
             addr_settle_s=self._mux_addr_settle_s,
+            button_debounce_s=self._timings["button_debounce_s"],
             event_queue=self._event_queue,
             resolver=self._resolver,
         )

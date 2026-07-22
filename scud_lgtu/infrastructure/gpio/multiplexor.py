@@ -73,6 +73,7 @@ class Multiplexer:
         stop_event: threading.Event,
         poll_interval: float,
         addr_settle_s: float,
+        button_debounce_s: float,
         event_queue: Optional[Queue] = None,
         resolver: Optional[Any] = None,
     ):
@@ -110,12 +111,15 @@ class Multiplexer:
         self._stop_event = stop_event
         self._poll_interval = poll_interval
         self._addr_settle_s = addr_settle_s
+        self._button_debounce_s = button_debounce_s
         self._event_queue = event_queue
         self._n = len(output_pins)
         # Индексы для быстрого iter: [0, 1, 2, ...]
         self._indices = list(range(self._n))
         # Кэш предыдущего состояния для дельта-фильтрации
         self._prev_state: dict = {}
+        self._stable_button_states: dict[str, int] = {}
+        self._pending_button_states: dict[str, tuple[int, float]] = {}
         self._overflow_logged = False
         self._resolver = resolver
 
@@ -135,6 +139,37 @@ class Multiplexer:
                     logger.debug(f"[Multiplexer] Мапинг: вход {addr} -> '{name}'")
         except Exception as e:
             logger.warning(f"[Multiplexer] Не удалось загрузить мапинг входов: {e}")
+
+    def _filter_debounced_button_states(self, states: dict[str, int], now: float) -> dict[str, int]:
+        """Вернуть состояния, публикуя кнопочные переходы только после debounce."""
+        filtered = states.copy()
+        for input_name, state in states.items():
+            if not input_name.startswith("button_"):
+                continue
+
+            stable_state = self._stable_button_states.get(input_name)
+            if stable_state is None:
+                self._stable_button_states[input_name] = state
+                continue
+
+            if state == stable_state:
+                self._pending_button_states.pop(input_name, None)
+                filtered[input_name] = stable_state
+                continue
+
+            pending = self._pending_button_states.get(input_name)
+            if pending is None or pending[0] != state:
+                self._pending_button_states[input_name] = (state, now)
+                filtered[input_name] = stable_state
+                continue
+
+            if now - pending[1] >= self._button_debounce_s:
+                self._stable_button_states[input_name] = state
+                self._pending_button_states.pop(input_name, None)
+                filtered[input_name] = state
+            else:
+                filtered[input_name] = stable_state
+        return filtered
 
     def _work_mux(self) -> None:
         """
@@ -176,6 +211,8 @@ class Multiplexer:
             # Используем имя входа из мапинга, если есть
             input_name = self._input_names.get(mask, f"input_{mask}")
             buf[input_name] = input_state
+
+        buf = self._filter_debounced_button_states(buf, time.monotonic())
 
         # Дельта-фильтр: отправляем только при изменении
         if buf != self._prev_state:
