@@ -15,12 +15,11 @@ from scud_lgtu.domain.common.models.models import AuthSession
 from scud_lgtu.domain.common.enums.enums import DirectionEnum
 from scud_lgtu.application.handlers.common import handle_credential_common
 import logging
-import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_credential(
+def handle_credential(
     event: CardRead | QrRead,
     turnstile,
     access_policy,
@@ -29,40 +28,18 @@ async def handle_credential(
     devices: dict,
     token_prefix: str = "cardid"
 ) -> None:
-    """
-    Обработать событие считывания учётных данных.
-
-    Parameters
-    ----------
-    event : CardRead | QrRead
-        Событие считывания карты или QR-кода
-    turnstile : TurnstileState
-        Состояние турникета для управления
-    access_policy : AccessPolicy
-        Политика доступа для проверки разрешений
-    passage_tracker : PassageTracker
-        Трекер проходов для предотвращения двойных проходов
-    event_bus : EventBus
-        Шина событий для публикации команд
-    devices : dict
-        Мапинг устройств из конфига
-    token_prefix : str
-        Префикс токена ("cardid" для карт, "maxid" для QR-кодов)
-    """
-    # Создание сессии авторизации с заданным префиксом
+    """Обработать событие считывания учётных данных."""
     session = AuthSession(
         token=f"{token_prefix}:{event.credential.value}",
         direction=DirectionEnum.IN,
-        user_id=None  # Будет заполнено в handle_credential_common
+        user_id=None,
     )
-
-    # Используем общий обработчик для карт и QR-кодов
-    await handle_credential_common(
+    handle_credential_common(
         event=event,
         turnstile=turnstile,
         access_policy=access_policy,
         passage_tracker=passage_tracker,
         event_bus=event_bus,
         session=session,
-        devices=devices
+        devices=devices,
     )

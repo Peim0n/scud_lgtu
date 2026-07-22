@@ -1,32 +1,15 @@
 """
-Детектор проходов по двум датчикам, подключенным к мультиплексору системы СКУД.
+Простой детектор факта прохода по двум сенсорам.
 
-Этот модуль реализует детектор прохода по двум входам мультиплексора. Каждая зона прохода
-имеет два датчика: INNER (ближе к зданию) и OUTER (ближе к улице). INNER → OUTER = проход
-ВЫХОД (out), OUTER → INNER = проход ВХОД (in). MuxWorker периодически считывает состояния
-всех адресов мультиплексора, PassageDetector получает эти состояния и отслеживает изменения.
+- inner (sensor_1) = вход (in)
+- outer (sensor_2) = выход (out)
 
-Классы
--------
-- SensorState: состояние одного датчика
-- PassageDetector: детектор прохода по двум входам мультиплексора
-
-Методы PassageDetector
-----------------------
-- __init__: инициализировать детектор прохода для одной зоны
-- on_mux_state: обработать новое состояние мультиплексора
-- _update_sensor: обновить состояние одного датчика (rising/falling)
-- _maybe_start: запомнить первый сработавший датчик
-- _check_completion: проверить завершение прохода по второму датчику
-- check_timeouts: проверить таймауты: разворот или заслон
-- _second_active: проверить, активен ли второй по порядку датчик
-- _reset: сбросить текущее состояние прохода
-- _emit: опубликовать событие прохода в event_queue
+При спадающем фронте сенсора, если направление совпадает с ожидаемым,
+публикуется событие PassageDetected.
 """
 
 import logging
 import threading
-import time
 from dataclasses import dataclass
 from typing import Optional
 from queue import Queue, Full
@@ -38,26 +21,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SensorState:
-    """Состояние одного датчика."""
+    """Состояние одного сенсора."""
     active: bool = False
-    start_time: float = 0.0
 
 
 class PassageDetector:
-    """
-    Детектор прохода по двум входам мультиплексора.
-
-    Parameters
-    ----------
-    zone_label : str
-        Название зоны прохода.
-    inner_name : str
-        Имя входа мультиплексора внутреннего датчика (из config.mux_inputs).
-    outer_name : str
-        Имя входа мультиплексора внешнего датчика (из config.mux_inputs).
-    event_queue : queue.Queue
-        Общая очередь событий ScudEngine.
-    """
+    """Детектор факта прохода по сенсорам мультиплексора."""
 
     def __init__(
         self,
@@ -68,162 +37,72 @@ class PassageDetector:
         passage_timeout: float,
         blockage_timeout: float,
     ):
-        """Инициализировать детектор прохода для одной зоны."""
         self._zone = zone_label
         self._inner_name = inner_name
         self._outer_name = outer_name
         self._event_queue = event_queue
+        # Таймауты больше не используются, оставлены для совместимости сигнатуры.
         self._passage_timeout = passage_timeout
         self._blockage_timeout = blockage_timeout
 
         self._inner = SensorState()
         self._outer = SensorState()
-        self._first_sensor: Optional[str] = None
-        self._first_time: float = 0.0
-
-        # Ожидаемое направление прохода ("in" | "out" | None — любое)
+        self._armed = False
         self._expected_direction: Optional[str] = None
-        # Флаг: уже сообщили о заслоне, ждём освобождения датчиков
-        self._blockage_reported: bool = False
-
         self._lock = threading.Lock()
 
     def on_mux_state(self, states: dict, timestamp: float) -> None:
-        """
-        Обработать новое состояние мультиплексора.
-
-        Parameters
-        ----------
-        states : dict
-            Словарь состояний входов мультиплексора с именами из config.mux_inputs.
-            Ключи - имена входов (например, "sensor_inner", "sensor_outer").
-            Значения — 0 или 1.
-        timestamp : float
-            Время получения состояния.
-        """
+        """Обработать новое состояние мультиплексора."""
         inner_val = states.get(self._inner_name, 0)
         outer_val = states.get(self._outer_name, 0)
 
-        logger.debug(f"[{self._zone}] Состояние датчиков: inner={inner_val}, outer={outer_val}")
-
         with self._lock:
-            self._update_sensor("inner", self._inner, inner_val, timestamp)
-            self._update_sensor("outer", self._outer, outer_val, timestamp)
+            self._update_sensor(self._inner_name, self._inner, inner_val, timestamp)
+            self._update_sensor(self._outer_name, self._outer, outer_val, timestamp)
 
-            if self._blockage_reported and not self._inner.active and not self._outer.active:
-                self._emit("cleared", "cleared", 0.0)
-                self._reset()
-                self._disarm_nolock()
+    def _sensor_direction(self, name: str) -> str:
+        """inner = вход, outer = выход."""
+        return "in" if name == self._inner_name else "out"
 
-    def _update_sensor(self, sensor: str, state: SensorState, value: int, timestamp: float) -> None:
-        """Обновить состояние одного датчика (нарастающий/спадающий фронт)."""
-        # Инвертированная логика: 1 = нет сигнала, 0 = есть сигнал
+    def _update_sensor(self, name: str, state: SensorState, value: int, timestamp: float) -> None:
+        """Обработать фронт сенсора. Инвертированная логика: 0 = активно."""
         if not value and not state.active:
-            # Нарастающий фронт — начало импульса (датчик сработал)
             state.active = True
-            state.start_time = timestamp
-
-            if self._expected_direction is not None:
-                sensor_dir = "out" if sensor == "inner" else "in"
-                if sensor_dir != self._expected_direction:
-                    logger.debug(f"[{self._zone}] {sensor} ignored: expected {self._expected_direction}, got {sensor_dir}")
-                    return
-
-            logger.debug(f"[{self._zone}] {sensor} rising")
-            self._maybe_start(sensor, timestamp)
+            logger.debug(f"[{self._zone}] {name} rising")
         elif value and state.active:
-            # Спадающий фронт — конец импульса (датчик перестал срабатывать)
             state.active = False
-            logger.debug(f"[{self._zone}] {sensor} falling, first={self._first_sensor}")
-            self._check_completion(sensor, timestamp)
-
-    def _maybe_start(self, sensor: str, timestamp: float) -> None:
-        """Запомнить первый сработавший датчик и сообщить о начале прохода."""
-        if self._first_sensor is None:
-            self._first_sensor = sensor
-            self._first_time = timestamp
-            direction = "out" if sensor == "inner" else "in"
-            self._emit("started", direction, 0.0)
-
-    def _passage_direction(self, first_sensor: str) -> str:
-        """Направление прохода по первому сработавшему датчику."""
-        return "out" if first_sensor == "inner" else "in"
-
-    def _check_completion(self, sensor: str, timestamp: float) -> None:
-        """Проверить завершение прохода по второму датчику."""
-        if self._first_sensor is None or sensor == self._first_sensor:
-            return
-
-        direction = self._passage_direction(self._first_sensor)
-        if self._expected_direction is not None and direction != self._expected_direction:
-            self._reset()
-            return
-
-        duration = timestamp - self._first_time
-        self._emit("completed", direction, duration)
-        self._reset()
-        self._disarm_nolock()
+            logger.debug(f"[{self._zone}] {name} falling")
+            if not self._armed:
+                return
+            direction = self._sensor_direction(name)
+            if self._expected_direction is None or self._expected_direction == direction:
+                self._emit("completed", direction, timestamp)
 
     def check_timeouts(self, now: float) -> None:
-        """Проверить таймауты: разворот или заслон."""
-        with self._lock:
-            if self._first_sensor is None:
-                return
-
-            direction = self._passage_direction(self._first_sensor)
-            if self._expected_direction is not None and direction != self._expected_direction:
-                self._reset()
-                return
-
-            elapsed = now - self._first_time
-
-            if self._inner.active and self._outer.active and elapsed > self._blockage_timeout:
-                self._emit("completed", "blockage", now - self._first_time)
-                self._reset()
-                self._blockage_reported = True
-                return
-
-            if elapsed > self._passage_timeout and not self._second_active():
-                self._emit("completed", "turnback", now - self._first_time)
-                self._reset()
-                self._disarm_nolock()
-
-    def _second_active(self) -> bool:
-        """True, если второй по порядку датчик сейчас активен."""
-        if self._first_sensor == "inner":
-            return self._outer.active
-        return self._inner.active
-
-    def _reset(self) -> None:
-        """Сбросить текущее состояние прохода."""
-        self._first_sensor = None
-        self._first_time = 0.0
-
-    def _arm_nolock(self, direction: Optional[str] = None) -> None:
-        self._expected_direction = direction
-        self._first_sensor = None
-        self._first_time = 0.0
-        self._blockage_reported = False
+        """Таймауты больше не используются."""
+        pass
 
     def arm(self, direction: Optional[str] = None) -> None:
-        """Установить ожидаемое направление прохода (None — любое направление)."""
+        """Установить ожидаемое направление прохода (None — любое)."""
         with self._lock:
-            self._arm_nolock(direction)
-        logger.debug(f"[PassageDetector {self._zone}] expected_direction={direction}")
-
-    def _disarm_nolock(self) -> None:
-        self._expected_direction = None
-        self._blockage_reported = False
+            self._armed = True
+            self._expected_direction = direction
+            self._inner.active = False
+            self._outer.active = False
+        logger.debug(f"[PassageDetector {self._zone}] armed direction={direction}")
 
     def disarm(self) -> None:
         """Снять ожидание направления."""
         with self._lock:
-            self._disarm_nolock()
+            self._armed = False
+            self._expected_direction = None
+            self._inner.active = False
+            self._outer.active = False
         logger.debug(f"[PassageDetector {self._zone}] disarmed")
 
     def _emit(self, event_type: str, direction: str, duration: float) -> None:
         """Опубликовать событие прохода в event_queue."""
-        logger.info("[%s] Проход %s: %s, %.3f с", self._zone, event_type, direction, duration)
+        logger.info("[%s] Проход %s: %s", self._zone, event_type, direction)
         if self._event_queue is None:
             return
         try:
@@ -235,7 +114,7 @@ class PassageDetector:
                         "event": event_type,
                         "zone": self._zone,
                         "direction": direction,
-                        "duration": duration,
+                        "duration": 0.0,
                         "inner_name": self._inner_name,
                         "outer_name": self._outer_name,
                     },

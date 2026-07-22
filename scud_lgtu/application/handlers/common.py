@@ -1,58 +1,28 @@
 """
 Общие обработчики событий системы СКУД.
 
-Этот модуль реализует общий обработчик для учётных данных (карты и QR-коды).
-Обработчик проверяет доступ через AccessPolicy, отслеживает проход через PassageTracker
-и управляет турникетом через TurnstileState. Использует конфигурацию устройств
-для динамического определения индикаторов, биперов и направлений.
-
-Функции
--------
-- handle_credential_common: общий обработчик для учётных данных (карты и QR-коды)
+Синхронный обработчик для учётных данных (карты и QR-коды).
 """
 from scud_lgtu.domain.common.models.models import AuthSession
 from scud_lgtu.domain.common.enums.enums import DirectionEnum
+from scud_lgtu.domain.common.events.events import OutputCommandsGenerated
 import logging
-import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_credential_common(event, turnstile, access_policy, passage_tracker, event_bus, session, devices: dict) -> None:
-    """
-    Общий обработчик для учётных данных (карты и QR-коды).
-
-    Parameters
-    ----------
-    event : CardRead or QrRead
-        Событие считывания учётных данных
-    turnstile : TurnstileState
-        Состояние турникета для управления
-    access_policy : AccessPolicy
-        Политика доступа для проверки разрешений
-    passage_tracker : PassageTracker
-        Трекер проходов для предотвращения двойных проходов
-    event_bus : EventBus
-        Шина событий для публикации команд
-    session : AuthSession
-        Сессия авторизации с токеном
-    devices : dict
-        Мапинг устройств из конфига
-    """
+def handle_credential_common(event, turnstile, access_policy, passage_tracker, event_bus, session, devices: dict) -> None:
+    """Общий обработчик для учётных данных (карты и QR-коды)."""
     logger.debug(f"Обработка события учётных данных: {event}")
 
-    # reader_id теперь логическое имя устройства (entry_reader, exit_reader, qr_reader)
     reader_id = event.reader_id
     readers = devices.get("readers", {})
-
-    # Находим конфигурацию считывателя по логическому имени
     reader_config = readers.get(reader_id)
 
     if not reader_config:
         logger.error(f"Считыватель не найден в конфиге: {reader_id}")
         return
 
-    # Получаем индикаторы, бипер и направление из конфига
     indicator_success = reader_config.get("indicator_success")
     indicator_fail = reader_config.get("indicator_fail")
     direction = reader_config.get("direction")
@@ -61,42 +31,28 @@ async def handle_credential_common(event, turnstile, access_policy, passage_trac
         logger.error(f"Неполная конфигурация считывателя: {reader_id}")
         return
 
-    # Проверка доступа
     decision = access_policy.check(event.credential)
     logger.info(f"Результат проверки доступа: allowed={decision.allowed}, reason={decision.reason}, user_id={decision.user_id}")
 
+    commands = []
     if decision.allowed:
-        # Обновляем user_id в сессии
         session.user_id = decision.user_id
-
         direction_enum = DirectionEnum.IN if direction == "entry" else DirectionEnum.OUT
 
-        # Проверка на двойной проход в том же направлении
-        if passage_tracker.is_double_pass(session.token, direction_enum):
-            logger.warning(f"Двойной проход: {session.token}, direction={direction}")
-            asyncio.create_task(turnstile.deny_beep_sequence(event_bus))
-            if indicator_fail:
-                asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_fail, True, turnstile.indicator_duration))
-            return
-
-        # Отслеживание прохода
-        passage_tracker.track(session)
-
-        # Привязать токен/пользователя к текущему открытию для логирования
         turnstile.set_current_session(session.token, session.user_id)
 
-        # Открытие турникета через background task (таймер запускается сразу)
         if direction == "entry":
-            asyncio.create_task(turnstile.open_entry_async(event_bus, start_timer=True))
+            commands.extend(turnstile.open_entry(start_timer=True))
         else:
-            asyncio.create_task(turnstile.open_exit_async(event_bus, start_timer=True))
-        logger.debug(f"Открытие турникета через async task (direction={direction})")
+            commands.extend(turnstile.open_exit(start_timer=True))
 
-        # Включить зеленый индикатор на configured duration
-        asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_success, True, turnstile.indicator_duration))
+        commands.extend(turnstile.set_indicator(indicator_success, True, turnstile.indicator_duration))
+        logger.info(f"Доступ разрешён: открытие {direction}")
     else:
-        # Отказ в доступе - 3 коротких писка и красный индикатор
         logger.info(f"Отказ в доступе: {decision.reason}")
-        asyncio.create_task(turnstile.deny_beep_sequence(event_bus))
+        commands.extend(turnstile.deny_beep())
         if indicator_fail:
-            asyncio.create_task(turnstile.set_indicator_async(event_bus, indicator_fail, True, turnstile.indicator_duration))
+            commands.extend(turnstile.set_indicator(indicator_fail, True, turnstile.indicator_duration))
+
+    if commands:
+        event_bus.publish(OutputCommandsGenerated(commands=commands))

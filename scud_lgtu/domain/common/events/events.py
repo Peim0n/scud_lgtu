@@ -44,6 +44,12 @@ class AlarmChanged:
 
 
 @dataclass
+class AdminCommand:
+    """Событие админ-команды."""
+    command: str
+
+
+@dataclass
 class PassageDetected:
     """Событие обнаружения прохода."""
     direction: str

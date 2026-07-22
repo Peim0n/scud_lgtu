@@ -164,6 +164,10 @@ devices:
       label: "button_2"
       action: "open_exit"
 
+    shift_button:
+      label: "button_3"
+      action: "shift"
+
 # ── Зоны прохода ──
 passage:
   zones:
@@ -225,6 +229,7 @@ timings:
   relay_open_duration_s: 3.0
   indicator_duration_s: 2.0
   button_timer_duration_s: 2.0
+  shift_short_press_max_s: 0.5
   post_blockage_safety_s: 1.0
   beep_signal_duration_s: 0.05
   beep_signal_pause_s: 0.1

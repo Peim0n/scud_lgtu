@@ -31,7 +31,7 @@ from typing import Any, Optional
 from scud_lgtu.domain.turnstile.services.turnstile import TurnstileState
 from scud_lgtu.domain.access.ports.ports import Actuator
 from scud_lgtu.domain.access.services.services import AccessPolicy, PassageTracker
-from scud_lgtu.domain.common.events.events import QrRead, CardRead, MuxInputChanged, PassageDetected, PassageStarted, PassageSensorsCleared, OutputCommandsGenerated
+from scud_lgtu.domain.common.events.events import QrRead, CardRead, MuxInputChanged, PassageDetected, PassageStarted, PassageSensorsCleared, OutputCommandsGenerated, AdminCommand
 from scud_lgtu.domain.common.models.models import Credential, OutputCommand
 from scud_lgtu.domain.common.enums.enums import TokenTypeEnum
 from scud_lgtu.application.events.event_bus import EventBus
@@ -42,6 +42,7 @@ from scud_lgtu.application.handlers.passage import handle_passage_detected, hand
 from scud_lgtu.application.handlers.mux import handle_mux_input_changed
 from scud_lgtu.application.handlers.alarm import handle_alarm_changed
 from scud_lgtu.application.handlers.button import handle_button_pressed
+from scud_lgtu.application.handlers.admin import handle_admin_command
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,7 @@ class LGTUApplication:
         self._event_bus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(e, self._event_bus, self._turnstile))
         self._event_bus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe("ButtonPressed", lambda e: handle_button_pressed(e, self._turnstile, self._event_bus, self._devices))
+        self._event_bus.subscribe("AdminCommand", lambda e: handle_admin_command(e, self._turnstile, self._event_bus))
         self._event_bus.subscribe("OutputCommandsGenerated", lambda e: self._handle_output_commands(e))
 
     def _handle_output_commands(self, event) -> None:
@@ -139,28 +141,31 @@ class LGTUApplication:
             for cmd in event.commands:
                 output_states[cmd.name] = cmd.state
 
-            # Поставить/снять детекторы прохода в зависимости от открытого направления.
-            # Реагируем только на команды реле; служебные команды (например, выключение бипера) не трогают охрану.
+            # Поставить/снять детекторы прохода только для разовых открытий.
+            # В разблокированном режиме сенсоры не закрывают дверь, поэтому охрану не включаем.
             if self._event_source is not None and hasattr(self._event_source, "arm_passage_detectors"):
+                state = self._turnstile.current_state
                 entry_changed = self._turnstile.entry_relay in output_states
                 exit_changed = self._turnstile.exit_relay in output_states
                 entry_on = output_states.get(self._turnstile.entry_relay, False) if entry_changed else None
                 exit_on = output_states.get(self._turnstile.exit_relay, False) if exit_changed else None
 
-                # Если открытие было по кнопке — у нас нет активной сессии, разрешаем любое направление.
-                # При открытии картой/QR ожидаем направление соответствующего считывателя.
                 has_session = self._turnstile.current_token is not None
 
-                if entry_on:
-                    direction = "in" if has_session else None
-                    logger.debug(f"Arming passage detectors for entry, direction={direction}, has_session={has_session}")
-                    self._event_source.arm_passage_detectors(direction)
-                elif exit_on:
-                    direction = "out" if has_session else None
-                    logger.debug(f"Arming passage detectors for exit, direction={direction}, has_session={has_session}")
-                    self._event_source.arm_passage_detectors(direction)
-                elif (entry_changed and entry_on is False) or (exit_changed and exit_on is False):
-                    logger.debug("Disarming passage detectors after close")
+                if state in ("entry_open", "exit_open"):
+                    if entry_on:
+                        direction = "in" if has_session else None
+                        logger.debug(f"Arming passage detectors for entry, direction={direction}, has_session={has_session}")
+                        self._event_source.arm_passage_detectors(direction)
+                    elif exit_on:
+                        direction = "out" if has_session else None
+                        logger.debug(f"Arming passage detectors for exit, direction={direction}, has_session={has_session}")
+                        self._event_source.arm_passage_detectors(direction)
+                    elif (entry_changed and entry_on is False) or (exit_changed and exit_on is False):
+                        logger.debug("Disarming passage detectors after close")
+                        self._event_source.disarm_passage_detectors()
+                elif (entry_changed or exit_changed) and not entry_on and not exit_on:
+                    logger.debug("Disarming passage detectors (not in single-open state)")
                     self._event_source.disarm_passage_detectors()
 
             # Отправляем состояния в сдвиговый регистр через порт Actuator
