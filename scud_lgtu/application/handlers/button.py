@@ -41,7 +41,7 @@ def handle_button_pressed(event: ButtonPressed, turnstile, event_bus, devices: d
         logger.error(f"Кнопка {event.button_id} не имеет action")
         return
 
-    is_pressed = not event.state
+    is_pressed = event.state
 
     if action == "shift":
         if is_pressed:
