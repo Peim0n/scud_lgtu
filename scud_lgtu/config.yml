@@ -274,7 +274,7 @@ logging:
     scud_lgtu.infrastructure.gpio.shift_register: WARNING
     scud_lgtu.infrastructure.gpio.multiplexor: WARNING
     scud_lgtu.infrastructure.gpio.signal_reader: WARNING
-    scud_lgtu.infrastructure.serial.wiegand_reader: WARNING
+    scud_lgtu.infrastructure.gpio.wiegand_reader: WARNING
     scud_lgtu.infrastructure.serial.qr_codec: WARNING
 
     # Доменный слой - INFO для бизнес-логики

@@ -34,7 +34,7 @@ from scud_lgtu.infrastructure.config import load as load_config
 from scud_lgtu.infrastructure.config.module_resolver import ModuleResolver
 from scud_lgtu.infrastructure.gpio.controller import GpiodPinController, PinControllerThread, build_pin_map
 from scud_lgtu.infrastructure.serial.reader import BackgroundSerialReader
-from scud_lgtu.infrastructure.serial.wiegand_reader import WeigandReader
+from scud_lgtu.infrastructure.gpio.wiegand_reader import WeigandReader
 
 logger = logging.getLogger(__name__)
 

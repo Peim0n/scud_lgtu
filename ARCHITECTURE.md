@@ -112,13 +112,13 @@ LGTU Controller — это система контроля доступа (СК�
 | `shift_register.py` | `ShiftRegister` — вывод битовой маски в сдвиговый регистр |
 | `signal_reader.py` | Чтение сигналов с GPIO |
 | `actuator.py` | `ShiftRegisterActuator` — адаптер `Actuator` для сдвигового регистра |
+| `wiegand_reader.py` | `WiegandReader` — чтение карт по Wiegand-интерфейсу |
 
-### 3.3. Serial / Wiegand (`scud_lgtu/infrastructure/serial/`)
+### 3.3. Serial (`scud_lgtu/infrastructure/serial/`)
 
 | Модуль | Назначение |
 |--------|------------|
 | `reader.py` | `BackgroundSerialReader` — фоновое чтение из Serial-порта |
-| `wiegand_reader.py` | `WiegandReader` — чтение карт по Wiegand-интерфейсу |
 | `qr_codec.py` | `QRDecoder` — декодирование URL QR-кодов с проверкой подписи |
 
 ### 3.4. Кэш и хранение
@@ -357,8 +357,8 @@ LGTU Controller — это система контроля доступа (СК�
 
 ### 10.4. Что трогать не нужно
 
-- `scud_lgtu/infrastructure/gpio/` — драйверы GPIO/мультиплексора/сдвигового регистра.
-- `scud_lgtu/infrastructure/serial/` и `wiegand_reader.py` — низкоуровневое чтение карт/QR.
+- `scud_lgtu/infrastructure/gpio/` — драйверы GPIO/мультиплексора/сдвигового регистра и Wiegand-считывателя.
+- `scud_lgtu/infrastructure/serial/` — низкоуровневое чтение QR/Serial.
 - `scud_lgtu/infrastructure/backend/` — HTTP-клиент к серверу.
 
 Изменения в этих модулях требуются только при смене железа или протокола.

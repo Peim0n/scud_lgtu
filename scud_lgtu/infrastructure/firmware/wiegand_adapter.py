@@ -4,7 +4,7 @@
 Этот модуль реализует интерфейс WiegandFirmware используя WeigandReader.
 """
 
-from scud_lgtu.infrastructure.serial.wiegand_reader import WeigandReader
+from scud_lgtu.infrastructure.gpio.wiegand_reader import WeigandReader
 from scud_lgtu.infrastructure.firmware.device_abstraction import WiegandFirmware
 
 

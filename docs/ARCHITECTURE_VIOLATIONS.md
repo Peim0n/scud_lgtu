@@ -425,7 +425,7 @@ asyncio.create_task(
 
 ```python
 from scud_lgtu.infrastructure.gpio.controller import GpiodPinController, PinControllerThread
-from scud_lgtu.infrastructure.serial.wiegand_reader import WeigandReader
+from scud_lgtu.infrastructure.gpio.wiegand_reader import WeigandReader
 from scud_lgtu.infrastructure.serial.reader import BackgroundSerialReader
 from scud_lgtu.infrastructure.persistence.passage_detector import PassageDetector
 ...
@@ -770,7 +770,7 @@ self.cache = self.application._cache
 ## Нарушение 18: В Infrastructure-классах захардкожены тайминги, пины, пути, URL и команды
 
 ### Файлы
-`scud_lgtu/infrastructure/serial/wiegand_reader.py:92-95`
+`scud_lgtu/infrastructure/gpio/wiegand_reader.py:92-95`
 `scud_lgtu/infrastructure/serial/reader.py:67`
 `scud_lgtu/infrastructure/gpio/multiplexor.py:34,80-81`
 `scud_lgtu/infrastructure/gpio/controller.py:59-82`
@@ -1147,7 +1147,7 @@ hardware:
   pin_controller_thread: scud_lgtu.infrastructure.gpio.controller.PinControllerThread
   shift_register: scud_lgtu.infrastructure.gpio.shift_register.ShiftRegister
   multiplexer: scud_lgtu.infrastructure.gpio.multiplexor.Multiplexer
-  wiegand_reader: scud_lgtu.infrastructure.serial.wiegand_reader.WeigandReader
+  wiegand_reader: scud_lgtu.infrastructure.gpio.wiegand_reader.WeigandReader
   serial_reader: scud_lgtu.infrastructure.serial.reader.BackgroundSerialReader
   passage_detector: scud_lgtu.infrastructure.persistence.passage_detector.PassageDetector
 
