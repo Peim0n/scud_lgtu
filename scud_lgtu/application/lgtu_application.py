@@ -85,11 +85,25 @@ class _CommandRunner:
     async def _schedule(self, command: Command) -> None:
         meta = command.meta
         for name in meta.conflicts:
-            # Если новая команда имеет тот же state_label, что и конфликтующая, пропускаем cleanup
+            # Пропускаем cleanup при переходе между состояниями с тем же направлением
             skip_cleanup = False
             old_command = self._commands.get(name)
-            if old_command is not None and old_command.meta.state_label == meta.state_label:
-                skip_cleanup = True
+            if old_command is not None:
+                # unlocked_entry должен пропускать cleanup для entry_open
+                if meta.state_label == "unlocked_entry" and old_command.meta.state_label == "entry_open":
+                    skip_cleanup = True
+                # unlocked_exit должен пропускать cleanup для exit_open
+                elif meta.state_label == "unlocked_exit" and old_command.meta.state_label == "exit_open":
+                    skip_cleanup = True
+                # entry_open должен пропускать cleanup для unlocked_entry
+                elif meta.state_label == "entry_open" and old_command.meta.state_label == "unlocked_entry":
+                    skip_cleanup = True
+                # exit_open должен пропускать cleanup для unlocked_exit
+                elif meta.state_label == "exit_open" and old_command.meta.state_label == "unlocked_exit":
+                    skip_cleanup = True
+                # Если state_label одинаковый, тоже пропускаем
+                elif old_command.meta.state_label == meta.state_label:
+                    skip_cleanup = True
             await self._stop_and_wait(name, skip_cleanup=skip_cleanup)
         # Если команда с таким же именем уже выполняется, обновляем её вместо остановки
         old_command = self._commands.get(meta.name)

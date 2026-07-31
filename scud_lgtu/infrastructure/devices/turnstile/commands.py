@@ -197,7 +197,7 @@ class UnlockEntryCommand(_RelayCommand):
     """Постоянно открытый вход."""
     meta = CommandMeta(
         name="unlock_entry",
-        conflicts=("open_exit", "unlock_exit"),
+        conflicts=("open_entry", "open_exit", "unlock_exit"),
         state_label="unlocked_entry",
         end_state_label="idle",
     )
@@ -231,7 +231,7 @@ class UnlockExitCommand(_RelayCommand):
     """Постоянно открытый выход."""
     meta = CommandMeta(
         name="unlock_exit",
-        conflicts=("open_entry", "unlock_entry"),
+        conflicts=("open_entry", "open_exit", "unlock_entry"),
         state_label="unlocked_exit",
         end_state_label="idle",
     )
