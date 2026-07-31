@@ -499,9 +499,8 @@ class LGTUApplication:
         elif event_type == "input_signal":
             # Обработка событий от датчиков прохода
             sensor = scud_event.payload.get("sensor")
-            duration = scud_event.payload.get("duration")
             signal_event = scud_event.payload.get("event", "completed")
-            if sensor and duration is not None:
+            if sensor:
                 # Определяем направление и зону по имени сенсора из passage_zones
                 direction = None
                 zone = None
@@ -518,11 +517,11 @@ class LGTUApplication:
                     event = PassageDetected(
                         direction=direction,
                         zone=zone,
-                        duration=duration,
+                        duration=0.0,  # Мультиплексор не измеряет длительность
                         token=self._device.current_token,
                         user_id=self._device.current_user_id
                     )
-                    logger.info(f"Passage Detected event: {event}")
+                    logger.info(f"[PassageDetected] direction={direction}, zone={zone}, token={self._device.current_token}, user_id={self._device.current_user_id}")
                     return event
 
         logger.debug(f"Unknown event type: {scud_event.type}")

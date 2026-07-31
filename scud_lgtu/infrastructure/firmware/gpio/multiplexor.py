@@ -79,7 +79,6 @@ class MuxEventMapper:
                                 payload={
                                     "event": "detected",
                                     "sensor": input_name,
-                                    "duration": 0.0,
                                 },
                             )
                         )

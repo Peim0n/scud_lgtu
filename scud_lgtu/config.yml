@@ -285,6 +285,11 @@ logging:
     scud_lgtu.application.orchestration: INFO
     scud_lgtu.application.handlers: INFO
     scud_lgtu.application.services: INFO
+    scud_lgtu.application.lgtu_application: INFO
+
+    # Команды турникета - INFO для логики прохода
+    scud_lgtu.infrastructure.devices.turnstile.commands: INFO
+    scud_lgtu.infrastructure.devices.turnstile.turnstile_device: INFO
 
     # Инфраструктура (кэш, бэкенд, хранилище) - WARNING
     scud_lgtu.infrastructure.cache: WARNING
