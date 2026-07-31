@@ -131,11 +131,12 @@ class _CommandRunner:
         if not commands:
             return
         if self._actuator is not None:
-            for cmd in commands:
-                try:
-                    self._actuator.apply(cmd)
-                except Exception as e:
-                    logger.error(f"Error applying command {cmd}: {e}")
+            # Собрать все команды в один вызов set_output_mask
+            masks = {cmd.name: cmd.state for cmd in commands}
+            try:
+                self._actuator._engine.set_output_mask(masks)
+            except Exception as e:
+                logger.error(f"Error applying commands {masks}: {e}")
 
     async def stop_all(self) -> None:
         for command in list(self._commands.values()):
