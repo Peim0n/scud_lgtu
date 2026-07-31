@@ -122,9 +122,15 @@ class TurnstileDevice(AccessDevice):
         self.current_token = event.token
         self.current_user_id = event.user_id
         if event.direction == "entry":
+            if self._mode == "entry_open":
+                # Уже открыто на вход, просто обновляем таймер
+                return OpenEntryCommand(self, self._relay_timeout)
             self._mode = "entry_open"
             logger.info(f"[TurnstileDevice] mode={self._mode}, token={event.token}, user_id={event.user_id}")
             return OpenEntryCommand(self, self._relay_timeout)
+        if self._mode == "exit_open":
+            # Уже открыто на выход, просто обновляем таймер
+            return OpenExitCommand(self, self._relay_timeout)
         self._mode = "exit_open"
         logger.info(f"[TurnstileDevice] mode={self._mode}, token={event.token}, user_id={event.user_id}")
         return OpenExitCommand(self, self._relay_timeout)
