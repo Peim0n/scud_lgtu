@@ -164,20 +164,36 @@ class TurnstileDevice:
             self._mode = "exit_open"
             return OpenExitCommand(self, self._button_timeout)
 
+        if command == "unlock_entry":
+            if self._mode == "entry_open":
+                # Переключение с разового входа на разблокированный вход
+                self._mode = "unlocked_entry"
+                return UnlockEntryCommand(self)
+            if self._mode == "unlocked_exit":
+                # Переключение с разблокированного выхода на разблокированный вход
+                self._mode = "unlocked_entry"
+                return UnlockEntryCommand(self)
+            self._mode = "unlocked_entry"
+            return UnlockEntryCommand(self)
+
+        if command == "unlock_exit":
+            if self._mode == "exit_open":
+                # Переключение с разового выхода на разблокированный выход
+                self._mode = "unlocked_exit"
+                return UnlockExitCommand(self)
+            if self._mode == "unlocked_entry":
+                # Переключение с разблокированного входа на разблокированный выход
+                self._mode = "unlocked_exit"
+                return UnlockExitCommand(self)
+            self._mode = "unlocked_exit"
+            return UnlockExitCommand(self)
+
         if command == "start_close_timer":
             return DelayedCloseCommand(self, self._button_timeout)
 
         if command == "close":
             self._mode = "idle"
             return CloseCommand(self)
-
-        if command == "unlock_entry":
-            self._mode = "unlocked_entry"
-            return UnlockEntryCommand(self)
-
-        if command == "unlock_exit":
-            self._mode = "unlocked_exit"
-            return UnlockExitCommand(self)
 
         if command == "lock":
             self.locked = True
