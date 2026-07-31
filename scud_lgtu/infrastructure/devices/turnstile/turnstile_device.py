@@ -168,10 +168,9 @@ class TurnstileDevice(AccessDevice):
 
         if command == "unlock_entry":
             if self._mode == "entry_open":
-                # Переключение с разового входа на разблокированный вход (без щелчка реле)
+                # Переключение с разового входа на разблокированный вход
                 self._mode = "unlocked_entry"
-                # Возвращаем команду с флагом skip_relay=True
-                return UnlockEntryCommand(self, skip_relay=True)
+                return UnlockEntryCommand(self)
             if self._mode == "unlocked_exit":
                 # Переключение с разблокированного выхода на разблокированный вход
                 self._mode = "unlocked_entry"
@@ -188,9 +187,9 @@ class TurnstileDevice(AccessDevice):
 
         if command == "unlock_exit":
             if self._mode == "exit_open":
-                # Переключение с разового выхода на разблокированный выход (без щелчка реле)
+                # Переключение с разового выхода на разблокированный выход
                 self._mode = "unlocked_exit"
-                return UnlockExitCommand(self, skip_relay=True)
+                return UnlockExitCommand(self)
             if self._mode == "unlocked_entry":
                 # Переключение с разблокированного входа на разблокированный выход
                 self._mode = "unlocked_exit"

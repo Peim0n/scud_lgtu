@@ -198,19 +198,17 @@ class UnlockEntryCommand(_RelayCommand):
         end_state_label="idle",
     )
 
-    def __init__(self, device: "TurnstileDevice", skip_relay: bool = False):
+    def __init__(self, device: "TurnstileDevice"):
         super().__init__(device)
-        self._skip_relay = skip_relay
 
     async def run(self, executor) -> None:
         logger.info("UnlockEntryCommand: разблокирован вход")
-        if not self._skip_relay:
-            await executor.apply([
-                OutputCommand(name=self._device.exit_relay, state=False),
-                OutputCommand(name=self._device.entry_relay, state=True),
-                OutputCommand(name=self._device.entry_green, state=True),
-                OutputCommand(name=self._device.entry_red, state=False),
-            ])
+        await executor.apply([
+            OutputCommand(name=self._device.exit_relay, state=False),
+            OutputCommand(name=self._device.entry_relay, state=True),
+            OutputCommand(name=self._device.entry_green, state=True),
+            OutputCommand(name=self._device.entry_red, state=False),
+        ])
         # Короткий бипер
         await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
         await self._sleep(0.2)
@@ -234,19 +232,17 @@ class UnlockExitCommand(_RelayCommand):
         end_state_label="idle",
     )
 
-    def __init__(self, device: "TurnstileDevice", skip_relay: bool = False):
+    def __init__(self, device: "TurnstileDevice"):
         super().__init__(device)
-        self._skip_relay = skip_relay
 
     async def run(self, executor) -> None:
         logger.info("UnlockExitCommand: разблокирован выход")
-        if not self._skip_relay:
-            await executor.apply([
-                OutputCommand(name=self._device.entry_relay, state=False),
-                OutputCommand(name=self._device.exit_relay, state=True),
-                OutputCommand(name=self._device.exit_green, state=True),
-                OutputCommand(name=self._device.exit_red, state=False),
-            ])
+        await executor.apply([
+            OutputCommand(name=self._device.entry_relay, state=False),
+            OutputCommand(name=self._device.exit_relay, state=True),
+            OutputCommand(name=self._device.exit_green, state=True),
+            OutputCommand(name=self._device.exit_red, state=False),
+        ])
         # Короткий бипер
         await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
         await self._sleep(0.2)
