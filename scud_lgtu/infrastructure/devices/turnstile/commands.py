@@ -102,17 +102,24 @@ class OpenEntryCommand(_RelayCommand):
             await self._sleep(0.2)
             await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
             # Основной таймер с возможностью обновления
+            stopped_by_interrupt = False
             while True:
                 if await self._sleep(self._duration - 0.2):
+                    stopped_by_interrupt = True
                     break  # Запрошена остановка (новая команда или сенсор)
                 if self._refresh_requested:
                     self._refresh_requested = False
                     continue  # Продолжаем ждать
+                logger.info(f"[OpenEntryCommand] закрытие по таймеру, token={self._device.current_token}, user_id={self._device.current_user_id}")
                 break  # Таймер истёк
         finally:
+            saved_token = self._device.current_token
+            saved_user_id = self._device.current_user_id
             self._device.current_token = None
             self._device.current_user_id = None
             if not self._skip_cleanup:
+                if stopped_by_interrupt:
+                    logger.info(f"[OpenEntryCommand] прерван, token={saved_token}, user_id={saved_user_id}")
                 await executor.apply([
                     OutputCommand(name=self._device.entry_relay, state=False),
                     OutputCommand(name=self._device.entry_green, state=False),
@@ -163,17 +170,24 @@ class OpenExitCommand(_RelayCommand):
             await self._sleep(0.2)
             await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
             # Основной таймер с возможностью обновления
+            stopped_by_interrupt = False
             while True:
                 if await self._sleep(self._duration - 0.2):
+                    stopped_by_interrupt = True
                     break  # Запрошена остановка (новая команда или сенсор)
                 if self._refresh_requested:
                     self._refresh_requested = False
                     continue  # Продолжаем ждать
+                logger.info(f"[OpenExitCommand] закрытие по таймеру, token={self._device.current_token}, user_id={self._device.current_user_id}")
                 break  # Таймер истёк
         finally:
+            saved_token = self._device.current_token
+            saved_user_id = self._device.current_user_id
             self._device.current_token = None
             self._device.current_user_id = None
             if not self._skip_cleanup:
+                if stopped_by_interrupt:
+                    logger.info(f"[OpenExitCommand] прерван, token={saved_token}, user_id={saved_user_id}")
                 await executor.apply([
                     OutputCommand(name=self._device.exit_relay, state=False),
                     OutputCommand(name=self._device.exit_green, state=False),
