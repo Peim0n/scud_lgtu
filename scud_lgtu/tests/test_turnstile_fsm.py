@@ -135,7 +135,7 @@ class TestEntryOpenTransitions:
         assert entry_open.current_state_label == "idle"
 
     def test_open_entry_refreshes(self, entry_open):
-        assert _cmd(entry_open, DeviceCommand(command="open_entry")) is None
+        assert _cmd(entry_open, DeviceCommand(command="open_entry")) is OpenEntryCommand
         assert entry_open.current_state_label == "entry_open"
 
     def test_open_exit_switches_to_exit(self, entry_open):
@@ -177,7 +177,7 @@ class TestExitOpenTransitions:
         assert exit_open.current_state_label == "idle"
 
     def test_open_exit_refreshes(self, exit_open):
-        assert _cmd(exit_open, DeviceCommand(command="open_exit")) is None
+        assert _cmd(exit_open, DeviceCommand(command="open_exit")) is OpenExitCommand
         assert exit_open.current_state_label == "exit_open"
 
     def test_open_entry_switches_to_entry(self, exit_open):

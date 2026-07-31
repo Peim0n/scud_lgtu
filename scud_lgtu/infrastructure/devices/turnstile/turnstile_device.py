@@ -143,8 +143,8 @@ class TurnstileDevice(AccessDevice):
                 self._mode = "entry_open"
                 return OpenEntryCommand(self, self._button_timeout)
             if self._mode == "entry_open":
-                # Уже открыто на один раз в ту же сторону, игнорируем
-                return None
+                # Уже открыто на один раз в ту же сторону, обновляем таймер
+                return OpenEntryCommand(self, self._button_timeout)
             self._mode = "entry_open"
             return OpenEntryCommand(self, self._button_timeout)
 
@@ -161,16 +161,17 @@ class TurnstileDevice(AccessDevice):
                 self._mode = "exit_open"
                 return OpenExitCommand(self, self._button_timeout)
             if self._mode == "exit_open":
-                # Уже открыто на один раз в ту же сторону, игнорируем
-                return None
+                # Уже открыто на один раз в ту же сторону, обновляем таймер
+                return OpenExitCommand(self, self._button_timeout)
             self._mode = "exit_open"
             return OpenExitCommand(self, self._button_timeout)
 
         if command == "unlock_entry":
             if self._mode == "entry_open":
-                # Переключение с разового входа на разблокированный вход
+                # Переключение с разового входа на разблокированный вход (без щелчка реле)
                 self._mode = "unlocked_entry"
-                return UnlockEntryCommand(self)
+                # Возвращаем команду с флагом skip_relay=True
+                return UnlockEntryCommand(self, skip_relay=True)
             if self._mode == "unlocked_exit":
                 # Переключение с разблокированного выхода на разблокированный вход
                 self._mode = "unlocked_entry"
@@ -187,9 +188,9 @@ class TurnstileDevice(AccessDevice):
 
         if command == "unlock_exit":
             if self._mode == "exit_open":
-                # Переключение с разового выхода на разблокированный выход
+                # Переключение с разового выхода на разблокированный выход (без щелчка реле)
                 self._mode = "unlocked_exit"
-                return UnlockExitCommand(self)
+                return UnlockExitCommand(self, skip_relay=True)
             if self._mode == "unlocked_entry":
                 # Переключение с разблокированного входа на разблокированный выход
                 self._mode = "unlocked_exit"

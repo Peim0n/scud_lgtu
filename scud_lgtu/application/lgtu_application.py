@@ -321,13 +321,6 @@ class LGTUApplication:
 
         if action in ("open_entry", "open_exit"):
             if event.state:
-                # Если устройство уже разблокировано в ту же сторону, игнорируем обычное нажатие
-                if action == "open_entry" and self._device.current_state_label == "unlocked_entry":
-                    logger.info("Устройство уже разблокировано на вход, игнорируем обычное нажатие")
-                    return None
-                if action == "open_exit" and self._device.current_state_label == "unlocked_exit":
-                    logger.info("Устройство уже разблокировано на выход, игнорируем обычное нажатие")
-                    return None
                 return DeviceCommand(command=action, state=True)
             return None
 
