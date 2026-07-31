@@ -136,6 +136,10 @@ class TurnstileDevice:
                 # Переключение с надолго на один раз
                 self._mode = "entry_open"
                 return OpenEntryCommand(self, self._button_timeout)
+            if self._mode == "exit_open":
+                # Переключение с разового выхода на разовый вход
+                self._mode = "entry_open"
+                return OpenEntryCommand(self, self._button_timeout)
             if self._mode == "entry_open":
                 # Уже открыто на один раз в ту же сторону, обновляем таймаут
                 return OpenEntryCommand(self, self._button_timeout)
@@ -148,6 +152,10 @@ class TurnstileDevice:
                 return CloseCommand(self)
             if self._mode == "unlocked_exit":
                 # Переключение с надолго на один раз
+                self._mode = "exit_open"
+                return OpenExitCommand(self, self._button_timeout)
+            if self._mode == "entry_open":
+                # Переключение с разового входа на разовый выход
                 self._mode = "exit_open"
                 return OpenExitCommand(self, self._button_timeout)
             if self._mode == "exit_open":
