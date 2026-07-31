@@ -88,16 +88,18 @@ class OpenEntryCommand(_RelayCommand):
                 OutputCommand(name=self._device.entry_relay, state=True),
                 OutputCommand(name=self._device.entry_green, state=True),
                 OutputCommand(name=self._device.entry_red, state=False),
-                OutputCommand(name=self._device.main_buzzer, state=True),
             ])
-            await self._sleep(self._duration)
+            # Короткий бипер
+            await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
+            await self._sleep(0.2)
+            await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
+            await self._sleep(self._duration - 0.2)
         finally:
             self._device.current_token = None
             self._device.current_user_id = None
             await executor.apply([
                 OutputCommand(name=self._device.entry_relay, state=False),
                 OutputCommand(name=self._device.entry_green, state=False),
-                OutputCommand(name=self._device.main_buzzer, state=False),
             ])
 
     def cleanup(self) -> List[OutputCommand]:
@@ -131,16 +133,18 @@ class OpenExitCommand(_RelayCommand):
                 OutputCommand(name=self._device.exit_relay, state=True),
                 OutputCommand(name=self._device.exit_green, state=True),
                 OutputCommand(name=self._device.exit_red, state=False),
-                OutputCommand(name=self._device.main_buzzer, state=True),
             ])
-            await self._sleep(self._duration)
+            # Короткий бипер
+            await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
+            await self._sleep(0.2)
+            await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
+            await self._sleep(self._duration - 0.2)
         finally:
             self._device.current_token = None
             self._device.current_user_id = None
             await executor.apply([
                 OutputCommand(name=self._device.exit_relay, state=False),
                 OutputCommand(name=self._device.exit_green, state=False),
-                OutputCommand(name=self._device.main_buzzer, state=False),
             ])
 
     def cleanup(self) -> List[OutputCommand]:

@@ -322,7 +322,7 @@ class LGTUApplication:
         if action in ("open_entry", "open_exit"):
             if event.state:
                 return DeviceCommand(command=action, state=True)
-            return DeviceCommand(command="start_close_timer", state=False)
+            return None
 
         return DeviceCommand(command=action, state=event.state)
 
