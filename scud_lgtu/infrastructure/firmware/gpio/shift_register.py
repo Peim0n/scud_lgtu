@@ -141,7 +141,7 @@ class ShiftRegister:
         """
         with self._lock:
             new_state = self._last_sent_state
-            logger.info(f"[ShiftRegister] set_mask: last_sent_state={self._last_sent_state:#06x}, masks={masks}")
+            logger.debug(f"[ShiftRegister] set_mask: last_sent_state={self._last_sent_state:#06x}, masks={masks}")
             for name, state in masks.items():
                 # Резолвим бизнес-имена в прямые имена пинов
                 resolved_name = self._resolve_name(name)
@@ -155,13 +155,13 @@ class ShiftRegister:
                     logger.warning(f"[ShiftRegister] Неизвестная маска: {lookup_name} (resolved: {resolved_name}, original: {name})")
                     continue
                 mask = self._pin_masks[lookup_name]
-                logger.info(f"[ShiftRegister] Processing {lookup_name}: state={state}, mask={mask:#06x}")
+                logger.debug(f"[ShiftRegister] Processing {lookup_name}: state={state}, mask={mask:#06x}")
                 if state:
                     new_state |= mask
                 else:
                     new_state &= ~mask
-                logger.info(f"[ShiftRegister] After {lookup_name}: new_state={new_state:#06x}")
-            logger.info(f"[ShiftRegister] Putting new_state={new_state:#06x} into queue")
+                logger.debug(f"[ShiftRegister] After {lookup_name}: new_state={new_state:#06x}")
+            logger.debug(f"[ShiftRegister] Putting new_state={new_state:#06x} into queue")
             self._input_queue.put(new_state, timeout=1.0)
             # Сразу обновляем last_sent_state, чтобы следующие команды видели новое состояние
             self._last_sent_state = new_state
@@ -206,7 +206,7 @@ class ShiftRegister:
         value : int
             Число для записи. Используются ``reg_len`` младших бит.
         """
-        logger.info(f"[ShiftRegister] _work_shift: writing value={value:#06x} to shift register")
+        logger.debug(f"[ShiftRegister] _work_shift: writing value={value:#06x} to shift register")
         wp = self._controller.write_pin_nolock
         for i in range(self._n - 1, -1, -1):
             bit = (value >> i) & 1
@@ -218,7 +218,7 @@ class ShiftRegister:
         wp(self._ser_latch_pin, 0)
         wp(self._ser_latch_pin, 1)
         wp(self._ser_latch_pin, 0)
-        logger.info(f"[ShiftRegister] _work_shift: written value={value:#06x}")
+        logger.debug(f"[ShiftRegister] _work_shift: written value={value:#06x}")
 
         # Обновляем последнее отправленное состояние
         self._last_sent_state = value
