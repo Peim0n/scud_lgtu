@@ -198,10 +198,23 @@ class TurnstileDevice:
             return DelayedCloseCommand(self, self._button_timeout)
 
         if command == "close":
+            if self._mode == "unlocked_entry":
+                # Короткий Shift из разблокированного входа
+                self._mode = "idle"
+                return CloseCommand(self)
+            if self._mode == "unlocked_exit":
+                # Короткий Shift из разблокированного выхода
+                self._mode = "idle"
+                return CloseCommand(self)
             self._mode = "idle"
             return CloseCommand(self)
 
         if command == "lock":
+            if self._mode in ("unlocked_entry", "unlocked_exit"):
+                # Переход из разблокированного состояния в заблокированное
+                self.locked = True
+                self._mode = "blocked"
+                return LockCommand(self)
             self.locked = True
             self._mode = "blocked"
             return LockCommand(self)
