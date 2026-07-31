@@ -231,6 +231,7 @@ class LGTUApplication:
         self._config = config
         self._timings = config["timings"]
         self._devices = devices or {}
+        self._passage_zones = devices.get("passage_zones", [])
         self._running = False
         self._qr_decoder = qr_decoder
         self._device = device_logic

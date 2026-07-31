@@ -255,7 +255,11 @@ class TurnstileDevice(AccessDevice):
         return ClearAlarmCommand(self)
 
     def _on_passage_detected(self, event: PassageDetected) -> Command:
-        self._mode = "idle"
-        self.current_token = None
-        self.current_user_id = None
-        return CloseCommand(self)
+        # Закрываем только в режимах одноразового прохода
+        if self._mode in ("entry_open", "exit_open"):
+            self._mode = "idle"
+            self.current_token = None
+            self.current_user_id = None
+            return CloseCommand(self)
+        # В unlocked режимах не закрываем - турникет должен оставаться открытым
+        return None
