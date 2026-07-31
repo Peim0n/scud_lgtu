@@ -3,6 +3,7 @@
 Этот файл — логика устройства. Все команды живут в commands.py."""
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from scud_lgtu.domain.access_device import AccessDevice
@@ -27,6 +28,8 @@ from scud_lgtu.infrastructure.devices.turnstile.commands import (
     UnlockEntryCommand,
     UnlockExitCommand,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TurnstileDevice(AccessDevice):
@@ -120,8 +123,10 @@ class TurnstileDevice(AccessDevice):
         self.current_user_id = event.user_id
         if event.direction == "entry":
             self._mode = "entry_open"
+            logger.info(f"[TurnstileDevice] mode={self._mode}, token={event.token}, user_id={event.user_id}")
             return OpenEntryCommand(self, self._relay_timeout)
         self._mode = "exit_open"
+        logger.info(f"[TurnstileDevice] mode={self._mode}, token={event.token}, user_id={event.user_id}")
         return OpenExitCommand(self, self._relay_timeout)
 
     def _on_access_denied(self, event: AccessDenied) -> Command:
@@ -133,47 +138,57 @@ class TurnstileDevice(AccessDevice):
         if command == "open_entry":
             if self._mode == "unlocked_exit":
                 self._mode = "idle"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked_exit)")
                 return CloseCommand(self)
             if self._mode == "unlocked_entry":
                 # Переключение с разблокированного входа на разовый вход (без щелчка реле)
                 self._mode = "entry_open"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked_entry)")
                 return OpenEntryCommand(self, self._button_timeout, skip_relay=True)
             if self._mode == "exit_open":
                 # Переключение с разового выхода на разовый вход
                 self._mode = "entry_open"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from exit_open)")
                 return OpenEntryCommand(self, self._button_timeout)
             if self._mode == "entry_open":
                 # Уже открыто на один раз в ту же сторону, возвращаем ту же команду для обновления таймера
                 return OpenEntryCommand(self, self._button_timeout)
             self._mode = "entry_open"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from idle)")
             return OpenEntryCommand(self, self._button_timeout)
 
         if command == "open_exit":
             if self._mode == "unlocked_entry":
                 self._mode = "idle"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked_entry)")
                 return CloseCommand(self)
             if self._mode == "unlocked_exit":
                 # Переключение с разблокированного выхода на разовый выход (без щелчка реле)
                 self._mode = "exit_open"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked_exit)")
                 return OpenExitCommand(self, self._button_timeout, skip_relay=True)
             if self._mode == "entry_open":
                 # Переключение с разового входа на разовый выход
                 self._mode = "exit_open"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from entry_open)")
                 return OpenExitCommand(self, self._button_timeout)
             if self._mode == "exit_open":
                 # Уже открыто на один раз в ту же сторону, возвращаем ту же команду для обновления таймера
                 return OpenExitCommand(self, self._button_timeout)
             self._mode = "exit_open"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from idle)")
             return OpenExitCommand(self, self._button_timeout)
 
         if command == "unlock_entry":
             if self._mode == "entry_open":
                 # Переключение с разового входа на разблокированный вход
                 self._mode = "unlocked_entry"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from entry_open)")
                 return UnlockEntryCommand(self)
             if self._mode == "unlocked_exit":
                 # Переключение с разблокированного выхода на разблокированный вход
                 self._mode = "unlocked_entry"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked_exit)")
                 return UnlockEntryCommand(self)
             if self._mode == "unlocked_entry":
                 # Уже разблокирован на вход, игнорируем
@@ -181,18 +196,22 @@ class TurnstileDevice(AccessDevice):
             if self._mode == "exit_open":
                 # Переключение с разового выхода на разблокированный вход
                 self._mode = "unlocked_entry"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from exit_open)")
                 return UnlockEntryCommand(self)
             self._mode = "unlocked_entry"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from idle)")
             return UnlockEntryCommand(self)
 
         if command == "unlock_exit":
             if self._mode == "exit_open":
                 # Переключение с разового выхода на разблокированный выход
                 self._mode = "unlocked_exit"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from exit_open)")
                 return UnlockExitCommand(self)
             if self._mode == "unlocked_entry":
                 # Переключение с разблокированного входа на разблокированный выход
                 self._mode = "unlocked_exit"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked_entry)")
                 return UnlockExitCommand(self)
             if self._mode == "unlocked_exit":
                 # Уже разблокирован на выход, игнорируем
@@ -200,8 +219,10 @@ class TurnstileDevice(AccessDevice):
             if self._mode == "entry_open":
                 # Переключение с разового входа на разблокированный выход
                 self._mode = "unlocked_exit"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from entry_open)")
                 return UnlockExitCommand(self)
             self._mode = "unlocked_exit"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from idle)")
             return UnlockExitCommand(self)
 
         if command == "start_close_timer":
@@ -211,13 +232,23 @@ class TurnstileDevice(AccessDevice):
             if self._mode == "unlocked_entry":
                 # Короткий Shift из разблокированного входа
                 self._mode = "idle"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked_entry)")
                 return CloseCommand(self)
             if self._mode == "unlocked_exit":
                 # Короткий Shift из разблокированного выхода
                 self._mode = "idle"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked_exit)")
                 return CloseCommand(self)
-            self._mode = "idle"
-            return CloseCommand(self)
+            if self._mode == "entry_open":
+                self._mode = "idle"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from entry_open)")
+                return CloseCommand(self)
+            if self._mode == "exit_open":
+                self._mode = "idle"
+                logger.info(f"[TurnstileDevice] mode={self._mode} (from exit_open)")
+                return CloseCommand(self)
+            # Уже закрыт
+            return None
 
         if command == "lock":
             if self._mode == "blocked":
@@ -227,17 +258,21 @@ class TurnstileDevice(AccessDevice):
                 # Не блокируем, пока человек может проходить или активна тревога
                 return None
             # idle / unlocked_entry / unlocked_exit
+            old_mode = self._mode
             self.locked = True
             self._mode = "blocked"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from {old_mode})")
             return LockCommand(self)
 
         if command == "unlock":
             self.locked = False
             self._mode = "idle"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from blocked)")
             return UnlockCommand(self)
 
         if command == "cancel_unlock":
             self._mode = "idle"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from unlocked)")
             return CloseCommand(self)
 
         return None
@@ -245,19 +280,24 @@ class TurnstileDevice(AccessDevice):
     def _on_alarm_changed(self, event: AlarmChanged) -> Optional[Command]:
         if event.active:
             self._alarm = True
+            old_mode = self._mode
             self._mode = "alarm"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from {old_mode})")
             return AlarmCommand(self)
         self._alarm = False
         # Диаграмма: после отмены ОПС всегда возвращаемся в нормально закрыт.
         # Если установлен флаг админской блокировки, следующая проверка переведёт
         # устройство в blocked через handle().
         self._mode = "idle"
+        logger.info(f"[TurnstileDevice] mode={self._mode} (from alarm)")
         return ClearAlarmCommand(self)
 
     def _on_passage_detected(self, event: PassageDetected) -> Command:
         # Закрываем только в режимах одноразового прохода
         if self._mode in ("entry_open", "exit_open"):
+            old_mode = self._mode
             self._mode = "idle"
+            logger.info(f"[TurnstileDevice] mode={self._mode} (from {old_mode}) - passage detected")
             return CloseCommand(self)
         # В unlocked режимах не закрываем - турникет должен оставаться открытым
         return None
