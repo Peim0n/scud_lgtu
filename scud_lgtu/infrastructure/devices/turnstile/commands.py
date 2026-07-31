@@ -284,7 +284,7 @@ class CloseCommand(_RelayCommand):
     )
 
     async def run(self, executor) -> None:
-        logger.info(f"[CloseCommand] закрытие, token={self._device.current_token}, user_id={self._device.current_user_id}")
+        logger.info(f"[CloseCommand] закрытие")
         self._device.current_token = None
         self._device.current_user_id = None
         await executor.apply([
