@@ -67,9 +67,8 @@ class MuxEventMapper:
                     )
                 )
             else:
-                direction = cfg.get("direction")
-                zone = cfg.get("zone")
-                if direction and zone and input_name in prev:
+                # Сенсоры - просто передаем имя сенсора и состояние
+                if input_name in prev:
                     prev_val = prev.get(input_name)
                     prev_bool = (prev_val == 1) if active_high else (prev_val == 0)
                     if prev_bool and not state_bool:
@@ -79,8 +78,7 @@ class MuxEventMapper:
                                 source=EventSource.MUX,
                                 payload={
                                     "event": "detected",
-                                    "zone": zone,
-                                    "direction": direction,
+                                    "sensor": input_name,
                                     "duration": 0.0,
                                 },
                             )

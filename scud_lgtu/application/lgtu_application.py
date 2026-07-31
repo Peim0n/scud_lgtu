@@ -497,21 +497,32 @@ class LGTUApplication:
                 return event
         elif event_type == "input_signal":
             # Обработка событий от датчиков прохода
-            zone = scud_event.payload.get("zone")
-            direction = scud_event.payload.get("direction")
+            sensor = scud_event.payload.get("sensor")
             duration = scud_event.payload.get("duration")
-            token = scud_event.payload.get("token")
             signal_event = scud_event.payload.get("event", "completed")
-            if zone and direction and duration is not None:
-                event = PassageDetected(
-                    direction=direction,
-                    zone=zone,
-                    duration=duration,
-                    token=token or self._device.current_token,
-                    user_id=self._device.current_user_id
-                )
-                logger.info(f"Passage Detected event: {event}")
-                return event
+            if sensor and duration is not None:
+                # Определяем направление и зону по имени сенсора из passage_zones
+                direction = None
+                zone = None
+                for zone_config in self._passage_zones:
+                    if zone_config.get("inner") == sensor:
+                        direction = "in"
+                        zone = zone_config.get("label")
+                        break
+                    elif zone_config.get("outer") == sensor:
+                        direction = "out"
+                        zone = zone_config.get("label")
+                        break
+                if direction and zone:
+                    event = PassageDetected(
+                        direction=direction,
+                        zone=zone,
+                        duration=duration,
+                        token=self._device.current_token,
+                        user_id=self._device.current_user_id
+                    )
+                    logger.info(f"Passage Detected event: {event}")
+                    return event
 
         logger.debug(f"Unknown event type: {scud_event.type}")
         return None
