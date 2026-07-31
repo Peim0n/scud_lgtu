@@ -210,6 +210,9 @@ class TurnstileDevice:
             return CloseCommand(self)
 
         if command == "lock":
+            if self._mode == "blocked":
+                # Уже заблокирован, игнорируем
+                return None
             if self._mode in ("unlocked_entry", "unlocked_exit"):
                 # Переход из разблокированного состояния в заблокированное
                 self.locked = True
