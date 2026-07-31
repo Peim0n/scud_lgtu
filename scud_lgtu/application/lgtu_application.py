@@ -343,7 +343,6 @@ class LGTUApplication:
         def run_loop():
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
-            self._event_bus.set_event_loop(self._loop)
             self._executor.set_loop(self._loop)
             self._loop.run_forever()
 
