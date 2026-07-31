@@ -6,6 +6,12 @@
 
 SCUD LGTU - система контроля доступа с турникетом, реализующая чистую архитектуру с разделением на доменный слой, слой приложения и инфраструктурный слой.
 
+## Репозитории
+
+- **origin**: https://github.com/Peim0n/scud_lgtu (основной репозиторий)
+- **orangepi**: root@172.19.12.202:/opt/scud_lgtu.git (деплой на устройство)
+- **hq**: git@git.hq.int-sys.ru:project/alo-acs-max-26.git (корпоративный репозиторий, ветка lgtu-acs-25)
+
 ## Настройка на Orange Pi
 
 ### 1. Настройка алиаса sudovenv
@@ -118,11 +124,12 @@ pip install gpiod pyserial pyyaml
 
 ## Настройка на компьютере разработчика
 
-### 1. Добавление удалённого репозитория
+### 1. Добавление удалённых репозиториев
 
 ```bash
-cd /home/danil/Git/scud_lgtu_refactor
-git remote add orangepi root@orangepi:/opt/scud_lgtu.git
+cd /home/danil/Git/scud_lgtu
+git remote add orangepi root@172.19.12.202:/opt/scud_lgtu.git
+git remote add hq git@git.hq.int-sys.ru:project/alo-acs-max-26.git
 ```
 
 ### 2. Отправка изменений на Orange Pi
@@ -133,11 +140,21 @@ git commit -m "Описание изменений"
 git push orangepi master
 ```
 
-### 3. Обновление на Orange Pi
+### 3. Отправка изменений в корпоративный репозиторий
+
+```bash
+git checkout lgtu-acs-25
+git add .
+git commit -m "Описание изменений"
+git push hq lgtu-acs-25
+git checkout master
+```
+
+### 4. Обновление на Orange Pi
 
 После push изменения автоматически применятся в `/opt/scud_lgtu` благодаря post-receive hook.
 
-### 4. Перезапуск сервиса (если нужно)
+### 5. Перезапуск сервиса (если нужно)
 
 ```bash
 ssh root@orangepi
@@ -164,13 +181,15 @@ ssh-copy-id root@orangepi
 git config remote.orangepi.url root@orangepi:/opt/scud_lgtu.git
 ```
 
-## Скрипт для быстрого деплоя
+## Скрипты для быстрого деплоя
 
-Создайте скрипт `deploy.sh` на компьютере разработчика:
+### Деплой на Orange Pi
+
+Создайте скрипт `deploy_orangepi.sh` на компьютере разработчика:
 
 ```bash
 #!/bin/bash
-cd /home/danil/Git/scud_lgtu_refactor
+cd /home/danil/Git/scud_lgtu
 git add .
 git commit -m "$1"
 git push orangepi master
@@ -180,7 +199,27 @@ ssh root@orangepi "systemctl restart scud_lgtu"
 Использование:
 
 ```bash
-./deploy.sh "Описание изменений"
+./deploy_orangepi.sh "Описание изменений"
+```
+
+### Деплой в корпоративный репозиторий
+
+Создайте скрипт `deploy_hq.sh` на компьютере разработчика:
+
+```bash
+#!/bin/bash
+cd /home/danil/Git/scud_lgtu
+git checkout lgtu-acs-25
+git add .
+git commit -m "$1"
+git push hq lgtu-acs-25
+git checkout master
+```
+
+Использование:
+
+```bash
+./deploy_hq.sh "Описание изменений"
 ```
 
 ## Проверка

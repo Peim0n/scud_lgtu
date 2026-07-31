@@ -203,9 +203,11 @@ pytest scud_lgtu/tests/test_regression/ -v
 - Кнопки управления:
   - Кнопка 1: открыть на вход
   - Кнопка 2: открыть на выход
-  - Кнопка 3: не используется
+  - Кнопка 3: модификатор Shift (для переключения в режимы unlocked_entry/unlocked_exit)
+- FSM турникета с режимами: idle, entry_open, exit_open, unlocked_entry, unlocked_exit, blocked, alarm
 - Синхронизация с бэкендом (ключи, списки доступа)
 - Офлайн-режим с локальным кэшем
+- Структурированное логирование с фильтрацией по модулям
 
 ## Логирование
 
@@ -214,6 +216,11 @@ pytest scud_lgtu/tests/test_regression/ -v
 ```
 %(asctime)s - %(name)s [%(levelname)s] %(message)s
 ```
+
+Уровни логирования настраиваются в `config.yml`:
+- Команды турникета и устройство: INFO
+- Инфраструктура (GPIO, Serial, кэш, бэкенд): WARNING
+- Application слой: INFO
 
 Для просмотра логов при запуске через systemd:
 
@@ -241,6 +248,12 @@ ruff format scud_lgtu/
 ```bash
 mypy scud_lgtu/
 ```
+
+## Репозитории
+
+- **origin**: https://github.com/Peim0n/scud_lgtu
+- **orangepi**: root@172.19.12.202:/opt/scud_lgtu.git (деплой на устройство)
+- **hq**: git@git.hq.int-sys.ru:project/alo-acs-max-26.git (корпоративный репозиторий)
 
 ## Лицензия
 

@@ -45,8 +45,8 @@ LGTU Controller — это система контроля доступа (СК�
 
 | Модуль | Назначение |
 |--------|------------|
-| `turnstile_device.py` | Логика турникета: обработка `AccessGranted`/`AccessDenied`/`PassageDetected` и генерация `Command` |
-| `commands.py` | Асинхронные команды: `OpenCommand`, `CloseCommand`, `AlarmCommand` и т.д. |
+| `turnstile_device.py` | FSM турникета: обработка `AccessGranted`/`AccessDenied`/`PassageDetected`/`AlarmChanged`/`DeviceCommand` и генерация `Command`. Режимы: idle, entry_open, exit_open, unlocked_entry, unlocked_exit, blocked, alarm |
+| `commands.py` | Асинхронные команды: `OpenEntryCommand`, `OpenExitCommand`, `UnlockEntryCommand`, `UnlockExitCommand`, `CloseCommand`, `LockCommand`, `UnlockCommand`, `AlarmCommand`, `ClearAlarmCommand`, `DenyCommand` |
 
 ---
 
@@ -216,6 +216,11 @@ LGTU Controller — это система контроля доступа (СК�
 | `tests/test_config.py` | Проверка загрузки и валидации конфигурации |
 | `tests/mocks/` | Моки: `MockEngine`, `MockGPIO`, `MockSerial`, `MockWiegand` |
 
+Запуск тестов:
+```bash
+pytest -q
+```
+
 ---
 
 ## 9. Соглашения по коду
@@ -224,6 +229,7 @@ LGTU Controller — это система контроля доступа (СК�
 - **Импорты**: группируются в порядке: стандартная библиотека, сторонние пакеты, внутренние модули `scud_lgtu`.
 - **Типизация**: используется `typing` (`Optional`, `Any`, `dict`, `list` и т.д.), требуется Python 3.10+.
 - **Стилистика**: проект ориентирован на `ruff` для линтинга и форматирования.
+- **Логирование**: структурированные логи с форматом `[CommandName] действие, token=..., user_id=...`. Уровни логирования настраиваются в `config.yml`.
 
 ---
 
@@ -237,9 +243,9 @@ LGTU Controller — это система контроля доступа (СК�
 |-------------|-------------|------------|
 | **Время открытия турникета** после карты/QR | `scud_lgtu/config.yml` → `timings.relay_open_duration_s` | Время в секундах, пока реле остаётся открытым |
 | **Время открытия турникета** после отжатия кнопки | `scud_lgtu/config.yml` → `timings.button_timer_duration_s` | Время до автоматического закрытия после отпускания кнопки |
-| **Логика открытия/закрытия, индикация, тревога** | `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` + `commands.py` | `TurnstileDevice.handle()` выбирает `Command` по событию; `commands.py` выполняет выходы асинхронно |
+| **Логика открытия/закрытия, индикация, тревога** | `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` + `commands.py` | `TurnstileDevice.handle()` выбирает `Command` по событию на основе текущего режима FSM; `commands.py` выполняет выходы асинхронно с таймерами и прерыванием |
 | **Правила доступа** (кто проходит, кто нет) | `scud_lgtu/domain/access.py` | Класс `AccessPolicy`, метод `check`. Источник данных — `AccessRepository` (`cache/repository.py`) |
-| **Реакция на кнопки** | `scud_lgtu/application/lgtu_application.py` → `_map_button_event()` + `scud_lgtu/config.yml` → `devices.buttons` | Сопоставление `label` → `action` (`open_entry`, `open_exit`, `shift`) |
+| **Реакция на кнопки** | `scud_lgtu/application/lgtu_application.py` → `_map_button_event()` + `scud_lgtu/config.yml` → `devices.buttons` | Сопоставление `label` → `action` (`open_entry`, `open_exit`, `shift`). Кнопка 3 (Shift) используется как модификатор для переключения в режимы unlocked_entry/unlocked_exit |
 | **Реакция на тревогу** | `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` → `_on_alarm_changed()` | Генерация `AlarmCommand` / `ClearAlarmCommand` |
 | **Обработка проходов** (логирование, закрытие после прохода) | `scud_lgtu/application/lgtu_application.py` → `_log_passage()` + `TurnstileDevice._on_passage_detected()` | `PassageService.log_passage()` + `CloseCommand` |
 | **Преобразование событий оборудования в доменные** | `scud_lgtu/application/lgtu_application.py` | Метод `_convert_scud_event_to_domain()` |
