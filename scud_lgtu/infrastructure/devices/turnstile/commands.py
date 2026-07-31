@@ -178,11 +178,7 @@ class UnlockEntryCommand(_RelayCommand):
         await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
         await self._sleep(0.2)
         await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
-        await self._wait_until_stopped()
-        await executor.apply([
-            OutputCommand(name=self._device.entry_relay, state=False),
-            OutputCommand(name=self._device.entry_green, state=False),
-        ])
+        # Реле остаётся открытым, пока не будет явной команды закрытия
 
     def cleanup(self) -> List[OutputCommand]:
         return [
@@ -213,11 +209,7 @@ class UnlockExitCommand(_RelayCommand):
         await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
         await self._sleep(0.2)
         await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
-        await self._wait_until_stopped()
-        await executor.apply([
-            OutputCommand(name=self._device.exit_relay, state=False),
-            OutputCommand(name=self._device.exit_green, state=False),
-        ])
+        # Реле остаётся открытым, пока не будет явной команды закрытия
 
     def cleanup(self) -> List[OutputCommand]:
         return [
