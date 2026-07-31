@@ -1,10 +1,8 @@
 """
 Модели данных, события и хранилище событий (DataTypes) системы СКУД.
 
-Этот модуль объединяет events.py, event_store.py и models.py в один модуль для
-централизованного управления событийной моделью ScudEngine. Содержит перечисления
-для событий и команд, классы событий и команд, перечисления бизнес-логики,
-модель события прохода и хранилище событий.
+Содержит перечисления для событий и команд, классы событий и команд,
+перечисления бизнес-логики, модель события прохода и хранилище событий.
 
 Классы
 -------
@@ -45,7 +43,8 @@ from scud_lgtu.application.commands import CommandTarget, CommandAction, ScudCom
 
 class EventType(str, Enum):
     """Типы событий от hardware-модулей."""
-    MUX_CHANGED = "mux_changed"
+    BUTTON_PRESSED = "button_pressed"
+    ALARM_CHANGED = "alarm_changed"
     SHIFT_DONE = "shift_done"
     CARD_READ = "card_read"
     QR_READ = "qr_read"
@@ -63,7 +62,6 @@ class EventSource(str, Enum):
     SHIFT = "shift"
     WIEGAND = "wiegand"
     SERIAL = "serial"
-    SIGNAL = "signal"
     WATCHDOG = "watchdog"
     ENGINE = "engine"
 

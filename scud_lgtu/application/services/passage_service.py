@@ -14,16 +14,20 @@
 - log_passage: записать событие прохода
 - flush_events: выгрузить все события проходов
 """
-from scud_lgtu.domain.common.models.models import Passage
-from scud_lgtu.domain.access.ports.ports import EventLog
+from typing import Any, Optional
+from scud_lgtu.domain.models import Passage
+from scud_lgtu.domain.access import AccessPolicy, PassageTracker
 
 
 class PassageService:
-    def __init__(self, event_log: EventLog):
+    def __init__(self, event_log: Any, passage_tracker: Optional[PassageTracker] = None):
         self._event_log = event_log
+        self._passage_tracker = passage_tracker
 
     def log_passage(self, passage: Passage) -> None:
         self._event_log.append(passage)
+        if self._passage_tracker is not None and passage.token:
+            self._passage_tracker.mark_completed(passage.token)
 
     def flush_events(self) -> list[Passage]:
         return self._event_log.flush()

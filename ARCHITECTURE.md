@@ -4,8 +4,8 @@ LGTU Controller — это система контроля доступа (СК�
 
 ## Общие принципы
 
-- **Разделение слоёв**: доменный слой не зависит от инфраструктуры; инфраструктура адаптируется через порты (интерфейсы).
-- **Событийная архитектура**: события от оборудования преобразуются в доменные события и обрабатываются через `EventBus`.
+- **Разделение слоёв**: доменный слой не зависит от инфраструктуры; инфраструктура адаптируется через адаптеры.
+- **Событийная архитектура**: события от оборудования преобразуются в доменные события и обрабатываются в `LGTUApplication`.
 - **Потокобезопасность**: hardware-модули работают в отдельных потоках и передают данные через `queue.Queue`.
 - **Офлайн-режим**: локальный кэш списка доступа позволяет работать при отсутствии связи с бэкендом.
 - **Конфигурация через YAML**: `scud_lgtu/config.yml` задаёт пины, тайминги, устройства и параметры бэкенда.
@@ -16,14 +16,13 @@ LGTU Controller — это система контроля доступа (СК�
 ┌─────────────────────────────────────────────────────┐
 │  Interfaces  │ run_lgtu_controller.py, interfaces/cli│
 ├─────────────────────────────────────────────────────┤
-│ Application  │ LGTUApplication, handlers, services,  │
-│              │ EventBus                              │
+│ Application  │ LGTUApplication, services             │
 ├─────────────────────────────────────────────────────┤
-│    Domain    │ models, enums, events, turnstile,     │
-│              │ access services, ports                │
+│    Domain    │ models, enums, events,                │
+│              │ access services                       │
 ├─────────────────────────────────────────────────────┤
-│ Infrastructure│ ScudEngine, gpio, serial, cache,     │
-│              │ persistence, backend, sound, threads  │
+│ Infrastructure│ ScudEngine, firmware, cache,         │
+│              │ persistence, backend, sound           │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -33,26 +32,21 @@ LGTU Controller — это система контроля доступа (СК�
 
 Содержит бизнес-логику и сущности, независимые от оборудования.
 
-### 1.1. Общие компоненты (`scud_lgtu/domain/common/`)
+### 1.1. Domain (`scud_lgtu/domain/`)
 
 | Модуль | Назначение |
 |--------|------------|
-| `enums/enums.py` | Перечисления: направление (`DirectionEnum`), тип токена (`TokenTypeEnum`), результат (`ResultEnum`), важность (`SeverityEnum`), тип события (`EventTypeEnum`) |
-| `models/models.py` | Доменные модели: `Credential`, `AccessDecision`, `AuthSession`, `Passage`, `OutputCommand` |
-| `events/events.py` | Доменные события: `CardRead`, `QrRead`, `MuxInputChanged`, `ButtonPressed`, `AlarmChanged`, `PassageDetected`, `OutputCommandsGenerated` |
+| `enums.py` | Перечисления: `DirectionEnum`, `TokenTypeEnum`, `ResultEnum`, `SeverityEnum`, `EventTypeEnum` |
+| `models.py` | Доменные модели: `Credential`, `AccessDecision`, `AuthSession`, `Passage`, `OutputCommand` |
+| `events.py` | Доменные события: `CardRead`, `QrRead`, `ButtonPressed`, `AlarmChanged`, `PassageDetected` |
+| `access.py` | `AccessPolicy` (проверка доступа), `PassageTracker` |
 
-### 1.2. Доступ (`scud_lgtu/domain/access/`)
-
-| Модуль | Назначение |
-|--------|------------|
-| `ports/ports.py` | Порты (интерфейсы) для адаптеров: `AccessRepository`, `EventLog`, `BackendGateway`, `SoundOutput`, `Actuator`, `ConfigResolver` |
-| `services/services.py` | Доменные сервисы: `AccessPolicy` (проверка доступа), `PassageTracker` (отслеживание проходов), `CredentialHasher` |
-
-### 1.3. Турникет (`scud_lgtu/domain/turnstile/`)
+### 1.2. Турникет (`scud_lgtu/infrastructure/devices/turnstile/`)
 
 | Модуль | Назначение |
 |--------|------------|
-| `services/turnstile.py` | Конечный автомат турникета `TurnstileState`: открытие/закрытие входа и выхода, тревога, таймауты, генерация `OutputCommand` |
+| `turnstile_device.py` | Логика турникета: обработка `AccessGranted`/`AccessDenied`/`PassageDetected` и генерация `Command` |
+| `commands.py` | Асинхронные команды: `OpenCommand`, `CloseCommand`, `AlarmCommand` и т.д. |
 
 ---
 
@@ -64,32 +58,14 @@ LGTU Controller — это система контроля доступа (СК�
 
 | Модуль | Назначение |
 |--------|------------|
-| `orchestration/lgtu_application.py` | `LGTUApplication` — главный цикл приложения: чтение событий от `ScudEngine`, преобразование в доменные события, публикация в `EventBus` |
+| `lgtu_application.py` | `LGTUApplication` — чтение `ScudEvent`, преобразование в доменные события, запуск команд устройства |
 
-### 2.2. Шина событий
-
-| Модуль | Назначение |
-|--------|------------|
-| `events/event_bus.py` | `EventBus` — асинхронная шина публикации/подписки на доменные события |
-
-### 2.3. Обработчики событий (`scud_lgtu/application/handlers/`)
+### 2.2. Сервисы приложения (`scud_lgtu/application/services/`)
 
 | Модуль | Назначение |
 |--------|------------|
-| `credential.py` | Обработка `CardRead` и `QrRead`: проверка доступа, открытие турникета |
-| `mux.py` | Обработка `MuxInputChanged`: преобразование в `ButtonPressed` или `AlarmChanged` |
-| `button.py` | Обработка `ButtonPressed`: открытие входа/выхода по кнопкам |
-| `alarm.py` | Обработка `AlarmChanged`: включение/выключение режима тревоги |
-| `passage.py` | Обработка `PassageDetected`: журналирование, закрытие турникета |
-| `common.py` | Вспомогательные функции для формирования ответов считывателям |
-
-### 2.4. Сервисы приложения (`scud_lgtu/application/services/`)
-
-| Модуль | Назначение |
-|--------|------------|
-| `access_service.py` | Сервис доступа (обёртка/расширение над `AccessPolicy`) |
-| `passage_service.py` | `PassageService` — журналирование проходов через `EventLog` |
-| `sync_service.py` | `SyncService` — периодическая синхронизация с бэкендом |
+| `passage_service.py` | Журналирование проходов |
+| `sync_service.py` | Синхронизация событий и списка доступа с бэкендом |
 
 ---
 
@@ -130,16 +106,15 @@ LGTU Controller — это система контроля доступа (СК�
 | `cache/identifier_hash.py` | Хеширование идентификаторов |
 | `persistence/event_store.py` | `EventStore` и `ScudEvent`/`ScudCommand` — хранение и очереди событий |
 | `persistence/event_log.py` | `EventLogAdapter` — адаптер журналирования |
-| `persistence/passage_detector.py` | `PassageDetector` — детекция прохода по двум датчикам |
+| `firmware/gpio/multiplexor.py` | `Multiplexer` и `MuxEventMapper` — сырые данные и преобразование в события |
 
 ### 3.5. Бэкенд и звук
 
 | Модуль | Назначение |
 |--------|------------|
 | `backend/client.py` | `BackendClient` — HTTP-клиент для синхронизации |
-| `backend/sync_scheduler.py` | `SyncScheduler` — планировщик синхронизации (устаревший/альтернативный) |
 | `sound/player.py` | `SoundPlayer` — воспроизведение звуковых файлов |
-| `sound/__init__.py` | `SoundOutputAdapter` — адаптер звукового выхода |
+| `sound/output.py` | `SoundOutputAdapter` — адаптер звукового выхода |
 
 ### 3.6. Конфигурация и загрузка
 
@@ -152,12 +127,13 @@ LGTU Controller — это система контроля доступа (СК�
 
 | Модуль | Назначение |
 |--------|------------|
-| `firmware/device_abstraction.py` | Абстракция устройства |
-| `firmware/gpio_adapter.py` | Адаптер GPIO для прошивки |
-| `firmware/serial_adapter.py` | Адаптер Serial |
-| `firmware/wiegand_adapter.py` | Адаптер Wiegand |
-| `keys/__init__.py` | Публичные ключи для проверки QR |
-| `threads/registry.py` | Реестр hardware-потоков |
+| `firmware/gpio/controller.py` | `PinControllerThread` — потоки GPIO |
+| `firmware/gpio/multiplexor.py` | `Multiplexer`/`MuxEventMapper` — входы |
+| `firmware/gpio/shift_register.py` | `ShiftRegister` — выходы |
+| `firmware/gpio/actuator.py` | `ShiftRegisterActuator` — `OutputCommand` → сдвиговый регистр |
+| `firmware/gpio/wiegand_reader.py` | Чтение Wiegand |
+| `firmware/serial/serial_reader.py` | Чтение Serial |
+| `firmware/serial/qr_decoder.py` | Декодирование QR |
 
 ---
 
@@ -179,35 +155,33 @@ LGTU Controller — это система контроля доступа (СК�
 ### 5.1. Чтение карты Wiegand
 
 ```
-[WiegandReader] → ScudEvent(CARD_READ) → LGTUApplication → CardRead → EventBus
+[WiegandReader] → ScudEvent(CARD_READ) → LGTUApplication → CardRead
                                                                      ↓
-                                                         handle_credential → AccessPolicy
+                                                    _to_device_event → TurnstileDevice
                                                                      ↓
-                                              TurnstileState.open_* → OutputCommandsGenerated
-                                                                     ↓
-                                              EventBus → LGTUApplication → ScudEngine → ShiftRegister
+                                              Command → _CommandRunner → ShiftRegisterActuator → ScudEngine → GPIO
 ```
 
 ### 5.2. Чтение QR через Serial
 
 ```
-[BackgroundSerialReader] → ScudEvent(SERIAL_DATA) → LGTUApplication (QRDecoder) → QrRead → EventBus
+[BackgroundSerialReader] → ScudEvent(SERIAL_DATA) → LGTUApplication (QRDecoder) → QrRead
 ```
 
 ### 5.3. Кнопки и тревога
 
 ```
-[Multiplexer] → ScudEvent(MUX_CHANGED) → MuxInputChanged → handle_mux_input_changed
+[Multiplexer] → ScudEngine → ScudEvent(BUTTON_PRESSED / ALARM_CHANGED) → LGTUApplication
                                                 ↓
-                              ButtonPressed / AlarmChanged → handle_button / handle_alarm
+                              ButtonPressed / AlarmChanged → _to_device_event
 ```
 
 ### 5.4. Датчики прохода
 
 ```
-[Multiplexer] → PassageDetector → ScudEvent(INPUT_SIGNAL) → PassageDetected
+[Multiplexer] → ScudEngine (MuxEventMapper) → ScudEvent(INPUT_SIGNAL) → LGTUApplication → PassageDetected
                                               ↓
-                          handle_passage_detected → PassageService + TurnstileState.close
+                                              _to_device_event → TurnstileDevice
 ```
 
 ---
@@ -379,9 +353,9 @@ LGTU Controller — это система контроля доступа (СК�
 ### 11.2. `LGTUApplication` — прикладной слой
 
 - Оркестратор: связывает домен и инфраструктуру.
-- Превращает события железа (`ScudEvent`) в доменные события (`CardRead`, `MuxInputChanged`, `PassageDetected`).
-- Запускает `EventBus`, подписывает обработчики (`button.py`, `alarm.py`, `passage.py`).
-- Тактически вызывает `turnstile.tick()` и применяет команды к `Actuator`.
+- Превращает события железа (`ScudEvent`) в доменные события (`CardRead`, `QrRead`, `ButtonPressed`, `AlarmChanged`, `PassageDetected`).
+- Передаёт доменные события `TurnstileDevice` и выполняет возвращённые `Command`.
+- Тактически применяет команды через `ShiftRegisterActuator`.
 - Не управляет GPIO напрямую — делает это через порт `Actuator`.
 
 ### 11.3. `ScudEngine` — инфраструктурный слой
@@ -394,15 +368,15 @@ LGTU Controller — это система контроля доступа (СК�
 ### 11.4. Поток событий между ними
 
 ```
-[Hardware] → ScudEngine → ScudEvent(MUX_CHANGED) → LGTUApplication
+[Hardware] → ScudEngine → ScudEvent(BUTTON_PRESSED / ALARM_CHANGED / INPUT_SIGNAL) → LGTUApplication
                                                        ↓
-                                          MuxInputChanged / ButtonPressed
+                                          ButtonPressed / AlarmChanged / PassageDetected
                                                        ↓
-                                          TurnstileState.open_exit()
+                                          TurnstileDevice.handle()
                                                        ↓
-                                          OutputCommandsGenerated
+                                          Command
                                                        ↓
-                                          LGTUApplication → Actuator → ScudEngine → GPIO
+                                          _CommandRunner → ShiftRegisterActuator → ScudEngine → GPIO
 ```
 
-Такое разделение соответствует **Clean Architecture**: домен не зависит от приложения и инфраструктуры, а инфраструктура зависит от портов (интерфейсов), объявленных в домене.
+Такое разделение соответствует **Clean Architecture**: домен не зависит от приложения и инфраструктуры, а инфраструктура зависит от адаптеров, реализующих нужные интерфейсы.

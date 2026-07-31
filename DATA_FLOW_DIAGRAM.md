@@ -10,16 +10,17 @@
 ## Абстракция оборудования
 
 ### Входные пины (Multiplexer)
-Для доменного и прикладного слоев входы через мультиплексор - это просто **входные пины** с именами из конфигурации (например, `button_entry`, `button_exit`, `alarm`, `sensor_inner`, `sensor_outer`).
+Для доменного и прикладного слоев входы через мультиплексор - это просто **входные пины** с именами из конфигурации (например, `button_entry`, `button_exit`, `alarm`, `sensor_entry`, `sensor_exit`).
 
 **Только инфраструктурный слой знает о реализации:**
 - `Multiplexer` - опрашивает адреса мультиплексора и читает входной пин
 - `PinControllerThread` - координирует работу Multiplexer и ShiftRegister под общим локом
-- `ScudEngine` - преобразует состояния мультиплексора в доменные события
+- `MuxEventMapper` - преобразует сырые состояния в `ScudEvent` (`BUTTON_PRESSED`, `ALARM_CHANGED`, `INPUT_SIGNAL`)
+- `ScudEngine` - читает `mux_output_queue` и складывает готовые события в `event_queue`
 
 **Для остального проекта:**
-- `PassageDetector` - получает состояния входов как словарь `{input_name: state}`
-- `handle_mux_input_changed` - получает изменения входов как доменные события
+- `MuxEventMapper` - получает состояния входов как словарь `{input_name: state}`
+- `LGTUApplication._convert_scud_event_to_domain()` - преобразует `ScudEvent` в доменные события
 - Не знают о том, что входы реализованы через мультиплексор
 
 ### Выходные пины (ShiftRegister)
@@ -42,7 +43,7 @@
 ```
 [GPIO Hardware] 
     ↓ (сигналы D0/D1)
-[WeigandReader.run()]
+[WiegandReader.run()]
     ↓ (CardData в output_queue)
 [ScudEngine._wiegand_queue_loop()]
     ↓ (ScudEvent type=CARD_READ в event_queue)
@@ -50,20 +51,15 @@
     ↓ (ScudEvent)
 [LGTUApplication._convert_scud_event_to_domain()]
     ↓ (CardRead доменное событие)
-[EventBus.publish(CardRead)]
+[LGTUApplication._process_domain_event() / _to_device_event()]
     ↓ (CardRead)
-[handle_card_read()]
-    ↓ (AuthSession, AccessDecision)
-[AccessPolicy.check_access()]
-    ↓ (AccessDecision)
-[handle_card_read() - логика доступа]
-    ↓ (OutputCommandsGenerated или deny_beep_sequence)
-[TurnstileState.open_entry_async() / deny_beep_sequence()]
-    ↓ (OutputCommandsGenerated)
-[EventBus.publish(OutputCommandsGenerated)]
-    ↓ (OutputCommandsGenerated)
-[LGTUApplication._handle_output_commands()]
-    ↓ (output_states dict)
+[TurnstileDevice.handle()]
+    ↓ (AccessDecision, AuthSession через AccessPolicy)
+    ↓ (Command)
+[LGTUApplication._CommandRunner]
+    ↓ (OutputCommand)
+[ShiftRegisterActuator.apply()]
+    ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
 [PinControllerThread.set_mask()]
@@ -85,23 +81,23 @@
 **Очередь**: `event_queue` (Queue)
 **Метод**: `ScudEngine._wiegand_queue_loop()` → `event_queue.put_nowait(ScudEvent)`
 
-#### 3. LGTUApplication → EventBus
+#### 3. LGTUApplication → _to_device_event
 **Данные**: `CardRead(reader_id: str, credential: Credential, timestamp: float)`
-**Метод**: `LGTUApplication._convert_scud_event_to_domain()` → `EventBus.publish(CardRead)`
+**Метод**: `LGTUApplication._process_domain_event()` → `_to_device_event(CardRead)`
 
-#### 4. EventBus → handle_card_read
+#### 4. _to_device_event → TurnstileDevice
 **Данные**: `CardRead` доменное событие
-**Метод**: `EventBus.subscribe("CardRead", lambda e: handle_card_read(...))`
+**Метод**: `TurnstileDevice.handle(CardRead)` → `Command` или `None`
 
-#### 5. handle_card_read → AccessPolicy
+#### 5. TurnstileDevice → AccessPolicy
 **Данные**: `Credential(token_type: TokenTypeEnum, value: str, encrypted: bool)`
 **Метод**: `AccessPolicy.check_access(credential)` → `AccessDecision(allowed: bool, reason: str)`
 
-#### 6. handle_card_read → TurnstileState
-**Данные**: `OutputCommand(name: str, state: bool)`
+#### 6. TurnstileDevice → _CommandRunner
+**Данные**: `Command` / `OutputCommand(name: str, state: bool)`
 **Метод**: 
-- При успехе: `TurnstileState.open_entry_async(event_bus)` → `OutputCommandsGenerated`
-- При отказе: `TurnstileState.deny_beep_sequence(event_bus)` → `OutputCommandsGenerated`
+- `TurnstileDevice.handle(CardRead)` → `Command`
+- `_CommandRunner.apply(commands)` → `ShiftRegisterActuator.apply(OutputCommand)`
 
 #### 7. LGTUApplication → ScudEngine (прикладной → инфраструктурный слой)
 **Данные**: `dict[str, bool]` - мапинг имен пинов на состояния (абстракция выходных пинов)
@@ -132,7 +128,7 @@
 
 ```
 [Serial Port Hardware]
-    ↓ (串口数据)
+    ↓ (данные с serial-порта)
 [BackgroundSerialReader._read_loop()]
     ↓ (строка в queue)
 [ScudEngine._serial_queue_loop()]
@@ -142,20 +138,15 @@
 [LGTUApplication._convert_scud_event_to_domain()]
     ↓ (QR декодирование через QRDecoder)
     ↓ (QrRead доменное событие)
-[EventBus.publish(QrRead)]
+[LGTUApplication._process_domain_event()]
     ↓ (QrRead)
-[handle_qr_read()]
-    ↓ (AuthSession, AccessDecision)
-[AccessPolicy.check_access()]
-    ↓ (AccessDecision)
-[handle_qr_read() - логика доступа]
-    ↓ (OutputCommandsGenerated или deny_beep_sequence)
-[TurnstileState.open_entry_async() / deny_beep_sequence()]
-    ↓ (OutputCommandsGenerated)
-[EventBus.publish(OutputCommandsGenerated)]
-    ↓ (OutputCommandsGenerated)
-[LGTUApplication._handle_output_commands()]
-    ↓ (output_states dict)
+[TurnstileDevice.handle()]
+    ↓ (AccessDecision, AuthSession через AccessPolicy)
+    ↓ (Command)
+[LGTUApplication._CommandRunner]
+    ↓ (OutputCommand)
+[ShiftRegisterActuator.apply()]
+    ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
 [PinControllerThread.set_mask()]
@@ -181,12 +172,11 @@
 **Данные**: `str` - URL QR кода
 **Метод**: `LGTUApplication._decode_qr_credential()` → `QRDecoder.decode_url(data)` → `Credential`
 
-#### 4. LGTUApplication → EventBus
+#### 4. LGTUApplication → _to_device_event
 **Данные**: `QrRead(reader_id: str, credential: Credential, timestamp: float)`
-**Метод**: `LGTUApplication._convert_scud_event_to_domain()` → `EventBus.publish(QrRead)`
+**Метод**: `LGTUApplication._process_domain_event()` → `_to_device_event(QrRead)`
 
-#### 5-10. Аналогично сценарию 1 (через AccessPolicy, TurnstileState, ShiftRegister)
-**Примечание**: Прикладной слой работает с именами пинов, инфраструктурный слой преобразует в битовые маски
+#### 5-10. Аналогично сценарию 1 (через AccessPolicy, TurnstileDevice, _CommandRunner)
 
 ---
 
@@ -202,25 +192,20 @@
 [PinControllerThread._mux_loop()]
     ↓ (словарь состояний в mux_queue)
 [ScudEngine._mux_queue_loop()]
-    ↓ (ScudEvent type=MUX_CHANGED в event_queue)
+    ↓ (MuxEventMapper)
+    ↓ (ScudEvent type=BUTTON_PRESSED в event_queue)
 [ScudEngine._event_loop()]
     ↓ (ScudEvent)
 [LGTUApplication._convert_scud_event_to_domain()]
-    ↓ (MuxInputChanged доменное событие)
-[EventBus.publish(MuxInputChanged)]
-    ↓ (MuxInputChanged)
-[handle_mux_input_changed()]
     ↓ (ButtonPressed доменное событие)
-[EventBus.publish(ButtonPressed)]
+[LGTUApplication._process_domain_event()]
     ↓ (ButtonPressed)
-[handle_button_pressed()]
-    ↓ (OutputCommandsGenerated)
-[TurnstileState.open_entry_async() / open_exit_async()]
-    ↓ (OutputCommandsGenerated)
-[EventBus.publish(OutputCommandsGenerated)]
-    ↓ (OutputCommandsGenerated)
-[LGTUApplication._handle_output_commands()]
-    ↓ (output_states dict)
+[TurnstileDevice.handle()]
+    ↓ (Command)
+[LGTUApplication._CommandRunner]
+    ↓ (OutputCommand)
+[ShiftRegisterActuator.apply()]
+    ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
 [PinControllerThread.set_mask()]
@@ -240,37 +225,29 @@
 
 #### 2. PinControllerThread → ScudEngine (инфраструктурный слой)
 **Данные**: `dict[str, int]` - словарь состояний входов мультиплексора (внутренняя реализация)
-**Очередь**: `mux_queue` (Queue)
-**Метод**: `PinControllerThread._mux_loop()` → `mux_queue.put_nowait(states)`
+**Очередь**: `mux_output_queue` (Queue)
+**Метод**: `Multiplexer` → `PinControllerThread.mux_output_queue.put_nowait(states)`
 **Примечание**: Только инфраструктурный слой знает о реализации через мультиплексор
 
 #### 3. ScudEngine → LGTUApplication (инфраструктурный → прикладной слой)
-**Данные**: `ScudEvent(type=EventType.MUX_CHANGED, source=EventSource.MUX, payload={states})`
+**Данные**: `ScudEvent(type=EventType.BUTTON_PRESSED, source=EventSource.MUX, payload={button_id, state})`
 **Очередь**: `event_queue` (Queue)
-**Метод**: `ScudEngine._mux_queue_loop()` → `event_queue.put_nowait(ScudEvent)`
+**Метод**: `ScudEngine._start_signals()` → `MuxEventMapper.map_changes()` → `event_queue.put_nowait(ScudEvent)`
 **Примечание**: На этом уровне происходит абстракция - доменный слой видит просто входные пины с именами
 
-#### 4. LGTUApplication → EventBus
-**Данные**: `MuxInputChanged(input_name: str, state: bool, timestamp: float)`
-**Метод**: `LGTUApplication._convert_scud_event_to_domain()` → `EventBus.publish(MuxInputChanged)`
-
-#### 5. EventBus → handle_mux_input_changed
-**Данные**: `MuxInputChanged` доменное событие
-**Метод**: `EventBus.subscribe("MuxInputChanged", lambda e: handle_mux_input_changed(...))`
-
-#### 6. handle_mux_input_changed → EventBus
+#### 4. LGTUApplication → _to_device_event
 **Данные**: `ButtonPressed(button_name: str, action: str, timestamp: float)`
-**Метод**: `handle_mux_input_changed()` → `EventBus.publish(ButtonPressed)`
+**Метод**: `LGTUApplication._process_domain_event()` → `_to_device_event(ButtonPressed)`
 
-#### 7. EventBus → handle_button_pressed
+#### 5. _to_device_event → TurnstileDevice
 **Данные**: `ButtonPressed` доменное событие
-**Метод**: `EventBus.subscribe("ButtonPressed", lambda e: handle_button_pressed(...))`
+**Метод**: `TurnstileDevice.handle(ButtonPressed)` → `Command`
 
-#### 8. handle_button_pressed → TurnstileState
-**Данные**: `OutputCommand(name: str, state: bool)`
-**Метод**: `TurnstileState.open_entry_async(event_bus)` или `open_exit_async(event_bus)`
+#### 6. TurnstileDevice → _CommandRunner
+**Данные**: `Command` / `OutputCommand`
+**Метод**: `_CommandRunner.apply(commands)` → `ShiftRegisterActuator.apply(OutputCommand)`
 
-#### 9-12. Аналогично сценарию 1 (через OutputCommandsGenerated, ShiftRegister)
+#### 7-9. Аналогично сценарию 1 (через ShiftRegisterActuator, ScudEngine, ShiftRegister)
 
 ---
 
@@ -285,26 +262,21 @@
     ↓ (словарь состояний {input_name: state} в output_queue)
 [PinControllerThread._mux_loop()]
     ↓ (словарь состояний в mux_queue)
-[ScudEngine._mux_queue_loop()]
-    ↓ (словари состояний в PassageDetector.on_mux_state())
-[PassageDetector.on_mux_state()]
-    ↓ (детекция прохода по двум датчикам)
+[ScudEngine._start_signals()]
+    ↓ (MuxEventMapper.map_changes())
     ↓ (ScudEvent type=INPUT_SIGNAL в event_queue)
 [ScudEngine._event_loop()]
     ↓ (ScudEvent)
 [LGTUApplication._convert_scud_event_to_domain()]
     ↓ (PassageDetected доменное событие)
-[EventBus.publish(PassageDetected)]
+[LGTUApplication._process_domain_event()]
     ↓ (PassageDetected)
-[handle_passage_detected()]
-    ↓ (PassageService.log_passage())
-    ↓ (EventStore.add_passage_event())
-    ↓ (TurnstileState.close())
-    ↓ (OutputCommandsGenerated)
-[EventBus.publish(OutputCommandsGenerated)]
-    ↓ (OutputCommandsGenerated)
-[LGTUApplication._handle_output_commands()]
-    ↓ (output_states dict)
+[TurnstileDevice.handle()]
+    ↓ (Command)
+[LGTUApplication._CommandRunner]
+    ↓ (OutputCommand)
+[ShiftRegisterActuator.apply()]
+    ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
 [PinControllerThread.set_mask()]
@@ -317,40 +289,40 @@
 ### Подробное описание команд
 
 #### 1-3. Аналогично сценарию 3 (Multiplexer → ScudEngine)
-**Примечание**: Инфраструктурный слой знает о реализации через мультиплексор, PassageDetector видит просто входные пины с именами
+**Примечание**: Инфраструктурный слой знает о реализации через мультиплексор, `MuxEventMapper` видит просто входные пины с именами
 
-#### 4. ScudEngine → PassageDetector (инфраструктурный → прикладной слой)
+#### 4. ScudEngine → MuxEventMapper (инфраструктурный слой)
 **Данные**: `dict[str, int]` - словарь состояний входов с именами (абстракция входных пинов)
-**Метод**: `ScudEngine._mux_queue_loop()` → `PassageDetector.on_mux_state(states, timestamp)`
-**Примечание**: PassageDetector работает с именами входов (sensor_inner, sensor_outer), не зная о реализации через мультиплексор
+**Метод**: `ScudEngine._start_signals()` → `MuxEventMapper.map_changes(prev, states)`
+**Примечание**: `MuxEventMapper` работает с именами входов (`sensor_*`, `button_*`, `alarm`), не зная о реализации через мультиплексор
 
-#### 5. PassageDetector → ScudEngine
-**Данные**: `ScudEvent(type=EventType.INPUT_SIGNAL, source=EventSource.SIGNAL, payload={zone, direction, duration})`
+#### 5. MuxEventMapper → ScudEngine
+**Данные**: `ScudEvent(type=EventType.INPUT_SIGNAL, source=EventSource.MUX, payload={zone, direction, duration})`
 **Очередь**: `event_queue` (Queue)
-**Метод**: `PassageDetector._emit()` → `event_queue.put_nowait(ScudEvent)`
+**Метод**: `MuxEventMapper.map_changes()` → `event_queue.put_nowait(ScudEvent)`
 
 #### 6. ScudEngine → LGTUApplication
 **Данные**: `ScudEvent(type=EventType.INPUT_SIGNAL, ...)`
 **Очередь**: `event_queue` (Queue)
-**Метод**: `ScudEngine._event_loop()` → `event_queue.get()`
+**Метод**: `ScudEngine.get_event_queue()` → `LGTUApplication._run()`
 
-#### 7. LGTUApplication → EventBus
+#### 7. LGTUApplication → _to_device_event
 **Данные**: `PassageDetected(zone: str, direction: DirectionEnum, result: ResultEnum, timestamp: float)`
-**Метод**: `LGTUApplication._convert_scud_event_to_domain()` → `EventBus.publish(PassageDetected)`
+**Метод**: `LGTUApplication._process_domain_event()` → `_to_device_event(PassageDetected)`
 
-#### 8. EventBus → handle_passage_detected
+#### 8. _to_device_event → TurnstileDevice
 **Данные**: `PassageDetected` доменное событие
-**Метод**: `EventBus.subscribe("PassageDetected", lambda e: handle_passage_detected(...))`
+**Метод**: `TurnstileDevice.handle(PassageDetected)` → `Command`
 
-#### 9. handle_passage_detected → PassageService
+#### 9. TurnstileDevice → _CommandRunner
+**Данные**: `Command` / `OutputCommand`
+**Метод**: `_CommandRunner.apply(commands)` → `ShiftRegisterActuator.apply(OutputCommand)`
+
+#### 10. LGTUApplication → PassageService
 **Данные**: `Passage(zone: str, direction: DirectionEnum, result: ResultEnum, timestamp: float)`
 **Метод**: `PassageService.log_passage(passage)` → `EventStore.add_passage_event()`
 
-#### 10. handle_passage_detected → TurnstileState
-**Данные**: `OutputCommand(name: str, state: bool)`
-**Метод**: `TurnstileState.close()` → `OutputCommandsGenerated`
-
-#### 11-14. Аналогично сценарию 1 (через OutputCommandsGenerated, ShiftRegister)
+#### 11-13. Аналогично сценарию 1 (через ShiftRegisterActuator, ScudEngine, ShiftRegister)
 **Примечание**: Прикладной слой работает с именами пинов, инфраструктурный слой преобразует в битовые маски
 
 ---
@@ -366,25 +338,21 @@
     ↓ (словарь состояний {alarm: state} в output_queue)
 [PinControllerThread._mux_loop()]
     ↓ (словарь состояний в mux_queue)
-[ScudEngine._mux_queue_loop()]
-    ↓ (ScudEvent type=MUX_CHANGED в event_queue)
+[ScudEngine._start_signals()]
+    ↓ (MuxEventMapper.map_changes())
+    ↓ (ScudEvent type=ALARM_CHANGED в event_queue)
 [ScudEngine._event_loop()]
     ↓ (ScudEvent)
 [LGTUApplication._convert_scud_event_to_domain()]
-    ↓ (MuxInputChanged доменное событие)
-[EventBus.publish(MuxInputChanged)]
-    ↓ (MuxInputChanged)
-[handle_mux_input_changed()]
     ↓ (AlarmChanged доменное событие)
-[EventBus.publish(AlarmChanged)]
+[LGTUApplication._process_domain_event()]
     ↓ (AlarmChanged)
-[handle_alarm_changed()]
-    ↓ (TurnstileState.set_alarm() или clear_alarm())
-    ↓ (OutputCommandsGenerated)
-[EventBus.publish(OutputCommandsGenerated)]
-    ↓ (OutputCommandsGenerated)
-[LGTUApplication._handle_output_commands()]
-    ↓ (output_states dict)
+[TurnstileDevice.handle()]
+    ↓ (Command)
+[LGTUApplication._CommandRunner]
+    ↓ (OutputCommand)
+[ShiftRegisterActuator.apply()]
+    ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
 [PinControllerThread.set_mask()]
@@ -396,25 +364,30 @@
 
 ### Подробное описание команд
 
-#### 1-5. Аналогично сценарию 3 (Multiplexer → handle_mux_input_changed)
-**Примечание**: Инфраструктурный слой знает о реализации через мультиплексор, доменный слой видит просто входные пины с именами
+#### 1-3. Аналогично сценарию 3 (Multiplexer → ScudEngine)
+**Примечание**: Инфраструктурный слой знает о реализации через мультиплексор, `MuxEventMapper` видит `alarm` как обычный вход
 
-#### 6. handle_mux_input_changed → EventBus (прикладной слой)
+#### 4. ScudEngine → LGTUApplication
+**Данные**: `ScudEvent(type=EventType.ALARM_CHANGED, source=EventSource.MUX, payload={active})`
+**Очередь**: `event_queue` (Queue)
+**Метод**: `ScudEngine._start_signals()` → `MuxEventMapper.map_changes()` → `event_queue.put_nowait(ScudEvent)`
+
+#### 5. LGTUApplication → _to_device_event
 **Данные**: `AlarmChanged(active: bool, timestamp: float)`
-**Метод**: `handle_mux_input_changed()` → `EventBus.publish(AlarmChanged)`
+**Метод**: `LGTUApplication._process_domain_event()` → `_to_device_event(AlarmChanged)`
 
-#### 7. EventBus → handle_alarm_changed (прикладной слой)
+#### 6. _to_device_event → TurnstileDevice
 **Данные**: `AlarmChanged` доменное событие
-**Метод**: `EventBus.subscribe("AlarmChanged", lambda e: handle_alarm_changed(...))`
+**Метод**: `TurnstileDevice.handle(AlarmChanged)` → `Command`
 
-#### 8. handle_alarm_changed → TurnstileState (прикладной слой)
-**Данные**: `OutputCommand(name: str, state: bool)` - абстракция выходных пинов
+#### 7. TurnstileDevice → _CommandRunner
+**Данные**: `Command` / `OutputCommand`
 **Метод**:
-- При тревоге: `TurnstileState.set_alarm()` → `OutputCommandsGenerated`
-- При сбросе: `TurnstileState.clear_alarm()` → `OutputCommandsGenerated`
-**Примечание**: TurnstileState работает с именами пинов, не зная о реализации через сдвиговый регистр
+- При тревоге: `TurnstileDevice._on_alarm_changed()` → `AlarmCommand`
+- При сбросе: `TurnstileDevice._on_alarm_changed()` → `ClearAlarmCommand`
+**Примечание**: `TurnstileDevice` работает с именами пинов, не зная о реализации через сдвиговый регистр
 
-#### 9-12. Аналогично сценарию 1 (через OutputCommandsGenerated, ShiftRegister)
+#### 8-10. Аналогично сценарию 1 (через ShiftRegisterActuator, ScudEngine, ShiftRegister)
 **Примечание**: Инфраструктурный слой преобразует имена пинов в битовые маски для сдвигового регистра
 
 ---
@@ -424,14 +397,14 @@
 ### Поток данных
 
 ```
-[ScudEngine._event_loop()]
+[LGTUApplication._tick_loop()]
     ↓ (периодический вызов)
-[TurnstileState.tick(now)]
-    ↓ (OutputCommandsGenerated при таймаутах)
-[EventBus.publish(OutputCommandsGenerated)]
-    ↓ (OutputCommandsGenerated)
-[LGTUApplication._handle_output_commands()]
-    ↓ (output_states dict)
+[TurnstileDevice.tick(now)]
+    ↓ (Command при таймаутах)
+[LGTUApplication._CommandRunner]
+    ↓ (OutputCommand)
+[ShiftRegisterActuator.apply()]
+    ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
 [PinControllerThread.set_mask()]
@@ -443,19 +416,19 @@
 
 ### Подробное описание команд
 
-#### 1. ScudEngine → TurnstileState
+#### 1. LGTUApplication → TurnstileDevice
 **Данные**: `float` - текущее время
-**Метод**: `ScudEngine._event_loop()` → `TurnstileState.tick(now)`
+**Метод**: `LGTUApplication._tick_loop()` → `TurnstileDevice.tick(now)`
 
-#### 2. TurnstileState → EventBus (прикладной слой)
+#### 2. TurnstileDevice → _CommandRunner (прикладной слой)
 **Данные**: `OutputCommand(name: str, state: bool)` при таймаутах:
 - Автоматическое закрытие после таймаута
 - Автоматическое выключение бипера
 - Периодический бипер при тревоге
-**Метод**: `TurnstileState.tick()` → `EventBus.publish(OutputCommandsGenerated)`
-**Примечание**: TurnstileState работает с именами пинов, не зная о реализации через сдвиговый регистр
+**Метод**: `TurnstileDevice.tick()` → `Command` / `OutputCommand` → `_CommandRunner.apply(commands)`
+**Примечание**: `TurnstileDevice` работает с именами пинов, не зная о реализации через сдвиговый регистр
 
-#### 3-6. Аналогично сценарию 1 (через OutputCommandsGenerated, ShiftRegister)
+#### 3-5. Аналогично сценарию 1 (через ShiftRegisterActuator, ScudEngine, ShiftRegister)
 **Примечание**: Прикладной слой работает с именами пинов, инфраструктурный слой преобразует в битовые маски
 
 ---
@@ -497,10 +470,10 @@
 |---------|-----------|--------------|-------------|-------------|------|
 | `output_queue` (Wiegand) | `CardData` | `WeigandReader` | `ScudEngine._wiegand_queue_loop` | ScudEngine | Инфраструктурный |
 | `queue` (Serial) | `str` | `BackgroundSerialReader` | `ScudEngine._serial_queue_loop` | ScudEngine | Инфраструктурный |
-| `output_queue` (Mux) | `dict[str, int]` | `Multiplexer` | `PinControllerThread._mux_loop` | PinControllerThread | Инфраструктурный |
-| `mux_queue` | `dict[str, int]` | `PinControllerThread._mux_loop` | `ScudEngine._mux_queue_loop` | ScudEngine | Инфраструктурный |
+| `output_queue` (Mux) | `dict[str, int]` | `Multiplexer` | `PinControllerThread.mux_output_queue` | PinControllerThread | Инфраструктурный |
+| `mux_output_queue` | `dict[str, int]` | `PinControllerThread` | `ScudEngine._start_signals()` | ScudEngine | Инфраструктурный |
 | `shift_queue` | `int` | `PinControllerThread.set_mask` | `ShiftRegister.run` | PinControllerThread | Инфраструктурный |
-| `event_queue` | `ScudEvent` | Все модули | `ScudEngine._event_loop` | ScudEngine | Инфраструктурный → Прикладной |
+| `event_queue` | `ScudEvent` | `ScudEngine` | `LGTUApplication._run()` | LGTUApplication | Инфраструктурный → Прикладной |
 
 ---
 
@@ -508,13 +481,11 @@
 
 | Событие | Производитель | Потребитель | Параметры |
 |---------|--------------|-------------|-----------|
-| `CardRead` | `LGTUApplication._convert_scud_event_to_domain` | `handle_card_read` | `reader_id, credential, timestamp` |
-| `QrRead` | `LGTUApplication._convert_scud_event_to_domain` | `handle_qr_read` | `reader_id, credential, timestamp` |
-| `MuxInputChanged` | `LGTUApplication._convert_scud_event_to_domain` | `handle_mux_input_changed` | `input_name, state, timestamp` |
-| `ButtonPressed` | `handle_mux_input_changed` | `handle_button_pressed` | `button_name, action, timestamp` |
-| `AlarmChanged` | `handle_mux_input_changed` | `handle_alarm_changed` | `active, timestamp` |
-| `PassageDetected` | `LGTUApplication._convert_scud_event_to_domain` | `handle_passage_detected` | `zone, direction, result, timestamp` |
-| `OutputCommandsGenerated` | `TurnstileState` | `LGTUApplication._handle_output_commands` | `commands: List[OutputCommand]` |
+| `CardRead` | `LGTUApplication._convert_scud_event_to_domain` | `TurnstileDevice.handle()` | `reader_id, credential, timestamp` |
+| `QrRead` | `LGTUApplication._convert_scud_event_to_domain` | `TurnstileDevice.handle()` | `reader_id, credential, timestamp` |
+| `ButtonPressed` | `MuxEventMapper` / `LGTUApplication._convert_scud_event_to_domain` | `TurnstileDevice.handle()` | `button_id, state` |
+| `AlarmChanged` | `MuxEventMapper` / `LGTUApplication._convert_scud_event_to_domain` | `TurnstileDevice.handle()` | `active` |
+| `PassageDetected` | `LGTUApplication._convert_scud_event_to_domain` | `TurnstileDevice.handle()` | `zone, direction, duration, timestamp` |
 
 ---
 

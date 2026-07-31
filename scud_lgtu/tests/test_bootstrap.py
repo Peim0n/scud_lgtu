@@ -13,7 +13,7 @@ def config_path():
 
 def test_build_application_returns_app(config_path):
     """Проверить, что build_application возвращает объект приложения."""
-    from scud_lgtu.application.orchestration.lgtu_application import LGTUApplication
+    from scud_lgtu.application.lgtu_application import LGTUApplication
     app = build_application(config_path)
     assert app is not None
     assert isinstance(app, LGTUApplication)
