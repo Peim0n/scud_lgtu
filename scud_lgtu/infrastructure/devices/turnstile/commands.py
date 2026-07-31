@@ -71,7 +71,7 @@ class OpenEntryCommand(_RelayCommand):
     """Разовое открытие на вход."""
     meta = CommandMeta(
         name="open_entry",
-        conflicts=("open_exit",),
+        conflicts=("open_exit", "unlock_entry"),
         state_label="entry_open",
         end_state_label="idle",
     )
@@ -116,7 +116,7 @@ class OpenExitCommand(_RelayCommand):
     """Разовое открытие на выход."""
     meta = CommandMeta(
         name="open_exit",
-        conflicts=("open_entry",),
+        conflicts=("open_entry", "unlock_exit"),
         state_label="exit_open",
         end_state_label="idle",
     )
