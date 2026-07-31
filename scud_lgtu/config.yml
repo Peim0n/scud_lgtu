@@ -271,7 +271,7 @@ logging:
   loggers:
     # Инфраструктура (железо) - WARNING по умолчанию, DEBUG для дебага GPIO
     scud_lgtu.infrastructure.gpio.controller: WARNING
-    scud_lgtu.infrastructure.gpio.shift_register: DEBUG
+    scud_lgtu.infrastructure.gpio.shift_register: WARNING
     scud_lgtu.infrastructure.gpio.multiplexor: WARNING
     scud_lgtu.infrastructure.gpio.signal_reader: WARNING
     scud_lgtu.infrastructure.gpio.wiegand_reader: WARNING
