@@ -276,28 +276,22 @@ logging:
     scud_lgtu.infrastructure.gpio.signal_reader: WARNING
     scud_lgtu.infrastructure.gpio.wiegand_reader: WARNING
     scud_lgtu.infrastructure.serial.qr_codec: WARNING
+    scud_lgtu.infrastructure.serial.serial_reader: WARNING
 
-    # Доменный слой - INFO для бизнес-логики
-    scud_lgtu.domain.turnstile: INFO
-    scud_lgtu.domain.access: INFO
-
-    # Application слой - INFO для обработки событий
-    scud_lgtu.application.orchestration: INFO
-    scud_lgtu.application.handlers: INFO
-    scud_lgtu.application.services: INFO
-    scud_lgtu.application.lgtu_application: INFO
-
-    # Команды турникета - INFO для логики прохода
-    scud_lgtu.infrastructure.devices.turnstile.commands: INFO
-    scud_lgtu.infrastructure.devices.turnstile.turnstile_device: INFO
+    # ScudEngine - WARNING для внутреннего цикла
+    scud_lgtu.infrastructure.engine: WARNING
 
     # Инфраструктура (кэш, бэкенд, хранилище) - WARNING
     scud_lgtu.infrastructure.cache: WARNING
     scud_lgtu.infrastructure.backend: WARNING
     scud_lgtu.infrastructure.persistence: WARNING
 
-    # ScudEngine - WARNING для внутреннего цикла
-    scud_lgtu.infrastructure.core.engine: WARNING
+    # Application слой - только важные события
+    scud_lgtu.application.lgtu_application: WARNING
+
+    # Команды турникета - INFO для логики прохода
+    scud_lgtu.infrastructure.devices.turnstile.commands: INFO
+    scud_lgtu.infrastructure.devices.turnstile.turnstile_device: INFO
 
     # Системные логгеры
     asyncio: WARNING
