@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from scud_lgtu.domain.access_device import AccessDevice
 from scud_lgtu.domain.events import (
     AccessGranted,
     AccessDenied,
@@ -28,7 +29,7 @@ from scud_lgtu.infrastructure.devices.turnstile.commands import (
 )
 
 
-class TurnstileDevice:
+class TurnstileDevice(AccessDevice):
     """Событийно-управляемый турникет.
 
     Принимает доменные события и возвращает команду.
@@ -36,28 +37,21 @@ class TurnstileDevice:
     """
 
     def __init__(self, auth_timeout: float, timings: dict, resolver: Any):
+        super().__init__(device_id="turnstile", timings=timings, resolver=resolver)
         self._mode = "idle"
-        self.locked = False
         self._alarm = False
         self.current_token: Optional[str] = None
         self.current_user_id: Optional[int] = None
-
-        self._resolver = resolver
-        self._load_config(timings)
+        self._auth_timeout = auth_timeout
 
     def _load_config(self, timings: dict) -> None:
-        """Загрузить имена выходов и тайминги через resolver."""
+        """Загрузить тайминги через базовый класс и специфичные для турникета."""
+        super()._load_config(timings)
         self._auth_timeout = self._resolver.get_timing("business", "auth_timeout_s", timings.get("auth_timeout_s", 5.0))
-        self._relay_timeout = self._resolver.get_timing("turnstile", "relay_open_duration_s", timings.get("relay_open_duration_s", 7.0))
-        self._button_timeout = self._resolver.get_timing("turnstile", "button_timer_duration_s", timings.get("button_timer_duration_s", 7.0))
-        self._indicator_duration = self._resolver.get_timing("business", "indicator_duration_s", timings.get("indicator_duration_s", 2.0))
-        self._deny_beep_count = int(self._resolver.get_timing("business", "deny_beep_count", timings.get("deny_beep_count", 3)))
-        self._deny_beep_duration = self._resolver.get_timing("business", "deny_beep_duration_s", timings.get("deny_beep_duration_s", 0.1))
-        self._deny_beep_pause = self._resolver.get_timing("business", "deny_beep_pause_s", timings.get("deny_beep_pause_s", 0.1))
-        self._alarm_beep_on_duration = self._resolver.get_timing("business", "alarm_beep_on_duration_s", timings.get("alarm_beep_on_duration_s", 0.5))
-        self._alarm_beep_off_duration = self._resolver.get_timing("business", "alarm_beep_off_duration_s", timings.get("alarm_beep_off_duration_s", 0.5))
 
-        # Имена выходов
+    def _load_io_mappings(self) -> None:
+        """Загрузить имена выходов турникета."""
+        # Временно используем старый путь для обратной совместимости с текущим конфигом
         self._resolver.set_context("turnstile")
         self.entry_relay = self._resolver.resolve("entry_relay")
         self.exit_relay = self._resolver.resolve("exit_relay")
@@ -101,6 +95,14 @@ class TurnstileDevice:
 
     def handle(self, event) -> Optional[Command]:
         """Обработать доменное событие и вернуть команду для исполнителя."""
+        # Если установлена админская блокировка, сначала переводим в blocked,
+        # кроме случаев, когда уже заблокированы или активна тревога.
+        # Обработка самого AlarmChanged идёт без этого guard.
+        if not isinstance(event, AlarmChanged):
+            if self.locked and self._mode not in ("blocked", "alarm"):
+                self._mode = "blocked"
+                return LockCommand(self)
+
         if isinstance(event, AccessGranted):
             return self._on_access_granted(event)
         if isinstance(event, AccessDenied):
@@ -213,11 +215,10 @@ class TurnstileDevice:
             if self._mode == "blocked":
                 # Уже заблокирован, игнорируем
                 return None
-            if self._mode in ("unlocked_entry", "unlocked_exit"):
-                # Переход из разблокированного состояния в заблокированное
-                self.locked = True
-                self._mode = "blocked"
-                return LockCommand(self)
+            if self._mode in ("entry_open", "exit_open", "alarm"):
+                # Не блокируем, пока человек может проходить или активна тревога
+                return None
+            # idle / unlocked_entry / unlocked_exit
             self.locked = True
             self._mode = "blocked"
             return LockCommand(self)
@@ -239,7 +240,10 @@ class TurnstileDevice:
             self._mode = "alarm"
             return AlarmCommand(self)
         self._alarm = False
-        self._mode = "blocked" if self.locked else "idle"
+        # Диаграмма: после отмены ОПС всегда возвращаемся в нормально закрыт.
+        # Если установлен флаг админской блокировки, следующая проверка переведёт
+        # устройство в blocked через handle().
+        self._mode = "idle"
         return ClearAlarmCommand(self)
 
     def _on_passage_detected(self, event: PassageDetected) -> Command:

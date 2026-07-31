@@ -70,6 +70,41 @@ class ScudCLI:
         self.application.send_command(cmd)
         print(f"✓ Команда отправлена: {target}.{action}")
 
+    def send_admin_command(self, command: str) -> None:
+        """Отправить админ-команду в доменную логику."""
+        if not self.application:
+            print("❌ Движок не запущен")
+            return
+
+        self.application.send_admin_command(command)
+        print(f"✓ Админ-команда отправлена: {command}")
+
+    def _admin_menu(self) -> None:
+        """Подменю админ-команд турникета."""
+        while True:
+            print("\n--- Админ-команды ---")
+            print("1. Заблокировать (lock)")
+            print("2. Разблокировать (unlock)")
+            print("3. Разблокировать на вход (unlock_entry)")
+            print("4. Разблокировать на выход (unlock_exit)")
+            print("5. Снять разблокировку (cancel_unlock)")
+            print("6. Назад")
+
+            choice = input("Выберите действие: ").strip()
+            commands = {
+                "1": "lock",
+                "2": "unlock",
+                "3": "unlock_entry",
+                "4": "unlock_exit",
+                "5": "cancel_unlock",
+            }
+            if choice == "6":
+                break
+            if choice in commands:
+                self.send_admin_command(commands[choice])
+            else:
+                print("❌ Неверный выбор")
+
     def interactive_menu(self) -> None:
         """Запустить интерактивное меню."""
         while True:
@@ -78,7 +113,8 @@ class ScudCLI:
             print("2. Сгенерировать QR")
             print("3. Открыть турникет")
             print("4. Записать shift")
-            print("5. Выход")
+            print("5. Админ-команды")
+            print("6. Выход")
 
             choice = input("Выберите действие: ").strip()
 
@@ -95,6 +131,8 @@ class ScudCLI:
                 value = int(input("Введите значение shift: ").strip())
                 self.send_command("shift", "write_shift", {"value": value})
             elif choice == "5":
+                self._admin_menu()
+            elif choice == "6":
                 print("Выход...")
                 break
             else:

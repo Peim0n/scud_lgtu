@@ -581,3 +581,8 @@ class LGTUApplication:
             self._event_source.send_command(command)
         else:
             logger.warning("LGTUApplication: send_command не поддерживается источником событий")
+
+    def send_admin_command(self, command: str) -> None:
+        """Отправить админ-команду напрямую в доменную логику."""
+        logger.info(f"LGTUApplication: admin command '{command}'")
+        self._process_domain_event(AdminCommand(command=command))

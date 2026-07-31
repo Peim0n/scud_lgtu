@@ -4,8 +4,8 @@
 
 Система состоит из следующих основных слоев:
 - **Infrastructure Layer**: Работа с оборудованием (GPIO, Serial, Wiegand, Multiplexer, ShiftRegister)
-- **Domain Layer**: Бизнес-логика (TurnstileState, AccessPolicy, PassageTracker)
-- **Application Layer**: Оркестрация (LGTUApplication, Handlers, Services)
+- **Domain Layer**: Бизнес-логика (`AccessPolicy`, `PassageTracker`, доменные события/модели)
+- **Application Layer**: Оркестрация (`LGTUApplication`, `TurnstileDevice`, `CommandRunner`, `Services`)
 
 ## Абстракция оборудования
 
@@ -58,7 +58,7 @@
     ↓ (Command)
 [LGTUApplication._CommandRunner]
     ↓ (OutputCommand)
-[ShiftRegisterActuator.apply()]
+[_CommandRunner.apply()]
     ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
@@ -97,7 +97,7 @@
 **Данные**: `Command` / `OutputCommand(name: str, state: bool)`
 **Метод**: 
 - `TurnstileDevice.handle(CardRead)` → `Command`
-- `_CommandRunner.apply(commands)` → `ShiftRegisterActuator.apply(OutputCommand)`
+- `_CommandRunner.apply(commands)` — применяет `OutputCommand` через `ScudEngine.set_output_mask()`
 
 #### 7. LGTUApplication → ScudEngine (прикладной → инфраструктурный слой)
 **Данные**: `dict[str, bool]` - мапинг имен пинов на состояния (абстракция выходных пинов)
@@ -145,7 +145,7 @@
     ↓ (Command)
 [LGTUApplication._CommandRunner]
     ↓ (OutputCommand)
-[ShiftRegisterActuator.apply()]
+[_CommandRunner.apply()]
     ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
@@ -204,7 +204,7 @@
     ↓ (Command)
 [LGTUApplication._CommandRunner]
     ↓ (OutputCommand)
-[ShiftRegisterActuator.apply()]
+[_CommandRunner.apply()]
     ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
@@ -245,9 +245,9 @@
 
 #### 6. TurnstileDevice → _CommandRunner
 **Данные**: `Command` / `OutputCommand`
-**Метод**: `_CommandRunner.apply(commands)` → `ShiftRegisterActuator.apply(OutputCommand)`
+**Метод**: `_CommandRunner.apply(commands)` — применяет `OutputCommand` через `ScudEngine.set_output_mask()`
 
-#### 7-9. Аналогично сценарию 1 (через ShiftRegisterActuator, ScudEngine, ShiftRegister)
+#### 7-9. Аналогично сценарию 1 (через _CommandRunner.apply(), ScudEngine.set_output_mask(), ShiftRegister)
 
 ---
 
@@ -275,7 +275,7 @@
     ↓ (Command)
 [LGTUApplication._CommandRunner]
     ↓ (OutputCommand)
-[ShiftRegisterActuator.apply()]
+[_CommandRunner.apply()]
     ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
@@ -316,13 +316,13 @@
 
 #### 9. TurnstileDevice → _CommandRunner
 **Данные**: `Command` / `OutputCommand`
-**Метод**: `_CommandRunner.apply(commands)` → `ShiftRegisterActuator.apply(OutputCommand)`
+**Метод**: `_CommandRunner.apply(commands)` — применяет `OutputCommand` через `ScudEngine.set_output_mask()`
 
 #### 10. LGTUApplication → PassageService
 **Данные**: `Passage(zone: str, direction: DirectionEnum, result: ResultEnum, timestamp: float)`
-**Метод**: `PassageService.log_passage(passage)` → `EventStore.add_passage_event()`
+**Метод**: `PassageService.log_passage(passage)` → `EventLogAdapter.append()` → `EventStore.append()`
 
-#### 11-13. Аналогично сценарию 1 (через ShiftRegisterActuator, ScudEngine, ShiftRegister)
+#### 11-13. Аналогично сценарию 1 (через _CommandRunner.apply(), ScudEngine.set_output_mask(), ShiftRegister)
 **Примечание**: Прикладной слой работает с именами пинов, инфраструктурный слой преобразует в битовые маски
 
 ---
@@ -351,7 +351,7 @@
     ↓ (Command)
 [LGTUApplication._CommandRunner]
     ↓ (OutputCommand)
-[ShiftRegisterActuator.apply()]
+[_CommandRunner.apply()]
     ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
@@ -387,23 +387,23 @@
 - При сбросе: `TurnstileDevice._on_alarm_changed()` → `ClearAlarmCommand`
 **Примечание**: `TurnstileDevice` работает с именами пинов, не зная о реализации через сдвиговый регистр
 
-#### 8-10. Аналогично сценарию 1 (через ShiftRegisterActuator, ScudEngine, ShiftRegister)
+#### 8-10. Аналогично сценарию 1 (через _CommandRunner.apply(), ScudEngine.set_output_mask(), ShiftRegister)
 **Примечание**: Инфраструктурный слой преобразует имена пинов в битовые маски для сдвигового регистра
 
 ---
 
-## Сценарий 6: Периодический тик TurnstileState
+## Сценарий 6: Таймауты внутри асинхронных команд
 
 ### Поток данных
 
 ```
-[LGTUApplication._tick_loop()]
-    ↓ (периодический вызов)
-[TurnstileDevice.tick(now)]
-    ↓ (Command при таймаутах)
 [LGTUApplication._CommandRunner]
+    ↓ (Command.run() выполняется как asyncio.Task)
+[OpenEntryCommand / OpenExitCommand]
+    ↓ await _sleep(relay_open_duration_s)
+[CloseCommand]  (автоматически при таймауте)
     ↓ (OutputCommand)
-[ShiftRegisterActuator.apply()]
+[_CommandRunner.apply()]
     ↓ (маска пинов)
 [ScudEngine.set_output_mask()]
     ↓ (masks dict)
@@ -416,19 +416,19 @@
 
 ### Подробное описание команд
 
-#### 1. LGTUApplication → TurnstileDevice
-**Данные**: `float` - текущее время
-**Метод**: `LGTUApplication._tick_loop()` → `TurnstileDevice.tick(now)`
+#### 1. _CommandRunner → Command
+**Данные**: `Command` (например, `OpenEntryCommand`)
+**Метод**: `_CommandRunner.submit(command)` → `asyncio.create_task(command.run(executor))`
 
-#### 2. TurnstileDevice → _CommandRunner (прикладной слой)
+#### 2. Command → _CommandRunner (при таймауте)
 **Данные**: `OutputCommand(name: str, state: bool)` при таймаутах:
-- Автоматическое закрытие после таймаута
+- Автоматическое закрытие после `relay_open_duration_s`
 - Автоматическое выключение бипера
 - Периодический бипер при тревоге
-**Метод**: `TurnstileDevice.tick()` → `Command` / `OutputCommand` → `_CommandRunner.apply(commands)`
-**Примечание**: `TurnstileDevice` работает с именами пинов, не зная о реализации через сдвиговый регистр
+**Метод**: `Command._sleep(timeout)` → по таймауту применяет выключение выходов
+**Примечание**: `TurnstileDevice` не имеет `tick()`; таймауты реализованы внутри команд.
 
-#### 3-5. Аналогично сценарию 1 (через ShiftRegisterActuator, ScudEngine, ShiftRegister)
+#### 3-5. Аналогично сценарию 1 (через _CommandRunner.apply(), ScudEngine, ShiftRegister)
 **Примечание**: Прикладной слой работает с именами пинов, инфраструктурный слой преобразует в битовые маски
 
 ---
@@ -443,9 +443,8 @@
 [SyncService._sync()]
     ↓ (BackendGateway.get_access_list())
     ↓ (LocalAccessCache.update())
+    ↓ (EventLogAdapter.flush() / EventStore.flush())
     ↓ (BackendGateway.send_events())
-    ↓ (EventStore.get_unsent_events())
-    ↓ (EventStore.mark_events_sent())
 ```
 
 ### Подробное описание команд
@@ -460,7 +459,7 @@
 
 #### 3. SyncService → EventStore
 **Данные**: `list[PassageEvent]` - неотправленные события
-**Метод**: `EventStore.get_unsent_events()` / `mark_events_sent()`
+**Метод**: `EventLogAdapter.flush()` → `EventStore.flush()`
 
 ---
 
@@ -493,15 +492,13 @@
 
 | Имя пина | Описание | Используется в |
 |----------|----------|----------------|
-| `rel1` | Реле входа | `open_entry`, `close`, `set_alarm`, `clear_alarm`, `block` |
-| `rel2` | Реле выхода | `open_exit`, `close`, `set_alarm`, `clear_alarm`, `block` |
-| `w1_green` | Индикатор входа (зелёный) | `open_entry`, `close` |
-| `w1_red` | Индикатор входа (красный) | `open_entry`, `set_alarm`, `clear_alarm`, `block`, `unblock` |
-| `w2_green` | Индикатор выхода (зелёный) | `open_exit`, `close` |
-| `w2_red` | Индикатор выхода (красный) | `open_exit`, `set_alarm`, `clear_alarm`, `block`, `unblock` |
-| `buz` | Основной бипер | `open_entry`, `open_exit`, `deny_beep_sequence`, `set_alarm`, `clear_alarm`, `tick` |
-| `w1_beep` | Бипер считывателя входа | `handle_card_read`, `handle_qr_read` (индикаторы) |
-| `w2_beep` | Бипер считывателя выхода | `handle_card_read`, `handle_qr_read` (индикаторы) |
+| `entry_relay` | Реле входа | `OpenEntryCommand`, `UnlockEntryCommand`, `CloseCommand`, `AlarmCommand`, `ClearAlarmCommand`, `LockCommand` |
+| `exit_relay` | Реле выхода | `OpenExitCommand`, `UnlockExitCommand`, `CloseCommand`, `AlarmCommand`, `ClearAlarmCommand`, `LockCommand` |
+| `entry_green` | Индикатор входа (зелёный) | `OpenEntryCommand`, `UnlockEntryCommand`, `CloseCommand` |
+| `entry_red` | Индикатор входа (красный) | `DenyCommand`, `AlarmCommand`, `ClearAlarmCommand`, `LockCommand`, `UnlockCommand` |
+| `exit_green` | Индикатор выхода (зелёный) | `OpenExitCommand`, `UnlockExitCommand`, `CloseCommand` |
+| `exit_red` | Индикатор выхода (красный) | `DenyCommand`, `AlarmCommand`, `ClearAlarmCommand`, `LockCommand`, `UnlockCommand` |
+| `main_buzzer` | Основной бипер | `OpenEntryCommand`, `OpenExitCommand`, `DenyCommand`, `AlarmCommand`, `ClearAlarmCommand`, `CloseCommand` |
 
 ---
 
@@ -513,10 +510,9 @@ GPIO: D0=_____-_____-_____ D1=_____-____-_____
 WeigandReader: accumulate bits (26 total)
 WeigandReader: CardData -> output_queue
 ScudEngine: CardData -> ScudEvent -> event_queue
-LGTUApplication: ScudEvent -> CardRead -> EventBus
-handle_card_read: CardRead -> AccessDecision
-TurnstileState: AccessDecision -> OutputCommandsGenerated
-ShiftRegister: OutputCommandsGenerated -> GPIO
+LGTUApplication: ScudEvent -> CardRead -> _to_device_event()
+TurnstileDevice.handle(CardRead) -> AccessPolicy.check() -> Command
+_CommandRunner: Command -> OutputCommand -> ScudEngine.set_output_mask() -> GPIO
 ```
 
 ### Multiplexer опрос
@@ -525,14 +521,14 @@ GPIO: Addr pins cycle 0-7, read input each
 Multiplexer: set_addr -> settle -> read (under lock)
 Multiplexer: dict -> output_queue (delta-filtered)
 PinControllerThread: dict -> mux_queue
-ScudEngine: dict -> PassageDetector / handle_mux
+ScudEngine: dict -> MuxEventMapper -> ButtonPressed / AlarmChanged / PassageDetected
 ```
 
 ### ShiftRegister запись
 ```
-TurnstileState: OutputCommandsGenerated
-LGTUApplication: commands -> output_states dict
-ScudEngine: dict -> masks dict
+TurnstileDevice.handle() -> Command
+_CommandRunner: Command -> list[OutputCommand]
+ScudEngine.set_output_mask(): OutputCommand names -> dict[str, bool] -> masks dict
 PinControllerThread: masks -> int mask
 ShiftRegister: int -> SER_DATA/SER_CLK/SER_LATCH sequence
 GPIO: 16 bits shifted out, LATCH pulsed

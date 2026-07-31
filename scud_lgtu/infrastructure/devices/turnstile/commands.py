@@ -416,6 +416,10 @@ class ClearAlarmCommand(_RelayCommand):
                 OutputCommand(name=self._device.exit_red, state=False),
             ])
         await executor.apply(commands)
+        # Чисто событийно: после сброса тревоги сразу формализуем
+        # админскую блокировку, если она установлена.
+        if self._device.locked:
+            self._device._mode = "blocked"
 
 
 class DenyCommand(_RelayCommand):

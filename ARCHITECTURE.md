@@ -77,25 +77,25 @@ LGTU Controller — это система контроля доступа (СК�
 
 | Модуль | Назначение |
 |--------|------------|
-| `core/engine.py` | `ScudEngine` — главный оркестратор hardware: запуск потоков, мосты очередей, watchdog |
+| `engine.py` | `ScudEngine` — главный оркестратор hardware: запуск потоков, мосты очередей, watchdog |
 
-### 3.2. GPIO (`scud_lgtu/infrastructure/gpio/`)
-
-| Модуль | Назначение |
-|--------|------------|
-| `controller.py` | `GpiodPinController` и `PinControllerThread`: управление пинами, мультиплексором и сдвиговым регистром |
-| `multiplexor.py` | `Multiplexer` — опрос входов через адресный мультиплексор |
-| `shift_register.py` | `ShiftRegister` — вывод битовой маски в сдвиговый регистр |
-| `signal_reader.py` | Чтение сигналов с GPIO |
-| `actuator.py` | `ShiftRegisterActuator` — адаптер `Actuator` для сдвигового регистра |
-| `wiegand_reader.py` | `WiegandReader` — чтение карт по Wiegand-интерфейсу |
-
-### 3.3. Serial (`scud_lgtu/infrastructure/serial/`)
+### 3.2. GPIO (`scud_lgtu/infrastructure/firmware/gpio/`)
 
 | Модуль | Назначение |
 |--------|------------|
-| `reader.py` | `BackgroundSerialReader` — фоновое чтение из Serial-порта |
-| `qr_codec.py` | `QRDecoder` — декодирование URL QR-кодов с проверкой подписи |
+| `firmware/gpio/controller.py` | `GpiodPinController` и `PinControllerThread`: управление пинами, мультиплексором и сдвиговым регистром |
+| `firmware/gpio/multiplexor.py` | `Multiplexer` и `MuxEventMapper` — опрос входов и генерация событий |
+| `firmware/gpio/shift_register.py` | `ShiftRegister` — вывод битовой маски в сдвиговый регистр |
+| `firmware/gpio/signal_reader.py` | Чтение сигналов с GPIO |
+| `firmware/gpio/actuator.py` | `ShiftRegisterActuator` — адаптер `Actuator` для сдвигового регистра |
+| `firmware/gpio/wiegand_reader.py` | `WiegandReader` — чтение карт по Wiegand-интерфейсу |
+
+### 3.3. Serial (`scud_lgtu/infrastructure/firmware/serial/`)
+
+| Модуль | Назначение |
+|--------|------------|
+| `firmware/serial/serial_reader.py` | `BackgroundSerialReader` — фоновое чтение из Serial-порта |
+| `firmware/serial/qr_decoder.py` | `QRDecoder` — декодирование URL QR-кодов с проверкой подписи |
 
 ### 3.4. Кэш и хранение
 
@@ -143,10 +143,6 @@ LGTU Controller — это система контроля доступа (СК�
 |------|------------|
 | `interfaces/cli.py` | Командный интерфейс для управления и диагностики |
 | `run_lgtu_controller.py` | Запуск реального контроллера |
-| `run_lgtu_controller_mock.py` | Запуск в режиме мок-оборудования |
-| `run_lgtu_controller_mock_interactive.py` | Интерактивный мок-контроллер |
-| `run_mock_devices.py` | Эмуляция hardware-устройств |
-| `run_mock_devices_interactive.py` | Интерактивный эмулятор устройств |
 
 ---
 
@@ -241,18 +237,20 @@ LGTU Controller — это система контроля доступа (СК�
 |-------------|-------------|------------|
 | **Время открытия турникета** после карты/QR | `scud_lgtu/config.yml` → `timings.relay_open_duration_s` | Время в секундах, пока реле остаётся открытым |
 | **Время открытия турникета** после отжатия кнопки | `scud_lgtu/config.yml` → `timings.button_timer_duration_s` | Время до автоматического закрытия после отпускания кнопки |
-| **Логика открытия/закрытия, индикация, тревога** | `scud_lgtu/domain/turnstile/services/turnstile.py` | Класс `TurnstileState`: методы `open_entry`, `open_exit`, `close`, `set_alarm`, `clear_alarm`, `tick` |
-| **Правила доступа** (кто проходит, кто нет) | `scud_lgtu/domain/access/services/services.py` | Класс `AccessPolicy`, метод `check`. Источник данных — `AccessRepository` (`cache/repository.py`) |
-| **Реакция на кнопки** | `scud_lgtu/application/handlers/button.py` + `scud_lgtu/config.yml` → `devices.buttons` | Сопоставление `label` → `action` (`open_entry`, `open_exit`, `close`) |
-| **Реакция на тревогу** | `scud_lgtu/application/handlers/alarm.py` | Вызов `turnstile.set_alarm()` / `clear_alarm()` и публикация команд |
-| **Обработка проходов** (логирование, закрытие после прохода) | `scud_lgtu/application/handlers/passage.py` | `handle_passage_detected` |
-| **Преобразование событий оборудования в доменные** | `scud_lgtu/application/orchestration/lgtu_application.py` | Метод `_convert_scud_event_to_domain` |
-| **Добавить новое событие** | `scud_lgtu/domain/common/events/events.py` + `scud_lgtu/application/handlers/` + `LGTUApplication._register_handlers` | Определить dataclass события, обработчик, зарегистрировать подписку |
+| **Логика открытия/закрытия, индикация, тревога** | `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` + `commands.py` | `TurnstileDevice.handle()` выбирает `Command` по событию; `commands.py` выполняет выходы асинхронно |
+| **Правила доступа** (кто проходит, кто нет) | `scud_lgtu/domain/access.py` | Класс `AccessPolicy`, метод `check`. Источник данных — `AccessRepository` (`cache/repository.py`) |
+| **Реакция на кнопки** | `scud_lgtu/application/lgtu_application.py` → `_map_button_event()` + `scud_lgtu/config.yml` → `devices.buttons` | Сопоставление `label` → `action` (`open_entry`, `open_exit`, `shift`) |
+| **Реакция на тревогу** | `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` → `_on_alarm_changed()` | Генерация `AlarmCommand` / `ClearAlarmCommand` |
+| **Обработка проходов** (логирование, закрытие после прохода) | `scud_lgtu/application/lgtu_application.py` → `_log_passage()` + `TurnstileDevice._on_passage_detected()` | `PassageService.log_passage()` + `CloseCommand` |
+| **Преобразование событий оборудования в доменные** | `scud_lgtu/application/lgtu_application.py` | Метод `_convert_scud_event_to_domain()` |
+| **Админ-команды** | `scud_lgtu/application/lgtu_application.py` → `send_admin_command()` + `interfaces/cli.py` | `AdminCommand` → `DeviceCommand` → `TurnstileDevice` |
+| **Добавить новое событие** | `scud_lgtu/domain/events.py` + `scud_lgtu/application/lgtu_application.py` | Определить dataclass события и обработать его в `_to_device_event()` / `TurnstileDevice.handle()` |
 | **Тайминги, мапинги пинов, устройства** | `scud_lgtu/config.yml` | Секции `timings`, `mappings`, `devices`, `mux`, `shift_register` |
 
 ### 10.2. Принцип: доменный слой не зависит от инфраструктуры
 
-- `TurnstileState` и `AccessPolicy` **не импортируют** GPIO, HTTP, базы данных.
+- `AccessPolicy` **не импортирует** GPIO, HTTP, базы данных.
+- `TurnstileDevice` (пока в инфраструктурном слое) знает имена пинов через `ModuleResolver`, но не работает с GPIO напрямую.
 - Вместо этого они работают с моделями (`Passage`, `Credential`, `OutputCommand`) и портами (`AccessRepository`, `EventLog`).
 - Если нужно изменить, *как* включается реле (инверсия, длительность импульса), править надо в инфраструктуре (`ShiftRegister`, `GpiodPinController`).
 - Если нужно изменить, *когда* включается реле (по какому событию, на сколько), править в домене/приложении.
@@ -276,13 +274,13 @@ LGTU Controller — это система контроля доступа (СК�
    ```
 
 3. Изменить `action` на одно из: `open_entry`, `open_exit`, `close`.
-4. Если нужно новое действие (например, блокировка), расширить `scud_lgtu/application/handlers/button.py` и добавить метод в `TurnstileState`.
+4. Если нужно новое действие, расширить `_map_button_event()` в `scud_lgtu/application/lgtu_application.py` и добавить обработку в `TurnstileDevice._on_device_command()`.
 
 #### Изменить поведение при тревоге
 
-1. Открыть `scud_lgtu/domain/turnstile/services/turnstile.py`.
-2. Найти методы `set_alarm()` и `clear_alarm()`.
-3. Изменить список `OutputCommand`, который они возвращают:
+1. Открыть `scud_lgtu/infrastructure/devices/turnstile/commands.py`.
+2. Найти классы `AlarmCommand` и `ClearAlarmCommand`.
+3. Изменить список `OutputCommand`, который они применяют:
 
    ```python
    OutputCommand(name=self._exit_relay, state=True),   # открыть выход
@@ -302,11 +300,11 @@ LGTU Controller — это система контроля доступа (СК�
      relay_open_duration_s: 3.0
    ```
 
-3. `TurnstileState._load_from_resolver()` подхватит значение автоматически.
+3. `TurnstileDevice._load_config()` подхватит значение автоматически.
 
 #### Добавить новый обработчик события
 
-1. Определить событие в `scud_lgtu/domain/common/events/events.py`:
+1. Определить событие в `scud_lgtu/domain/events.py`:
 
    ```python
    @dataclass
@@ -314,40 +312,31 @@ LGTU Controller — это система контроля доступа (СК�
        payload: str
    ```
 
-2. Создать обработчик в `scud_lgtu/application/handlers/my_handler.py`:
+2. Преобразовать `ScudEvent` в него в `scud_lgtu/application/lgtu_application.py` → `_convert_scud_event_to_domain()`.
 
-   ```python
-   def handle_my_event(event: MyEvent, turnstile, event_bus):
-       ...
-   ```
+3. Обработать его в `scud_lgtu/application/lgtu_application.py` → `_to_device_event()` и/или в `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` → `handle()`.
 
-3. Зарегистрировать в `scud_lgtu/application/orchestration/lgtu_application.py`:
-
-   ```python
-   self._event_bus.subscribe("MyEvent", lambda e: handle_my_event(e, self._turnstile, self._event_bus))
-   ```
-
-4. Убедиться, что событие публикуется где-то в `_convert_scud_event_to_domain` или другом обработчике.
+4. Если нужно добавить новую команду, создать класс в `scud_lgtu/infrastructure/devices/turnstile/commands.py` и вернуть его из `TurnstileDevice.handle()`.
 
 ### 10.4. Что трогать не нужно
 
-- `scud_lgtu/infrastructure/gpio/` — драйверы GPIO/мультиплексора/сдвигового регистра и Wiegand-считывателя.
-- `scud_lgtu/infrastructure/serial/` — низкоуровневое чтение QR/Serial.
+- `scud_lgtu/infrastructure/firmware/gpio/` — драйверы GPIO/мультиплексора/сдвигового регистра и Wiegand-считывателя.
+- `scud_lgtu/infrastructure/firmware/serial/` — низкоуровневое чтение QR/Serial.
 - `scud_lgtu/infrastructure/backend/` — HTTP-клиент к серверу.
 
 Изменения в этих модулях требуются только при смене железа или протокола.
 
 ---
 
-## 11. Почему `TurnstileState`, `LGTUApplication` и `ScudEngine` разделены
+## 11. Почему `TurnstileDevice`, `LGTUApplication` и `ScudEngine` разделены
 
 Эти три компонента отвечают за разные уровни абстракции. Их разделение позволяет тестировать бизнес-логику без железа, менять GPIO-библиотеку или вообще запускать приложение в мок-режиме.
 
-### 11.1. `TurnstileState` — доменный слой
+### 11.1. `TurnstileDevice` — логика устройства
 
-- Чистая бизнес-логика: состояния турникета, таймауты, что включать/выключать.
-- Не знает ни про GPIO, ни про очереди, ни про HTTP.
-- Получает команды («открыть вход», «тревога», «проход завершён») и возвращает список `OutputCommand`.
+- Реализует конечный автомат турникета: состояния, переходы по событиям, выбор асинхронной команды.
+- Не работает с GPIO напрямую: знает только бизнес-имена пинов (`entry_relay`, `exit_relay`, …) через `ModuleResolver`.
+- Получает доменные события (`AccessGranted`, `AlarmChanged`, `PassageDetected`, `DeviceCommand`) и возвращает `Command`.
 - Его можно протестировать unit-тестами без Orange Pi.
 
 ### 11.2. `LGTUApplication` — прикладной слой
@@ -356,7 +345,7 @@ LGTU Controller — это система контроля доступа (СК�
 - Превращает события железа (`ScudEvent`) в доменные события (`CardRead`, `QrRead`, `ButtonPressed`, `AlarmChanged`, `PassageDetected`).
 - Передаёт доменные события `TurnstileDevice` и выполняет возвращённые `Command`.
 - Тактически применяет команды через `ShiftRegisterActuator`.
-- Не управляет GPIO напрямую — делает это через порт `Actuator`.
+- Не управляет GPIO напрямую — делает это через `_CommandRunner`, который применяет `OutputCommand` к актуатору.
 
 ### 11.3. `ScudEngine` — инфраструктурный слой
 
@@ -372,11 +361,11 @@ LGTU Controller — это система контроля доступа (СК�
                                                        ↓
                                           ButtonPressed / AlarmChanged / PassageDetected
                                                        ↓
-                                          TurnstileDevice.handle()
+                                          _to_device_event() / TurnstileDevice.handle()
                                                        ↓
                                           Command
                                                        ↓
-                                          _CommandRunner → ShiftRegisterActuator → ScudEngine → GPIO
+                                          _CommandRunner.apply() → ScudEngine.set_output_mask() → GPIO
 ```
 
 Такое разделение соответствует **Clean Architecture**: домен не зависит от приложения и инфраструктуры, а инфраструктура зависит от адаптеров, реализующих нужные интерфейсы.
