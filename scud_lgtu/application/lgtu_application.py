@@ -472,9 +472,9 @@ class LGTUApplication:
             state = scud_event.payload.get("state")
             if button_id is not None and state is not None:
                 event = ButtonPressed(button_id=button_id, state=state)
-                # Логируем только нажатия на DEBUG уровне
+                # Логируем только нажатия
                 if state:
-                    logger.debug(f"Button pressed: {button_id}")
+                    logger.info(f"Button pressed: {button_id}")
                 return event
             return None
         elif event_type == "alarm_changed":
