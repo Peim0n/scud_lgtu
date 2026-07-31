@@ -83,7 +83,7 @@ class OpenEntryCommand(_RelayCommand):
     async def run(self, executor) -> None:
         logger.info(f"OpenEntryCommand: открытие входа на {self._duration}с")
         try:
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.exit_relay, state=False),
                 OutputCommand(name=self._device.entry_relay, state=True),
                 OutputCommand(name=self._device.entry_green, state=True),
@@ -94,7 +94,7 @@ class OpenEntryCommand(_RelayCommand):
         finally:
             self._device.current_token = None
             self._device.current_user_id = None
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.entry_relay, state=False),
                 OutputCommand(name=self._device.entry_green, state=False),
                 OutputCommand(name=self._device.main_buzzer, state=False),
@@ -126,7 +126,7 @@ class OpenExitCommand(_RelayCommand):
     async def run(self, executor) -> None:
         logger.info(f"OpenExitCommand: открытие выхода на {self._duration}с")
         try:
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.entry_relay, state=False),
                 OutputCommand(name=self._device.exit_relay, state=True),
                 OutputCommand(name=self._device.exit_green, state=True),
@@ -137,7 +137,7 @@ class OpenExitCommand(_RelayCommand):
         finally:
             self._device.current_token = None
             self._device.current_user_id = None
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.exit_relay, state=False),
                 OutputCommand(name=self._device.exit_green, state=False),
                 OutputCommand(name=self._device.main_buzzer, state=False),
@@ -164,7 +164,7 @@ class UnlockEntryCommand(_RelayCommand):
 
     async def run(self, executor) -> None:
         logger.info("UnlockEntryCommand: разблокирован вход")
-        executor.apply([
+        await executor.apply([
             OutputCommand(name=self._device.exit_relay, state=False),
             OutputCommand(name=self._device.entry_relay, state=True),
             OutputCommand(name=self._device.entry_green, state=True),
@@ -172,7 +172,7 @@ class UnlockEntryCommand(_RelayCommand):
             OutputCommand(name=self._device.main_buzzer, state=True),
         ])
         await self._wait_until_stopped()
-        executor.apply([
+        await executor.apply([
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.entry_green, state=False),
             OutputCommand(name=self._device.main_buzzer, state=False),
@@ -197,7 +197,7 @@ class UnlockExitCommand(_RelayCommand):
 
     async def run(self, executor) -> None:
         logger.info("UnlockExitCommand: разблокирован выход")
-        executor.apply([
+        await executor.apply([
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.exit_relay, state=True),
             OutputCommand(name=self._device.exit_green, state=True),
@@ -205,7 +205,7 @@ class UnlockExitCommand(_RelayCommand):
             OutputCommand(name=self._device.main_buzzer, state=True),
         ])
         await self._wait_until_stopped()
-        executor.apply([
+        await executor.apply([
             OutputCommand(name=self._device.exit_relay, state=False),
             OutputCommand(name=self._device.exit_green, state=False),
             OutputCommand(name=self._device.main_buzzer, state=False),
@@ -231,7 +231,7 @@ class CloseCommand(_RelayCommand):
         logger.info("CloseCommand: закрытие")
         self._device.current_token = None
         self._device.current_user_id = None
-        executor.apply([
+        await executor.apply([
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.exit_relay, state=False),
             OutputCommand(name=self._device.entry_green, state=False),
@@ -282,7 +282,7 @@ class LockCommand(_RelayCommand):
             self._device.locked = True
             self._device.current_token = None
             self._device.current_user_id = None
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.entry_relay, state=False),
                 OutputCommand(name=self._device.exit_relay, state=False),
                 OutputCommand(name=self._device.entry_green, state=False),
@@ -293,7 +293,7 @@ class LockCommand(_RelayCommand):
             ])
             await self._wait_until_stopped()
         finally:
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.entry_red, state=False),
                 OutputCommand(name=self._device.exit_red, state=False),
             ])
@@ -316,7 +316,7 @@ class UnlockCommand(_RelayCommand):
     async def run(self, executor) -> None:
         logger.info("UnlockCommand: разблокировка")
         self._device.locked = False
-        executor.apply([
+        await executor.apply([
             OutputCommand(name=self._device.entry_red, state=False),
             OutputCommand(name=self._device.exit_red, state=False),
         ])
@@ -341,7 +341,7 @@ class AlarmCommand(_RelayCommand):
         self._device.current_token = None
         self._device.current_user_id = None
         try:
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.entry_relay, state=False),
                 OutputCommand(name=self._device.exit_relay, state=True),  # эвакуация
                 OutputCommand(name=self._device.entry_green, state=False),
@@ -353,12 +353,12 @@ class AlarmCommand(_RelayCommand):
             while True:
                 if await self._sleep(self._on_duration):
                     break
-                executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
+                await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
                 if await self._sleep(self._off_duration):
                     break
-                executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
+                await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
         finally:
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.entry_relay, state=False),
                 OutputCommand(name=self._device.exit_relay, state=False),
                 OutputCommand(name=self._device.entry_red, state=False),
@@ -390,7 +390,7 @@ class ClearAlarmCommand(_RelayCommand):
 
     async def run(self, executor) -> None:
         logger.info("ClearAlarmCommand: сброс тревоги")
-        executor.apply([
+        await executor.apply([
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.exit_relay, state=False),
             OutputCommand(name=self._device.entry_green, state=False),
@@ -400,7 +400,7 @@ class ClearAlarmCommand(_RelayCommand):
             OutputCommand(name=self._device.main_buzzer, state=False),
         ])
         if self._device.locked:
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.entry_red, state=True),
                 OutputCommand(name=self._device.exit_red, state=True),
             ])
@@ -426,24 +426,24 @@ class DenyCommand(_RelayCommand):
         pause = self._device.deny_beep_pause
 
         try:
-            executor.apply([OutputCommand(name=green, state=False)])
+            await executor.apply([OutputCommand(name=green, state=False)])
             for i in range(count):
                 if self._stop.is_set():
                     break
-                executor.apply([
+                await executor.apply([
                     OutputCommand(name=self._device.main_buzzer, state=True),
                     OutputCommand(name=red, state=True),
                 ])
                 if await self._sleep(duration):
                     break
-                executor.apply([
+                await executor.apply([
                     OutputCommand(name=self._device.main_buzzer, state=False),
                     OutputCommand(name=red, state=False),
                 ])
                 if i < count - 1 and await self._sleep(pause):
                     break
         finally:
-            executor.apply([
+            await executor.apply([
                 OutputCommand(name=self._device.main_buzzer, state=False),
                 OutputCommand(name=red, state=False),
             ])
