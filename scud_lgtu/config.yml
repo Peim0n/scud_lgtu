@@ -54,9 +54,9 @@ mux:
   inputs:
     input_0: {addr: 0}
     button_3: {addr: 1}
-    sensor_2: {addr: 2}
+    sensor_2: {addr: 2, direction: "out", zone: "zone1"}
     input_3: {addr: 3}
-    sensor_1: {addr: 4}
+    sensor_1: {addr: 4, direction: "in", zone: "zone1"}
     button_1: {addr: 5}
     alarm: {addr: 6, active_high: true}
     button_2: {addr: 7}
