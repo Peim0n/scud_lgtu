@@ -287,7 +287,7 @@ logging:
     scud_lgtu.infrastructure.persistence: WARNING
 
     # Application слой - только важные события
-    scud_lgtu.application.lgtu_application: WARNING
+    scud_lgtu.application.lgtu_application: INFO
 
     # Команды турникета - INFO для логики прохода
     scud_lgtu.infrastructure.devices.turnstile.commands: INFO
