@@ -85,7 +85,12 @@ class _CommandRunner:
     async def _schedule(self, command: Command) -> None:
         meta = command.meta
         for name in meta.conflicts:
-            await self._stop_and_wait(name)
+            # Если новая команда имеет тот же state_label, что и конфликтующая, пропускаем cleanup
+            skip_cleanup = False
+            old_command = self._commands.get(name)
+            if old_command is not None and old_command.meta.state_label == meta.state_label:
+                skip_cleanup = True
+            await self._stop_and_wait(name, skip_cleanup=skip_cleanup)
         # Если команда с таким же именем уже выполняется, обновляем её вместо остановки
         old_command = self._commands.get(meta.name)
         task = self._tasks.get(meta.name)
@@ -101,13 +106,15 @@ class _CommandRunner:
         self._commands[meta.name] = command
         self._tasks[meta.name] = task
 
-    async def _stop_and_wait(self, name: str, timeout: float = 0.5) -> None:
+    async def _stop_and_wait(self, name: str, timeout: float = 0.5, skip_cleanup: bool = False) -> None:
         old_command = self._commands.get(name)
         task = self._tasks.get(name)
         if old_command is None or task is None or task.done():
             self._commands.pop(name, None)
             self._tasks.pop(name, None)
             return
+        if skip_cleanup and hasattr(old_command, '_skip_cleanup'):
+            old_command._skip_cleanup = True
         old_command.request_stop()
         try:
             await asyncio.wait_for(task, timeout=timeout)

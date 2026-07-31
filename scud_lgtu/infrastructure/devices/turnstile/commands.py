@@ -80,10 +80,11 @@ class OpenEntryCommand(_RelayCommand):
         end_state_label="idle",
     )
 
-    def __init__(self, device: "TurnstileDevice", duration: float):
+    def __init__(self, device: "TurnstileDevice", duration: float, skip_cleanup: bool = False):
         super().__init__(device)
         self._duration = duration
         self._refresh_requested = False
+        self._skip_cleanup = skip_cleanup
 
     async def run(self, executor) -> None:
         logger.info(f"OpenEntryCommand: открытие входа на {self._duration}с")
@@ -109,10 +110,11 @@ class OpenEntryCommand(_RelayCommand):
         finally:
             self._device.current_token = None
             self._device.current_user_id = None
-            await executor.apply([
-                OutputCommand(name=self._device.entry_relay, state=False),
-                OutputCommand(name=self._device.entry_green, state=False),
-            ])
+            if not self._skip_cleanup:
+                await executor.apply([
+                    OutputCommand(name=self._device.entry_relay, state=False),
+                    OutputCommand(name=self._device.entry_green, state=False),
+                ])
 
     def refresh(self) -> None:
         """Обновить таймер без повторного выполнения."""
@@ -137,10 +139,11 @@ class OpenExitCommand(_RelayCommand):
         end_state_label="idle",
     )
 
-    def __init__(self, device: "TurnstileDevice", duration: float):
+    def __init__(self, device: "TurnstileDevice", duration: float, skip_cleanup: bool = False):
         super().__init__(device)
         self._duration = duration
         self._refresh_requested = False
+        self._skip_cleanup = skip_cleanup
 
     async def run(self, executor) -> None:
         logger.info(f"OpenExitCommand: открытие выхода на {self._duration}с")
@@ -166,10 +169,11 @@ class OpenExitCommand(_RelayCommand):
         finally:
             self._device.current_token = None
             self._device.current_user_id = None
-            await executor.apply([
-                OutputCommand(name=self._device.exit_relay, state=False),
-                OutputCommand(name=self._device.exit_green, state=False),
-            ])
+            if not self._skip_cleanup:
+                await executor.apply([
+                    OutputCommand(name=self._device.exit_relay, state=False),
+                    OutputCommand(name=self._device.exit_green, state=False),
+                ])
 
     def refresh(self) -> None:
         """Обновить таймер без повторного выполнения."""
