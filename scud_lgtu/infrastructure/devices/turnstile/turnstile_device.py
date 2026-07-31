@@ -258,8 +258,6 @@ class TurnstileDevice(AccessDevice):
         # Закрываем только в режимах одноразового прохода
         if self._mode in ("entry_open", "exit_open"):
             self._mode = "idle"
-            self.current_token = None
-            self.current_user_id = None
             return CloseCommand(self)
         # В unlocked режимах не закрываем - турникет должен оставаться открытым
         return None
