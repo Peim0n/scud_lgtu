@@ -390,20 +390,24 @@ class ClearAlarmCommand(_RelayCommand):
 
     async def run(self, executor) -> None:
         logger.info("ClearAlarmCommand: сброс тревоги")
-        await executor.apply([
+        commands = [
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.exit_relay, state=False),
             OutputCommand(name=self._device.entry_green, state=False),
             OutputCommand(name=self._device.exit_green, state=False),
-            OutputCommand(name=self._device.entry_red, state=False),
-            OutputCommand(name=self._device.exit_red, state=False),
             OutputCommand(name=self._device.main_buzzer, state=False),
-        ])
+        ]
         if self._device.locked:
-            await executor.apply([
+            commands.extend([
                 OutputCommand(name=self._device.entry_red, state=True),
                 OutputCommand(name=self._device.exit_red, state=True),
             ])
+        else:
+            commands.extend([
+                OutputCommand(name=self._device.entry_red, state=False),
+                OutputCommand(name=self._device.exit_red, state=False),
+            ])
+        await executor.apply(commands)
 
 
 class DenyCommand(_RelayCommand):
