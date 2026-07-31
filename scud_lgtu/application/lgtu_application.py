@@ -493,8 +493,9 @@ class LGTUApplication:
         try:
             shift_cfg = self._config.get("shift_register", {})
             pins_cfg = shift_cfg.get("pins", {})
-            for name in pins_cfg:
-                self._actuator.apply(OutputCommand(name=name, state=False))
+            # Собрать все выходы в один вызов set_output_mask
+            masks = {name: False for name in pins_cfg}
+            self._actuator._engine.set_output_mask(masks)
             logger.debug(f"Initialized outputs to safe state: {list(pins_cfg)}")
         except Exception as e:
             logger.error(f"Error initializing outputs: {e}")
