@@ -472,9 +472,7 @@ class LGTUApplication:
             state = scud_event.payload.get("state")
             if button_id is not None and state is not None:
                 event = ButtonPressed(button_id=button_id, state=state)
-                # Логируем только нажатия (state=True), так как на них реагирует FSM
-                if state:
-                    logger.info(f"Button Pressed event: {event}")
+                logger.info(f"Button Pressed event: {event}")
                 return event
             return None
         elif event_type == "alarm_changed":
