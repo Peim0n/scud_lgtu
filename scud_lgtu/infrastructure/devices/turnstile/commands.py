@@ -104,12 +104,10 @@ class OpenEntryCommand(_RelayCommand):
             # Основной таймер с возможностью обновления
             while True:
                 if await self._sleep(self._duration - 0.2):
-                    logger.info(f"[OpenEntryCommand] закрытие по прерыванию, token={self._device.current_token}, user_id={self._device.current_user_id}")
-                    break  # Запрошена остановка
+                    break  # Запрошена остановка (новая команда или сенсор)
                 if self._refresh_requested:
                     self._refresh_requested = False
                     continue  # Продолжаем ждать
-                logger.info(f"[OpenEntryCommand] закрытие по таймеру, token={self._device.current_token}, user_id={self._device.current_user_id}")
                 break  # Таймер истёк
         finally:
             self._device.current_token = None
@@ -167,12 +165,10 @@ class OpenExitCommand(_RelayCommand):
             # Основной таймер с возможностью обновления
             while True:
                 if await self._sleep(self._duration - 0.2):
-                    logger.info(f"[OpenExitCommand] закрытие по прерыванию, token={self._device.current_token}, user_id={self._device.current_user_id}")
-                    break  # Запрошена остановка
+                    break  # Запрошена остановка (новая команда или сенсор)
                 if self._refresh_requested:
                     self._refresh_requested = False
                     continue  # Продолжаем ждать
-                logger.info(f"[OpenExitCommand] закрытие по таймеру, token={self._device.current_token}, user_id={self._device.current_user_id}")
                 break  # Таймер истёк
         finally:
             self._device.current_token = None
