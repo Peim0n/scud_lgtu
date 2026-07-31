@@ -59,6 +59,10 @@ class Command:
         """Запасной вариант выключения, если команду отменили насильно."""
         return []
 
+    def refresh(self) -> None:
+        """Обновить таймер команды без повторного выполнения."""
+        pass
+
 
 class _RelayCommand(Command):
     """Базовая команда с доступом к пинам устройства."""
@@ -79,6 +83,7 @@ class OpenEntryCommand(_RelayCommand):
     def __init__(self, device: "TurnstileDevice", duration: float):
         super().__init__(device)
         self._duration = duration
+        self._refresh_requested = False
 
     async def run(self, executor) -> None:
         logger.info(f"OpenEntryCommand: открытие входа на {self._duration}с")
@@ -93,14 +98,21 @@ class OpenEntryCommand(_RelayCommand):
             await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
             await self._sleep(0.2)
             await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
-            await self._sleep(self._duration - 0.2)
+            # Основной таймер с возможностью обновления
+            while True:
+                if await self._sleep(self._duration - 0.2):
+                    break  # Запрошена остановка
+                if self._refresh_requested:
+                    self._refresh_requested = False
+                    continue  # Продолжаем ждать
+                break  # Таймер истёк
         finally:
             self._device.current_token = None
             self._device.current_user_id = None
-            await executor.apply([
-                OutputCommand(name=self._device.entry_relay, state=False),
-                OutputCommand(name=self._device.entry_green, state=False),
-            ])
+
+    def refresh(self) -> None:
+        """Обновить таймер без повторного выполнения."""
+        self._refresh_requested = True
 
     def cleanup(self) -> List[OutputCommand]:
         self._device.current_token = None
@@ -124,6 +136,7 @@ class OpenExitCommand(_RelayCommand):
     def __init__(self, device: "TurnstileDevice", duration: float):
         super().__init__(device)
         self._duration = duration
+        self._refresh_requested = False
 
     async def run(self, executor) -> None:
         logger.info(f"OpenExitCommand: открытие выхода на {self._duration}с")
@@ -138,7 +151,14 @@ class OpenExitCommand(_RelayCommand):
             await executor.apply([OutputCommand(name=self._device.main_buzzer, state=True)])
             await self._sleep(0.2)
             await executor.apply([OutputCommand(name=self._device.main_buzzer, state=False)])
-            await self._sleep(self._duration - 0.2)
+            # Основной таймер с возможностью обновления
+            while True:
+                if await self._sleep(self._duration - 0.2):
+                    break  # Запрошена остановка
+                if self._refresh_requested:
+                    self._refresh_requested = False
+                    continue  # Продолжаем ждать
+                break  # Таймер истёк
         finally:
             self._device.current_token = None
             self._device.current_user_id = None
@@ -146,6 +166,10 @@ class OpenExitCommand(_RelayCommand):
                 OutputCommand(name=self._device.exit_relay, state=False),
                 OutputCommand(name=self._device.exit_green, state=False),
             ])
+
+    def refresh(self) -> None:
+        """Обновить таймер без повторного выполнения."""
+        self._refresh_requested = True
 
     def cleanup(self) -> List[OutputCommand]:
         self._device.current_token = None

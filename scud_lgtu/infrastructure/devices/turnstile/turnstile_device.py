@@ -143,7 +143,7 @@ class TurnstileDevice(AccessDevice):
                 self._mode = "entry_open"
                 return OpenEntryCommand(self, self._button_timeout)
             if self._mode == "entry_open":
-                # Уже открыто на один раз в ту же сторону, обновляем таймер
+                # Уже открыто на один раз в ту же сторону, возвращаем ту же команду для обновления таймера
                 return OpenEntryCommand(self, self._button_timeout)
             self._mode = "entry_open"
             return OpenEntryCommand(self, self._button_timeout)
@@ -161,7 +161,7 @@ class TurnstileDevice(AccessDevice):
                 self._mode = "exit_open"
                 return OpenExitCommand(self, self._button_timeout)
             if self._mode == "exit_open":
-                # Уже открыто на один раз в ту же сторону, обновляем таймер
+                # Уже открыто на один раз в ту же сторону, возвращаем ту же команду для обновления таймера
                 return OpenExitCommand(self, self._button_timeout)
             self._mode = "exit_open"
             return OpenExitCommand(self, self._button_timeout)

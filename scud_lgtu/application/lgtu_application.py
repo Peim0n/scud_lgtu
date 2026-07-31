@@ -86,6 +86,14 @@ class _CommandRunner:
         meta = command.meta
         for name in meta.conflicts:
             await self._stop_and_wait(name)
+        # Если команда с таким же именем уже выполняется, обновляем её вместо остановки
+        old_command = self._commands.get(meta.name)
+        task = self._tasks.get(meta.name)
+        if old_command is not None and task is not None and not task.done():
+            # Обновляем существующую команду
+            old_command.refresh()
+            logger.info(f"CommandRunner: обновлена команда {meta.name}")
+            return
         await self._stop_and_wait(meta.name)
         if meta.state_label:
             self._state_label = meta.state_label
