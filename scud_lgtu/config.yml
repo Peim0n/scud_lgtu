@@ -194,7 +194,7 @@ access:
 
 # ── QR декодер ──
 qr_decoder:
-  keys_dir: "infrastructure/keys"
+  keys_dir: "/data/keys"
 
 # ── Бэкенд ──
 backend:
