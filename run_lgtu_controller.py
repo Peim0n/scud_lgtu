@@ -6,6 +6,35 @@
 import logging
 import sys
 import os
+import threading
+import ctypes
+
+
+def _set_os_thread_name() -> None:
+    if sys.platform != "linux":
+        return
+    try:
+        name = threading.current_thread().name.encode("utf-8")[:15]
+        libc = ctypes.CDLL("libc.so.6")
+        libc.prctl.argtypes = [ctypes.c_int, ctypes.c_char_p]
+        libc.prctl.restype = ctypes.c_int
+        libc.prctl(15, name)
+    except Exception:
+        pass
+
+
+_original_thread_run = threading.Thread.run
+
+
+def _patched_thread_run(self: threading.Thread) -> None:
+    try:
+        _set_os_thread_name()
+    except Exception:
+        pass
+    _original_thread_run(self)
+
+
+threading.Thread.run = _patched_thread_run
 
 # Настройка логирования
 logging.basicConfig(
