@@ -214,7 +214,7 @@ timings:
 
   # Wiegand
   wiegand_bit_timeout_s: 0.025
-  wiegand_wait_timeout_s: 0.005
+  wiegand_wait_timeout_s: 0.02
   wiegand_ignore_after_valid_s: 0.05
 
   # Serial
