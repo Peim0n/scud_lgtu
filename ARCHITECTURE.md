@@ -7,8 +7,8 @@ LGTU Controller — это система контроля доступа (СК�
 - **Разделение слоёв**: доменный слой не зависит от инфраструктуры; инфраструктура адаптируется через адаптеры.
 - **Событийная архитектура**: события от оборудования преобразуются в доменные события и обрабатываются в `LGTUApplication`.
 - **Потокобезопасность**: hardware-модули работают в отдельных потоках и передают данные через `queue.Queue`.
-- **Офлайн-режим**: локальный кэш списка доступа позволяет работать при отсутствии связи с бэкендом.
-- **Конфигурация через YAML**: `scud_lgtu/config.yml` задаёт пины, тайминги, устройства и параметры бэкенда.
+- **Офлайн-режим**: in-memory кэш списка доступа позволяет работать при отсутствии связи с бэкендом (данные загружаются заново после перезагрузки).
+- **Конфигурация через YAML**: `app/config.yml` задаёт пины, тайминги, устройства и параметры бэкенда.
 
 ## Структура слоёв
 
@@ -28,11 +28,11 @@ LGTU Controller — это система контроля доступа (СК�
 
 ---
 
-## 1. Доменный слой (`scud_lgtu/domain/`)
+## 1. Доменный слой (`app/domain/`)
 
 Содержит бизнес-логику и сущности, независимые от оборудования.
 
-### 1.1. Domain (`scud_lgtu/domain/`)
+### 1.1. Domain (`app/domain/`)
 
 | Модуль | Назначение |
 |--------|------------|
@@ -41,7 +41,7 @@ LGTU Controller — это система контроля доступа (СК�
 | `events.py` | Доменные события: `CardRead`, `QrRead`, `ButtonPressed`, `AlarmChanged`, `PassageDetected` |
 | `access.py` | `AccessPolicy` (проверка доступа), `PassageTracker` |
 
-### 1.2. Турникет (`scud_lgtu/infrastructure/devices/turnstile/`)
+### 1.2. Турникет (`app/infrastructure/devices/turnstile/`)
 
 | Модуль | Назначение |
 |--------|------------|
@@ -50,7 +50,7 @@ LGTU Controller — это система контроля доступа (СК�
 
 ---
 
-## 2. Прикладной слой (`scud_lgtu/application/`)
+## 2. Прикладной слой (`app/application/`)
 
 Связывает инфраструктуру и доменную логику.
 
@@ -60,16 +60,24 @@ LGTU Controller — это система контроля доступа (СК�
 |--------|------------|
 | `lgtu_application.py` | `LGTUApplication` — чтение `ScudEvent`, преобразование в доменные события, запуск команд устройства |
 
-### 2.2. Сервисы приложения (`scud_lgtu/application/services/`)
+### 2.2. Команды приложения
+
+| Модуль | Назначение |
+|--------|------------|
+| `commands.py` | `CommandAction`, `CommandTarget`, `ScudCommand` — типы команд |
+
+### 2.3. Сервисы приложения (`app/application/services/`)
 
 | Модуль | Назначение |
 |--------|------------|
 | `passage_service.py` | Журналирование проходов |
 | `sync_service.py` | Синхронизация событий и списка доступа с бэкендом |
+| `key_sync_service.py` | Синхронизация ключей QR-кодов (загрузка в память через QRDecoder) |
+| `accesspoint_inventory_service.py` | Инвентаризация точки доступа (accesspoint/patch) |
 
 ---
 
-## 3. Инфраструктурный слой (`scud_lgtu/infrastructure/`)
+## 3. Инфраструктурный слой (`app/infrastructure/`)
 
 Адаптеры оборудования и внешних систем.
 
@@ -79,7 +87,7 @@ LGTU Controller — это система контроля доступа (СК�
 |--------|------------|
 | `engine.py` | `ScudEngine` — главный оркестратор hardware: запуск потоков, мосты очередей, watchdog |
 
-### 3.2. GPIO (`scud_lgtu/infrastructure/firmware/gpio/`)
+### 3.2. GPIO (`app/infrastructure/firmware/gpio/`)
 
 | Модуль | Назначение |
 |--------|------------|
@@ -90,54 +98,64 @@ LGTU Controller — это система контроля доступа (СК�
 | `firmware/gpio/actuator.py` | `ShiftRegisterActuator` — адаптер `Actuator` для сдвигового регистра |
 | `firmware/gpio/wiegand_reader.py` | `WiegandReader` — чтение карт по Wiegand-интерфейсу |
 
-### 3.3. Serial (`scud_lgtu/infrastructure/firmware/serial/`)
+### 3.3. Serial (`app/infrastructure/firmware/serial/`)
 
 | Модуль | Назначение |
 |--------|------------|
 | `firmware/serial/serial_reader.py` | `BackgroundSerialReader` — фоновое чтение из Serial-порта |
 | `firmware/serial/qr_decoder.py` | `QRDecoder` — декодирование URL QR-кодов с проверкой подписи |
 
-### 3.4. Кэш и хранение
+### 3.4. Кэш и хранение (in-memory)
+
+Все данные хранятся **только в оперативной памяти** — на SD-карту ничего не пишется (кроме mTLS-сертификатов). При перезагрузке данные загружаются заново с бэкенда.
 
 | Модуль | Назначение |
 |--------|------------|
-| `cache/access_cache.py` | `LocalAccessCache` — локальный JSON-кэш списка доступа |
+| `cache/access_cache.py` | `LocalAccessCache` — in-memory кэш списка доступа |
 | `cache/repository.py` | `AccessRepositoryAdapter` — адаптер `AccessRepository` |
 | `cache/identifier_hash.py` | Хеширование идентификаторов |
-| `persistence/event_store.py` | `EventStore` и `ScudEvent`/`ScudCommand` — хранение и очереди событий |
+| `persistence/event_store.py` | `EventStore` — in-memory очередь событий для отправки на бэкенд |
 | `persistence/event_log.py` | `EventLogAdapter` — адаптер журналирования |
-| `firmware/gpio/multiplexor.py` | `Multiplexer` и `MuxEventMapper` — сырые данные и преобразование в события |
 
-### 3.5. Бэкенд и звук
+### 3.5. Бэкенд
 
 | Модуль | Назначение |
 |--------|------------|
-| `backend/client.py` | `BackendClient` — HTTP-клиент для синхронизации |
-| `sound/player.py` | `SoundPlayer` — воспроизведение звуковых файлов |
+| `backend/rest_client.py` | `RestClient` — низкоуровневый REST-клиент (HTTPS + mTLS, TCP keepalive) |
+| `backend/client.py` | `BackendClient` — бизнес-операции (ключи, списки доступа, события) |
+| `backend/certificate_manager.py` | `CertificateManager` — управление mTLS-сертификатами (генерация, ротация) |
+| `backend/gateway.py` | `BackendGatewayAdapter` — адаптер шлюза бэкенда |
+
+### 3.6. Звук
+
+| Модуль | Назначение |
+|--------|------------|
+| `sound/player.py` | `SoundPlayer` — неблокирующий проигрыватель звуковых эффектов |
 | `sound/output.py` | `SoundOutputAdapter` — адаптер звукового выхода |
 
-### 3.6. Конфигурация и загрузка
+### 3.7. Устройства (`app/infrastructure/devices/turnstile/`)
+
+| Модуль | Назначение |
+|--------|------------|
+| `turnstile_device.py` | `TurnstileDevice` — FSM турникета (режимы: idle, entry_open, exit_open, unlocked_entry, unlocked_exit, blocked, alarm) |
+| `commands.py` | Асинхронные команды: `OpenEntryCommand`, `OpenExitCommand`, `UnlockEntryCommand`, `UnlockExitCommand`, `CloseCommand`, `LockCommand`, `UnlockCommand`, `AlarmCommand`, `ClearAlarmCommand`, `DenyCommand` |
+
+### 3.8. Конфигурация и загрузка
 
 | Модуль | Назначение |
 |--------|------------|
 | `config/config_loader.py` | Загрузка `config.yml` |
 | `config/module_resolver.py` | `ModuleResolver` — разрешение имён пинов/таймингов по конфигурации |
 
-### 3.7. Прошивка и вспомогательные модули
+### 3.9. Загрузка приложения
 
 | Модуль | Назначение |
 |--------|------------|
-| `firmware/gpio/controller.py` | `PinControllerThread` — потоки GPIO |
-| `firmware/gpio/multiplexor.py` | `Multiplexer`/`MuxEventMapper` — входы |
-| `firmware/gpio/shift_register.py` | `ShiftRegister` — выходы |
-| `firmware/gpio/actuator.py` | `ShiftRegisterActuator` — `OutputCommand` → сдвиговый регистр |
-| `firmware/gpio/wiegand_reader.py` | Чтение Wiegand |
-| `firmware/serial/serial_reader.py` | Чтение Serial |
-| `firmware/serial/qr_decoder.py` | Декодирование QR |
+| `bootstrap.py` | `build_application()` — сборка всех компонентов и внедрение зависимостей |
 
 ---
 
-## 4. Точки входа (`scud_lgtu/interfaces/`, корневые скрипты)
+## 4. Точки входа (`app/interfaces/`, корневые скрипты)
 
 | Файл | Назначение |
 |------|------------|
@@ -197,14 +215,17 @@ LGTU Controller — это система контроля доступа (СК�
 
 ## 7. Конфигурация
 
-Основной файл — `scud_lgtu/config.yml`. Пример ключевых секций:
+Основной файл — `app/config.yml`. Ключевые секции:
 
-- `gpiod` — пины GPIO: `mux_a0`, `mux_a1`, `mux_a2`, `mux_input`, `shift_data`, `shift_clk`, `shift_latch`.
-- `mux.inputs` — имена входов мультиплексора (`button_entry`, `button_exit`, `alarm`, `sensor_inner`, `sensor_outer`).
-- `shift_register.pins` — имена выходов сдвигового регистра (`rel1`, `rel2`, `w1_green`, `w1_red`, `w2_green`, `w2_red`, `buz`, `w1_beep`, `w2_beep`).
-- `timings` — таймауты прохода, Wiegand, синхронизации, очередей.
-- `backend` — URL, endpoints, авторизация.
-- `sound` — директория звуков и команда плеера.
+- `gpiod` — пины GPIO: mux, shift, wiegand.
+- `mux.inputs` — имена входов мультиплексора.
+- `shift_register.pins` — имена выходов сдвигового регистра.
+- `timings` — таймауты прохода, Wiegand, синхронизации, очередей, `command_stop_timeout_s`, `open_beep_duration_s`.
+- `backend` — `base_url`, `api_path_prefix`, `tcp_keepalive_time_s`/`probes`/`intvl_s`, `request_timeout_s`, `cert` (включая `rsa_key_size`).
+- `qr_decoder` — `base_url` (базовый URL QR-кодов).
+- `sound` — `sound_dir`, `player_cmd`, `stop_timeout_s`, `play_timeout_s`.
+- `devices` — конфигурация кнопок, считывателей, маппинги.
+- `logging` — уровни логирования по каждому модулю индивидуально (20 модулей).
 
 ---
 
@@ -214,11 +235,22 @@ LGTU Controller — это система контроля доступа (СК�
 |------------|------------|
 | `tests/test_bootstrap.py` | Проверка сборки приложения и DI |
 | `tests/test_config.py` | Проверка загрузки и валидации конфигурации |
+| `tests/test_turnstile_fsm.py` | Тесты FSM турникета (все переходы состояний) |
+| `tests/test_qr_decoder.py` | Тесты QR-кодирования/декодирования |
+| `tests/test_backend_rest_client.py` | Тесты REST-клиента |
+| `tests/test_backend_client.py` | Тесты бизнес-клиента бэкенда |
+| `tests/test_certificate_manager.py` | Тесты управления сертификатами |
+| `tests/test_sync_service.py` | Тесты синхронизации с бэкендом |
+| `tests/test_key_sync_service.py` | Тесты синхронизации ключей |
+| `tests/test_accesspoint_inventory_service.py` | Тесты инвентаризации |
+| `tests/test_identifier_hash.py` | Тесты хеширования идентификаторов |
+| `tests/test_event_store_persistence.py` | Тесты in-memory хранилища событий |
+| `tests/test_watchdog.py` | Тесты watchdog |
 | `tests/mocks/` | Моки: `MockEngine`, `MockGPIO`, `MockSerial`, `MockWiegand` |
 
 Запуск тестов:
 ```bash
-pytest -q
+pytest app/tests/ -v --ignore=app/tests/test_backend_integration.py
 ```
 
 ---
@@ -226,7 +258,7 @@ pytest -q
 ## 9. Соглашения по коду
 
 - **Docstrings**: оформлены на русском языке в формате reStructuredText (Sphinx) с секциями `Parameters`, `Returns`, `Example`.
-- **Импорты**: группируются в порядке: стандартная библиотека, сторонние пакеты, внутренние модули `scud_lgtu`.
+- **Импорты**: группируются в порядке: стандартная библиотека, сторонние пакеты, внутренние модули `app`.
 - **Типизация**: используется `typing` (`Optional`, `Any`, `dict`, `list` и т.д.), требуется Python 3.10+.
 - **Стилистика**: проект ориентирован на `ruff` для линтинга и форматирования.
 - **Логирование**: структурированные логи с форматом `[CommandName] действие, token=..., user_id=...`. Уровни логирования настраиваются в `config.yml`.
@@ -241,17 +273,17 @@ pytest -q
 
 | Что меняешь | Где править | Что именно |
 |-------------|-------------|------------|
-| **Время открытия турникета** после карты/QR | `scud_lgtu/config.yml` → `timings.relay_open_duration_s` | Время в секундах, пока реле остаётся открытым |
-| **Время открытия турникета** после отжатия кнопки | `scud_lgtu/config.yml` → `timings.button_timer_duration_s` | Время до автоматического закрытия после отпускания кнопки |
-| **Логика открытия/закрытия, индикация, тревога** | `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` + `commands.py` | `TurnstileDevice.handle()` выбирает `Command` по событию на основе текущего режима FSM; `commands.py` выполняет выходы асинхронно с таймерами и прерыванием |
-| **Правила доступа** (кто проходит, кто нет) | `scud_lgtu/domain/access.py` | Класс `AccessPolicy`, метод `check`. Источник данных — `AccessRepository` (`cache/repository.py`) |
-| **Реакция на кнопки** | `scud_lgtu/application/lgtu_application.py` → `_map_button_event()` + `scud_lgtu/config.yml` → `devices.buttons` | Сопоставление `label` → `action` (`open_entry`, `open_exit`, `shift`). Кнопка 3 (Shift) используется как модификатор для переключения в режимы unlocked_entry/unlocked_exit |
-| **Реакция на тревогу** | `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` → `_on_alarm_changed()` | Генерация `AlarmCommand` / `ClearAlarmCommand` |
-| **Обработка проходов** (логирование, закрытие после прохода) | `scud_lgtu/application/lgtu_application.py` → `_log_passage()` + `TurnstileDevice._on_passage_detected()` | `PassageService.log_passage()` + `CloseCommand` |
-| **Преобразование событий оборудования в доменные** | `scud_lgtu/application/lgtu_application.py` | Метод `_convert_scud_event_to_domain()` |
-| **Админ-команды** | `scud_lgtu/application/lgtu_application.py` → `send_admin_command()` + `interfaces/cli.py` | `AdminCommand` → `DeviceCommand` → `TurnstileDevice` |
-| **Добавить новое событие** | `scud_lgtu/domain/events.py` + `scud_lgtu/application/lgtu_application.py` | Определить dataclass события и обработать его в `_to_device_event()` / `TurnstileDevice.handle()` |
-| **Тайминги, мапинги пинов, устройства** | `scud_lgtu/config.yml` | Секции `timings`, `mappings`, `devices`, `mux`, `shift_register` |
+| **Время открытия турникета** после карты/QR | `app/config.yml` → `timings.relay_open_duration_s` | Время в секундах, пока реле остаётся открытым |
+| **Время открытия турникета** после отжатия кнопки | `app/config.yml` → `timings.button_timer_duration_s` | Время до автоматического закрытия после отпускания кнопки |
+| **Логика открытия/закрытия, индикация, тревога** | `app/infrastructure/devices/turnstile/turnstile_device.py` + `commands.py` | `TurnstileDevice.handle()` выбирает `Command` по событию на основе текущего режима FSM; `commands.py` выполняет выходы асинхронно с таймерами и прерыванием |
+| **Правила доступа** (кто проходит, кто нет) | `app/domain/access.py` | Класс `AccessPolicy`, метод `check`. Источник данных — `AccessRepository` (`cache/repository.py`) |
+| **Реакция на кнопки** | `app/application/lgtu_application.py` → `_map_button_event()` + `app/config.yml` → `devices.buttons` | Сопоставление `label` → `action` (`open_entry`, `open_exit`, `shift`). Кнопка 3 (Shift) используется как модификатор для переключения в режимы unlocked_entry/unlocked_exit |
+| **Реакция на тревогу** | `app/infrastructure/devices/turnstile/turnstile_device.py` → `_on_alarm_changed()` | Генерация `AlarmCommand` / `ClearAlarmCommand` |
+| **Обработка проходов** (логирование, закрытие после прохода) | `app/application/lgtu_application.py` → `_log_passage()` + `TurnstileDevice._on_passage_detected()` | `PassageService.log_passage()` + `CloseCommand` |
+| **Преобразование событий оборудования в доменные** | `app/application/lgtu_application.py` | Метод `_convert_scud_event_to_domain()` |
+| **Админ-команды** | `app/application/lgtu_application.py` → `send_admin_command()` + `interfaces/cli.py` | `AdminCommand` → `DeviceCommand` → `TurnstileDevice` |
+| **Добавить новое событие** | `app/domain/events.py` + `app/application/lgtu_application.py` | Определить dataclass события и обработать его в `_to_device_event()` / `TurnstileDevice.handle()` |
+| **Тайминги, мапинги пинов, устройства** | `app/config.yml` | Секции `timings`, `mappings`, `devices`, `mux`, `shift_register` |
 
 ### 10.2. Принцип: доменный слой не зависит от инфраструктуры
 
@@ -265,7 +297,7 @@ pytest -q
 
 #### Изменить действие кнопки
 
-1. Открыть `scud_lgtu/config.yml`.
+1. Открыть `app/config.yml`.
 2. Найти секцию `devices.buttons`:
 
    ```yaml
@@ -280,11 +312,11 @@ pytest -q
    ```
 
 3. Изменить `action` на одно из: `open_entry`, `open_exit`, `close`.
-4. Если нужно новое действие, расширить `_map_button_event()` в `scud_lgtu/application/lgtu_application.py` и добавить обработку в `TurnstileDevice._on_device_command()`.
+4. Если нужно новое действие, расширить `_map_button_event()` в `app/application/lgtu_application.py` и добавить обработку в `TurnstileDevice._on_device_command()`.
 
 #### Изменить поведение при тревоге
 
-1. Открыть `scud_lgtu/infrastructure/devices/turnstile/commands.py`.
+1. Открыть `app/infrastructure/devices/turnstile/commands.py`.
 2. Найти классы `AlarmCommand` и `ClearAlarmCommand`.
 3. Изменить список `OutputCommand`, который они применяют:
 
@@ -298,7 +330,7 @@ pytest -q
 
 #### Изменить время автозакрытия после карты
 
-1. Открыть `scud_lgtu/config.yml`.
+1. Открыть `app/config.yml`.
 2. Изменить:
 
    ```yaml
@@ -310,7 +342,7 @@ pytest -q
 
 #### Добавить новый обработчик события
 
-1. Определить событие в `scud_lgtu/domain/events.py`:
+1. Определить событие в `app/domain/events.py`:
 
    ```python
    @dataclass
@@ -318,17 +350,17 @@ pytest -q
        payload: str
    ```
 
-2. Преобразовать `ScudEvent` в него в `scud_lgtu/application/lgtu_application.py` → `_convert_scud_event_to_domain()`.
+2. Преобразовать `ScudEvent` в него в `app/application/lgtu_application.py` → `_convert_scud_event_to_domain()`.
 
-3. Обработать его в `scud_lgtu/application/lgtu_application.py` → `_to_device_event()` и/или в `scud_lgtu/infrastructure/devices/turnstile/turnstile_device.py` → `handle()`.
+3. Обработать его в `app/application/lgtu_application.py` → `_to_device_event()` и/или в `app/infrastructure/devices/turnstile/turnstile_device.py` → `handle()`.
 
-4. Если нужно добавить новую команду, создать класс в `scud_lgtu/infrastructure/devices/turnstile/commands.py` и вернуть его из `TurnstileDevice.handle()`.
+4. Если нужно добавить новую команду, создать класс в `app/infrastructure/devices/turnstile/commands.py` и вернуть его из `TurnstileDevice.handle()`.
 
 ### 10.4. Что трогать не нужно
 
-- `scud_lgtu/infrastructure/firmware/gpio/` — драйверы GPIO/мультиплексора/сдвигового регистра и Wiegand-считывателя.
-- `scud_lgtu/infrastructure/firmware/serial/` — низкоуровневое чтение QR/Serial.
-- `scud_lgtu/infrastructure/backend/` — HTTP-клиент к серверу.
+- `app/infrastructure/firmware/gpio/` — драйверы GPIO/мультиплексора/сдвигового регистра и Wiegand-считывателя.
+- `app/infrastructure/firmware/serial/` — низкоуровневое чтение QR/Serial.
+- `app/infrastructure/backend/` — HTTP-клиент к серверу.
 
 Изменения в этих модулях требуются только при смене железа или протокола.
 

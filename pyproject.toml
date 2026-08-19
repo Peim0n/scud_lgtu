@@ -3,7 +3,7 @@ requires = ["setuptools>=40.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "scud_lgtu"
+name = "lgtu-controller"
 version = "0.1.0"
 description = "СКУД на базе gpiod + threading для Orange Pi Zero LTS"
 readme = "README.md"
@@ -15,6 +15,8 @@ authors = [
 dependencies = [
     "pyserial>=3.5",
     "pyyaml>=6.0",
+    "requests>=2.31",
+    "cryptography>=41.0",
 ]
 
 [project.optional-dependencies]
@@ -24,4 +26,4 @@ hardware = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["scud_lgtu*"]
+include = ["app*"]

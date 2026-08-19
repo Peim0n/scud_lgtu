@@ -8,11 +8,12 @@
 Пример:
     python generate_qr.py 12345 13
 """
+import os
 import sys
 import time
-import os
-from scud_lgtu.infrastructure.serial.qr_codec import encode_qr
-from scud_lgtu.infrastructure.config import load as load_config
+
+from app.infrastructure.config import load as load_config
+from app.infrastructure.firmware.serial.qr_decoder import encode_qr
 
 
 def main():
@@ -26,9 +27,9 @@ def main():
 
     # Загружаем ключи из конфига
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, "scud_lgtu", "config.yml")
+    config_path = os.path.join(script_dir, "app", "config.yml")
     config = load_config(config_path)
-    keys_dir = config["software"]["qr_decoder"]["args"]["keys_dir"]
+    keys_dir = config["qr_decoder"]["keys_dir"]
     private_key_path = os.path.join(keys_dir, f"private_key.{key_id}")
     shared_key_path = os.path.join(keys_dir, f"shared_key.{key_id}")
 

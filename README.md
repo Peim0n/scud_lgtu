@@ -6,44 +6,70 @@
 
 Проект реализует чистую архитектуру (Clean Architecture) с разделением на слои:
 
-### Доменный слой (`scud_lgtu/domain/`)
+### Доменный слой (`app/domain/`)
 Содержит основную бизнес-логику и не зависит от инфраструктуры:
-- `enums.py` - перечисления (направление, тип токена, результат, важность)
+- `enums.py` - перечисления (направление, тип токена, результат, важность, тип события)
 - `models.py` - доменные модели (Credential, AccessDecision, AuthSession, Passage, OutputCommand)
-- `turnstile.py` - конечный автомат турникета
-- `services.py` - доменные сервисы (AccessPolicy, PassageTracker, CredentialHasher)
-- `events.py` - события домена (QrRead, CardRead, PassageDetected, AlarmChanged, ButtonPressed)
-- `ports.py` - порты (интерфейсы) для адаптеров
+- `events.py` - события домена (QrRead, CardRead, PassageDetected, AlarmChanged, ButtonPressed, AccessGranted, AccessDenied, DeviceCommand)
+- `access.py` - доменные сервисы (AccessPolicy, PassageTracker)
+- `access_device.py` - базовый класс устройства доступа (AccessDevice)
 
-### Слой приложения (`scud_lgtu/application/`)
-Оркестрация бизнес-логики и use cases:
-- `event_bus.py` - шина событий с поддержкой asyncio
-- `handlers/` - обработчики событий (QR, карты, проходы, тревога, кнопки, мультиплексор)
-- `services/` - сервисы приложения (AccessService, PassageService, SyncService)
-- `lgtu_application.py` - основное приложение LGTU
-- `lgtu_controller.py` - контроллер ЛГТУ (устаревающий, используется для регрессионных тестов)
-- `basic_business_logic.py` - базовая бизнес-логика (устаревающая)
+### Слой приложения (`app/application/`)
+Оркестрация бизнес-логики:
+- `lgtu_application.py` - основное приложение LGTU (LGTUApplication, _CommandRunner)
+- `commands.py` - команды приложения (CommandAction, CommandTarget, ScudCommand)
+- `services/` - сервисы приложения:
+  - `sync_service.py` - синхронизация событий и списка доступа с бэкендом
+  - `passage_service.py` - журналирование проходов
+  - `key_sync_service.py` - синхронизация ключей QR-кодов (in-memory)
+  - `accesspoint_inventory_service.py` - инвентаризация точки доступа
 
-### Инфраструктурный слой (`scud_lgtu/infrastructure/`)
+### Инфраструктурный слой (`app/infrastructure/`)
 Адаптеры внешних систем:
-- `engine.py` - основной движок системы
-- `gpio/` - управление GPIO (контроллер, мультиплексор, сдвиговый регистр, сигналы)
-- `serial/` - работа с последовательными портами (QR-код, считыватели)
-- `cache/` - локальный кэш доступа
-- `persistence/` - хранение событий
-- `backend/` - клиент бэкенда
-- `sound/` - управление звуком
-- `threads/` - управление потоками
+- `engine.py` - ScudEngine: оркестратор hardware (потоки, очереди, watchdog)
+- `bootstrap.py` - сборка приложения и внедрение зависимостей
+- `firmware/gpio/` - управление GPIO:
+  - `controller.py` - GpiodPinController, PinControllerThread
+  - `multiplexor.py` - Multiplexer, MuxEventMapper
+  - `shift_register.py` - ShiftRegister
+  - `signal_reader.py` - чтение сигналов GPIO
+  - `actuator.py` - ShiftRegisterActuator (OutputCommand -> сдвиговый регистр)
+  - `wiegand_reader.py` - WiegandReader (чтение карт)
+- `firmware/serial/` - работа с последовательными портами:
+  - `serial_reader.py` - BackgroundSerialReader
+  - `qr_decoder.py` - QRDecoder (декодирование и верификация QR-кодов)
+- `cache/` - кэш доступа (in-memory):
+  - `access_cache.py` - LocalAccessCache (in-memory, без записи на SD-карту)
+  - `repository.py` - AccessRepositoryAdapter
+  - `identifier_hash.py` - хеширование идентификаторов
+- `persistence/` - хранение событий (in-memory):
+  - `event_store.py` - EventStore (in-memory очередь событий)
+  - `event_log.py` - EventLogAdapter
+- `backend/` - клиент бэкенда:
+  - `rest_client.py` - RestClient (HTTP + mTLS + TCP keepalive)
+  - `client.py` - BackendClient (бизнес-операции)
+  - `certificate_manager.py` - CertificateManager (mTLS-сертификаты)
+  - `gateway.py` - BackendGatewayAdapter
+- `sound/` - управление звуком:
+  - `player.py` - SoundPlayer (неблокирующий проигрыватель)
+  - `output.py` - SoundOutputAdapter
+- `devices/turnstile/` - логика турникета:
+  - `turnstile_device.py` - TurnstileDevice (FSM турникета)
+  - `commands.py` - асинхронные команды (OpenEntry, OpenExit, Unlock, Close, Alarm, Deny и др.)
+- `config/` - конфигурация:
+  - `config_loader.py` - загрузка config.yml
+  - `module_resolver.py` - ModuleResolver (разрешение имён пинов/таймингов)
 
-### Слой интерфейсов (`scud_lgtu/interfaces/`)
+### Слой интерфейсов (`app/interfaces/`)
 Точки входа в систему:
-- `cli.py` - командный интерфейс
+- `cli.py` - командный интерфейс для управления и диагностики
 
-### Файлы конфигурации
-- `config.py` - загрузка конфигурации
-- `settings.py` - типизированная конфигурация
-- `bootstrap.py` - контейнер внедрения зависимостей
-- `config.yml` - конфигурация системы
+### Точка запуска
+- `run_lgtu_controller.py` - запуск контроллера
+
+## Хранение данных
+
+Все данные (кэш доступа, очередь событий, ключи QR-кодов) хранятся **только в оперативной памяти**. На SD-карту ничего не пишется, кроме mTLS-сертификатов. При перезагрузке данные загружаются заново с бэкенда.
 
 ## Установка на Orange Pi
 
@@ -85,13 +111,13 @@ pip install -e .
 pip install --no-index setuptools wheel
 
 # Затем установите зависимости
-pip install --no-index gpiod pyserial pyyaml
+pip install --no-index gpiod pyserial pyyaml cryptography
 ```
 
 Вариант B - использование системных пакетов (рекомендуется для Orange Pi):
 ```bash
 # Установите зависимости в систему
-apt install python3-gpiod python3-serial python3-yaml -y
+apt install python3-gpiod python3-serial python3-yaml python3-cryptography -y
 
 # Создайте символические ссылки в venv
 ln -s /usr/lib/python3/dist-packages/gpiod venv/lib/python3.*/site-packages/
@@ -99,14 +125,12 @@ ln -s /usr/lib/python3/dist-packages/serial venv/lib/python3.*/site-packages/
 ln -s /usr/lib/python3/dist-packages/yaml venv/lib/python3.*/site-packages/
 ```
 
-**Примечание:** Для работы без интернета рекомендуется использовать системные пакеты через apt и создать символические ссылки в venv.
-
 ### 4. Настройка конфигурации
 
-Отредактируйте файл `scud_lgtu/config.yml` под ваше оборудование:
+Отредактируйте файл `app/config.yml` под ваше оборудование:
 
 ```bash
-nano scud_lgtu/config.yml
+nano app/config.yml
 ```
 
 Настройте:
@@ -114,7 +138,8 @@ nano scud_lgtu/config.yml
 - Параметры Wiegand-считывателей
 - Параметры последовательных портов
 - Тайминги системы
-- Параметры бэкенда
+- Параметры бэкенда (URL, api_path_prefix, TCP keepalive)
+- QR-декодер (base_url)
 
 ### 5. Настройка gpiod
 
@@ -132,7 +157,7 @@ apt install gpiod -y
 
 ```bash
 # Активация виртуального окружения
-source /opt/scud_lgtu/venv/bin/activate
+source /opt/app/venv/bin/activate
 
 # Запуск контроллера
 python run_lgtu_controller.py
@@ -143,7 +168,7 @@ python run_lgtu_controller.py
 Создайте файл сервиса:
 
 ```bash
-nano /etc/systemd/system/scud_lgtu.service
+nano /etc/systemd/system/app.service
 ```
 
 Содержимое:
@@ -157,8 +182,8 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/scud_lgtu
-Environment="PATH=/opt/scud_lgtu/venv/bin"
-ExecStart=/opt/scud_lgtu/venv/bin/python /opt/scud_lgtu/run_lgtu_controller.py
+Environment="PATH=/opt/app/venv/bin"
+ExecStart=/opt/app/venv/bin/python /opt/app/run_lgtu_controller.py
 Restart=always
 RestartSec=10
 
@@ -177,27 +202,30 @@ systemctl status scud_lgtu
 
 ## Тестирование
 
-Запуск регрессионных тестов:
+Запуск тестов:
 
 ```bash
-cd /opt/scud_lgtu
-source venv/bin/activate
-pytest scud_lgtu/tests/test_regression/ -v
+pytest app/tests/ -v --ignore=app/tests/test_backend_integration.py
 ```
 
 ## Конфигурация
 
-Основные параметры в `scud_lgtu/config.yml`:
+Основной файл — `app/config.yml`. Ключевые секции:
 
-- `auth_timeout_s: 30.0` - время действия авторизации
-- `relay_open_duration_s: 2.0` - время открытия реле
-- `indicator_duration_s: 2.0` - длительность индикатора
-- `backend_sync_interval_s: 60.0` - интервал синхронизации с бэкендом
+- `gpiod` — пины GPIO: mux, shift, wiegand
+- `mux.inputs` — имена входов мультиплексора
+- `shift_register.pins` — имена выходов сдвигового регистра
+- `timings` — таймауты прохода, Wiegand, синхронизации, очередей, command_stop_timeout_s, open_beep_duration_s
+- `backend` — base_url, api_path_prefix, tcp_keepalive_*, request_timeout_s, cert
+- `qr_decoder` — base_url (базовый URL QR-кодов)
+- `sound` — директория звуков, команда плеера, stop_timeout_s, play_timeout_s
+- `devices` — конфигурация устройств (кнопки, считыватели)
+- `logging` — уровни логирования по каждому модулю индивидуально
 
 ## Функциональность
 
-- Обработка QR-кодов (валидация в декодере)
-- Обработка карт МИР с учётом шифрования считывателем
+- Обработка QR-кодов (AES128-CTR + Ed25519, TLV payload)
+- Обработка карт по Wiegand (частичное хеширование идентификатора)
 - Логика проходов (вход/выход) с проверкой двойного прохода
 - Пожарная сигнализация с инверсией (state False = норма, True = пожар)
 - Кнопки управления:
@@ -205,22 +233,23 @@ pytest scud_lgtu/tests/test_regression/ -v
   - Кнопка 2: открыть на выход
   - Кнопка 3: модификатор Shift (для переключения в режимы unlocked_entry/unlocked_exit)
 - FSM турникета с режимами: idle, entry_open, exit_open, unlocked_entry, unlocked_exit, blocked, alarm
-- Синхронизация с бэкендом (ключи, списки доступа)
-- Офлайн-режим с локальным кэшем
-- Структурированное логирование с фильтрацией по модулям
+- Синхронизация с бэкендом (ключи, списки доступа, события)
+- Офлайн-режим с локальным кэшем (in-memory, при перезагрузке данные загружаются заново)
+- mTLS-сертификаты с автоматической ротацией
+- Инвентаризация точки доступа
 
 ## Логирование
 
 Логи выводятся в stdout с форматом:
 
 ```
-%(asctime)s - %(name)s [%(levelname)s] %(message)s
+%(asctime)s %(name)s [%(levelname)s] %(message)s
 ```
 
-Уровни логирования настраиваются в `config.yml`:
-- Команды турникета и устройство: INFO
-- Инфраструктура (GPIO, Serial, кэш, бэкенд): WARNING
-- Application слой: INFO
+Уровни логирования настраиваются в `config.yml` для каждого из 20 модулей индивидуально. По умолчанию:
+- Application (lgtu_application, сервисы): INFO
+- Турникет (commands, turnstile_device): INFO
+- Инфраструктура (GPIO, Serial, кэш, бэкенд, звук): WARNING
 
 Для просмотра логов при запуске через systemd:
 
@@ -239,20 +268,20 @@ pip install -e ".[dev]"
 ### Линтер и форматирование
 
 ```bash
-ruff check scud_lgtu/
-ruff format scud_lgtu/
+ruff check app/
+ruff format app/
 ```
 
 ### Типизация
 
 ```bash
-mypy scud_lgtu/
+mypy app/
 ```
 
 ## Репозитории
 
 - **origin**: https://github.com/Peim0n/scud_lgtu
-- **orangepi**: root@172.19.12.202:/opt/scud_lgtu.git (деплой на устройство)
+- **orangepi**: root@172.19.12.202:/opt/app.git (деплой на устройство)
 - **hq**: git@git.hq.int-sys.ru:project/alo-acs-max-26.git (корпоративный репозиторий)
 
 ## Лицензия

@@ -3,11 +3,11 @@
 Запуск LGTU контроллера турникета для системы управления доступом.
 """
 
-import logging
-import sys
-import os
-import threading
 import ctypes
+import logging
+import os
+import sys
+import threading
 
 
 def _set_os_thread_name() -> None:
@@ -19,7 +19,7 @@ def _set_os_thread_name() -> None:
         libc.prctl.argtypes = [ctypes.c_int, ctypes.c_char_p]
         libc.prctl.restype = ctypes.c_int
         libc.prctl(15, name)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
@@ -29,7 +29,7 @@ _original_thread_run = threading.Thread.run
 def _patched_thread_run(self: threading.Thread) -> None:
     try:
         _set_os_thread_name()
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     _original_thread_run(self)
 
@@ -42,7 +42,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s [%(levelname)s] %(message)s",
 )
 
-from scud_lgtu.infrastructure.bootstrap import build_application
+from app.infrastructure.bootstrap import build_application
 
 
 def main():
@@ -51,7 +51,7 @@ def main():
     
     # Определить путь к конфигурации
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, "scud_lgtu", "config.yml")
+    config_path = os.path.join(script_dir, "app", "config.yml")
     
     # Собрать приложение с DI
     application = build_application(config_path)
@@ -65,7 +65,7 @@ def main():
     except KeyboardInterrupt:
         print("\nОстановка контроллера по запросу пользователя...")
         application.shutdown()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Ошибка работы контроллера: {e}")
         application.shutdown()
         sys.exit(1)

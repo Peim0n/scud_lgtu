@@ -1,0 +1,368 @@
+# ── GPIO-контроллер (абстракция над gpiod) ──
+# Мапинг логических имен пинов на реальные gpiod пины
+gpiod_controller:
+  pins:
+    # Пины для сдвигового регистра
+    shift_data: PA6
+    shift_clk: PA19
+    shift_latch: PA7
+
+    # Пины для мультиплексора
+    mux_a0: PA6
+    mux_a1: PA11
+    mux_a2: PA12
+    mux_input: PL11
+
+    # Пины для Wiegand-считывателей
+    wiegand1_d0: PA10
+    wiegand1_d1: PA2
+    wiegand2_d0: PA3
+    wiegand2_d1: PA18
+
+# ── Аппаратные модули (инфраструктура) ──
+
+# Секция shift_register: конфигурация для класса ShiftRegister
+shift_register:
+  ser_data: "gpiod_controller.shift_data"
+  ser_clk: "gpiod_controller.shift_clk"
+  ser_latch: "gpiod_controller.shift_latch"
+  reg_len: 16
+  pins:
+    beep1: {offset: 3, inverted: false}
+    beep2: {offset: 11, inverted: false}
+    main_beeper: {offset: 8, inverted: false}
+    green1: {offset: 1, inverted: false}
+    red1: {offset: 2, inverted: false}
+    green2: {offset: 9, inverted: false}
+    red2: {offset: 10, inverted: false}
+    rel1: {offset: 14, inverted: false}
+    rel2: {offset: 15, inverted: false}
+    pult_buzz: {offset: 4, inverted: false}
+    pult_l3: {offset: 5, inverted: false}
+    pult_l2: {offset: 6, inverted: false}
+    pult_l1: {offset: 7, inverted: false}
+    od1: {offset: 12, inverted: false}
+    od2: {offset: 13, inverted: false}
+
+# Секция mux: конфигурация для класса Multiplexer
+mux:
+  addr_pins:
+    A0: "gpiod_controller.mux_a0"
+    A1: "gpiod_controller.mux_a1"
+    A2: "gpiod_controller.mux_a2"
+  input_pin: "gpiod_controller.mux_input"
+  inputs:
+    input_0: {addr: 0}
+    button_3: {addr: 1}
+    sensor_2: {addr: 2}
+    input_3: {addr: 3}
+    sensor_1: {addr: 4}
+    button_1: {addr: 5}
+    alarm: {addr: 6, active_high: true}
+    button_2: {addr: 7}
+
+# ── Единый каскад мапингов ──
+# Бизнес-имена → module.local_name
+mappings:
+  # Биперы
+  entry_beeper: "shift_register.beep1"
+  exit_beeper: "shift_register.beep2"
+  main_buzzer: "shift_register.main_beeper"
+
+  # Индикаторы
+  inner_indicator_success: "shift_register.green1"
+  inner_indicator_fail: "shift_register.red1"
+  outer_indicator_success: "shift_register.green2"
+  outer_indicator_fail: "shift_register.red2"
+
+  # Реле
+  entry_relay: "shift_register.rel1"
+  exit_relay: "shift_register.rel2"
+
+  # Кнопки и датчики (через мультиплексор)
+  entry_button: "mux.button_1"
+  exit_button: "mux.button_2"
+  alarm_input: "mux.alarm"
+  entry_sensor: "mux.sensor_1"
+  exit_sensor: "mux.sensor_2"
+
+  # Мапинг полных имён считывателей на логические
+  wiegand_Wiegand-1: entry_card_reader
+  wiegand_Wiegand-2: exit_card_reader
+  serial_Serial-1: entry_qr_reader
+  serial_Serial-2: exit_qr_reader
+
+# ── Wiegand-считыватели ──
+wiegand:
+  - label: Wiegand-1
+    d0: 10  # PA10
+    d1: 2   # PA2
+    type: era_mf_64_hash
+    encrypted: false
+
+  - label: Wiegand-2
+    d0: 3   # PA3
+    d1: 18  # PA18
+    type: era_mf_64_hash
+    encrypted: false
+
+# ── Серийные порты (старая секция для обратной совместимости) ──
+# Для QR-считывателей и других устройств с последовательным интерфейсом
+serial:
+  - label: Serial-1
+    port: /dev/ttyS1
+    baud: 115200     # Скорость передачи (baud)
+    timeout: 0.05
+
+  - label: Serial-2
+    port: /dev/ttyS2
+    baud: 115200     # Скорость передачи (baud)
+    timeout: 0.05
+
+# ── Функциональные устройства ──
+# Конфигурация считывателей с ссылками на бизнес-секцию
+devices:
+  readers:
+    entry_card_reader:
+      label: "Wiegand-1"
+      type: "wiegand"
+      direction: "entry"
+      beeper: "entry_beeper"
+      indicator_success: "inner_indicator_success"
+      indicator_fail: "inner_indicator_fail"
+
+    exit_card_reader:
+      label: "Wiegand-2"
+      type: "wiegand"
+      direction: "exit"
+      beeper: "exit_beeper"
+      indicator_success: "outer_indicator_success"
+      indicator_fail: "outer_indicator_fail"
+
+    entry_qr_reader:
+      label: "Serial-1"
+      type: "serial"
+      direction: "entry"
+      beeper: "entry_beeper"
+      indicator_success: "inner_indicator_success"
+      indicator_fail: "inner_indicator_fail"
+
+    exit_qr_reader:
+      label: "Serial-2"
+      type: "serial"
+      direction: "exit"
+      beeper: "exit_beeper"
+      indicator_success: "outer_indicator_success"
+      indicator_fail: "outer_indicator_fail"
+
+  buttons:
+    entry_button:
+      label: "button_1"
+      action: "open_entry"
+
+    exit_button:
+      label: "button_2"
+      action: "open_exit"
+
+    shift_button:
+      label: "button_3"
+      action: "shift"
+
+# ── Зоны прохода ──
+passage:
+  zones:
+    - label: "zone1"
+      inner: "sensor_1"  # Внутренний датчик (вход)
+      outer: "sensor_2"  # Внешний датчик (выход)
+
+
+turnstile:
+  entry_relay: "entry_relay"
+  exit_relay: "exit_relay"
+  main_buzzer: "main_buzzer"
+  entry_green: "inner_indicator_success"
+  entry_red: "inner_indicator_fail"
+  exit_green: "outer_indicator_success"
+  exit_red: "outer_indicator_fail"
+
+# ── Параметры доступа ──
+# STATIC_KEY — уникален для точки доступа (16 байт в hex). ВАЖНО: этот же
+# ключ должен быть прописан в самих Wiegand-считывателях (ЭРА/аналоги) через
+# USB-конфигуратор, режим банковских карт "HMAC-SHA256(SHA256(PAN), KEY)" —
+# ридер сам считает SHA256(PAN)+HMAC(STATIC_KEY) и обрезает результат до 8
+# байт (64 значащих бита, сдвиг 0) под Wiegand-кадр era_mf_64_hash. Поэтому
+# card_data от ридера — это НЕ сырой номер карты, а уже частично хешированное
+# значение (см. TokenTypeEnum.CARDID_PARTIAL_H, identifier_hash.hash_partial_identifier).
+# DYNAMIC_KEY — меняется ежедневно, загружается автоматически с бэкенда
+# при первом access/get. В конфиге не указывается.
+access:
+  static_key: "0123456789abcdef0123456789abcdef"
+
+# ── QR декодер ──
+qr_decoder:
+  base_url: "https://pass.lipetsk.ru/?"
+
+# ── Бэкенд (§5.4, §6 ТЗ) ──
+backend:
+  # Публичный IP:порт controller'а, доступный с устройства (временно через NAT).
+  base_url: "https://195.34.235.89:8448"
+  api_path_prefix: "/controller/v1"
+  # KMS-сервер для получения первичных сертификатов (/bootstrap).
+  # Временно открытый, потом будет доступен только из внутренней сети.
+  kms_url: "https://kms-scud-dev.admlr.lipetsk.ru"
+  # Путь к CA-сертификату для проверки сервера; null — системное хранилище.
+  ca_bundle: null
+  # Переопределение путей и методов отдельных endpoint'ов реального backend.
+  endpoint_map:
+    cert/get: "/controller/v1/cert"
+    keys/get: "/controller/v1/keys"
+  method_map:
+    keys/get: "GET"
+  # Пока коннектимся к controller по IP, имя хоста в сертификате не совпадает.
+  # Для тестового доступа отключаем проверку hostname (CA всё равно проверяется).
+  verify_hostname: false
+  request_timeout_s: 10.0
+  # TCP keepalive (п. 6.4 ТЗ)
+  tcp_keepalive_time_s: 300
+  tcp_keepalive_probes: 3
+  tcp_keepalive_intvl_s: 20
+  # Имя сетевого интерфейса для инвентаризации (accesspoint/patch); null — автоопределение.
+  network_interface: null
+  # mTLS-сертификат контроллера (§5.4.1).
+  cert:
+    cert_dir: "infrastructure/certs"
+    # Первичный сертификат/ключ (10 суток). Получается автоматически от
+    # KMS-сервера (kms_url/bootstrap) при первом запуске, если отсутствует.
+    # Удаляется автоматически после успешного обмена на рабочий.
+    initial_cert_path: "infrastructure/certs/initial_cert.pem"
+    initial_key_path: "infrastructure/certs/initial_key.pem"
+    rotation_period_days: 30
+    rsa_key_size: 2048
+    # Subject клиентского сертификата: O, OU (список, может быть несколько
+    # вложенных подразделений), CN — заполняются согласно записи контроллера в БД.
+    subject:
+      organization: "ЛГТУ"
+      organizational_units:
+        - "Корпус 1"
+        - "КПП Главный вход"
+      common_name: "turnstile-01"
+
+# ── Звук ──
+sound:
+  sound_dir: "sounds"
+  player_cmd: "aplay"
+  stop_timeout_s: 5.0
+  play_timeout_s: 10.0
+
+# ── Общие системные тайминги ──
+timings:
+  # GPIO / multiplexer
+  mux_poll_interval_s: 0.02
+  mux_addr_settle_s: 0.0001
+  mux_queue_timeout_s: 0.1
+
+  # Wiegand
+  wiegand_bit_timeout_s: 0.025
+  wiegand_wait_timeout_s: 0.02
+  wiegand_ignore_after_valid_s: 0.05
+
+  # Serial
+  serial_queue_timeout_s: 0.2
+  serial_retry_delay_s: 1.0
+
+  # Generic event/command loops
+  event_queue_timeout_s: 0.2
+  command_queue_timeout_s: 0.2
+  event_queue_maxsize: 1000
+  command_queue_maxsize: 100
+
+  # Passage detection
+  passage_timeout_s: 2.0
+  passage_blockage_timeout_s: 5.0
+
+  # Turnstile / UI
+  auth_timeout_s: 5.0
+  relay_open_duration_s: 7.0
+  indicator_duration_s: 2.0
+  button_timer_duration_s: 7.0
+  button_debounce_s: 0.025
+  shift_short_press_max_s: 0.5
+  post_blockage_safety_s: 1.0
+  beep_signal_duration_s: 0.05
+  open_beep_duration_s: 0.2
+  deny_beep_duration_s: 0.1
+  deny_beep_pause_s: 0.1
+  deny_beep_count: 3
+  alarm_beep_on_duration_s: 0.5
+  alarm_beep_off_duration_s: 0.5
+
+  # Command execution
+  command_stop_timeout_s: 0.5
+
+  # System / watchdog / sync / threads
+  watchdog_check_interval_s: 2.0
+  watchdog_stop_timeout_s: 2.0
+  backend_sync_interval_s: 600      # §5.4.3: раз в 10 минут
+  key_sync_interval_s: 86400        # §5.4.2: раз в сутки
+  accesspoint_sync_interval_s: 86400
+  thread_join_timeout_s: 5.0
+
+  # Queue sizes
+  sound_queue_maxsize: 20
+  shift_queue_maxsize: 50
+  mux_queue_maxsize: 100
+
+# ── Логирование ──
+# Уровни: DEBUG, INFO, WARNING, ERROR, CRITICAL
+# Для дебага установите level: DEBUG и раскомментируйте нужные модули
+logging:
+  # Общий уровень логирования
+  level: INFO
+  # Формат логов
+  format: "%(asctime)s %(name)s [%(levelname)s] %(message)s"
+
+  # Детальная настройка по модулям.
+  # Имена соответствуют __name__ модулей Python.
+  # Для дебага смените нужный модуль на DEBUG.
+  loggers:
+    # ── Application ──
+    app.application.lgtu_application: INFO
+    app.application.services.sync_service: INFO
+    app.application.services.key_sync_service: INFO
+    app.application.services.accesspoint_inventory_service: INFO
+
+    # ── Инфраструктура: bootstrap / engine ──
+    app.infrastructure.bootstrap: INFO
+    app.infrastructure.engine: WARNING
+
+    # ── Инфраструктура: GPIO (железо) ──
+    app.infrastructure.firmware.gpio.controller: WARNING
+    app.infrastructure.firmware.gpio.shift_register: WARNING
+    app.infrastructure.firmware.gpio.multiplexor: WARNING
+    app.infrastructure.firmware.gpio.signal_reader: WARNING
+    app.infrastructure.firmware.gpio.wiegand_reader: WARNING
+
+    # ── Инфраструктура: Serial (QR-считыватели) ──
+    app.infrastructure.firmware.serial.qr_decoder: WARNING
+    app.infrastructure.firmware.serial.serial_reader: WARNING
+
+    # ── Инфраструктура: кэш доступа ──
+    app.infrastructure.cache.access_cache: WARNING
+
+    # ── Инфраструктура: бэкенд (REST, клиент, сертификаты) ──
+    app.infrastructure.backend.rest_client: WARNING
+    app.infrastructure.backend.client: WARNING
+    app.infrastructure.backend.certificate_manager: WARNING
+
+    # ── Инфраструктура: звук ──
+    app.infrastructure.sound.player: WARNING
+
+    # ── Инфраструктура: конфиг ──
+    app.infrastructure.config.module_resolver: WARNING
+
+    # ── Устройства: турникет ──
+    app.infrastructure.devices.turnstile.commands: INFO
+    app.infrastructure.devices.turnstile.turnstile_device: INFO
+
+    # ── Системные ──
+    asyncio: WARNING
