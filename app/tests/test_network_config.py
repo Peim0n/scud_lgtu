@@ -29,7 +29,7 @@ def test_update_merges(tmp_path):
     save(defaults(), str(path))
     result = update(str(path), {"network": {"hostname": "new-host"}})
     assert result["network"]["hostname"] == "new-host"
-    assert result["network"]["ethernet"]["interface"] == "eth0"
+    assert result["network"]["ethernet"]["interface"] == "end0"
 
 
 def test_env_override_path(tmp_path, monkeypatch):

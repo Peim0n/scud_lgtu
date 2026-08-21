@@ -131,9 +131,12 @@ def network_page() -> str:
         "timezone": nm.get_timezone(),
         "interfaces": nm.list_interfaces(),
     }
-    # В форме показываем значения из конфига (то, что сохранено),
-    # а в "Текущее состояние" — реальные системные.
-    # Если конфиг пустой (нет network_config.yml), берём системные как стартовые.
+    # Автоопределяем имена интерфейсов из системы, если конфиг пустой
+    if not net_cfg.get("network", {}).get("ethernet", {}).get("interface"):
+        net_cfg.setdefault("network", {}).setdefault("ethernet", {})["interface"] = nm.detect_ethernet_interface()
+    if not net_cfg.get("network", {}).get("wifi", {}).get("interface"):
+        net_cfg.setdefault("network", {}).setdefault("wifi", {})["interface"] = nm.detect_wifi_interface()
+    # Если конфиг пустой (нет network_config.yml), берём системные hostname/timezone как стартовые
     if not net_cfg.get("network", {}).get("hostname") and current["hostname"]:
         net_cfg["network"]["hostname"] = current["hostname"]
     if not net_cfg.get("network", {}).get("timezone") and current["timezone"]:

@@ -1,13 +1,17 @@
 """Адаптер управления сетевым окружением контроллера.
 
-Реализует чтение текущего состояния и применение настроек через стандартные
-системные утилиты (NetworkManager/nmcli, hostnamectl, timedatectl, ip).
+Реализует чтение текущего состояния и применение настроек через:
+- netplan + systemd-networkd (основной путь для Armbian/Debian);
+- NetworkManager/nmcli (fallback, если установлен);
+- hostnamectl, timedatectl — для hostname/timezone/NTP.
+
 Если требуемый инструмент недоступен, метод возвращает ошибку, но не падает.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shlex
 import subprocess
@@ -56,12 +60,19 @@ class NetworkManagerAdapter:
 
     def __init__(self) -> None:
         self._nmcli_available: bool | None = None
+        self._netplan_available: bool | None = None
 
     def _has_nmcli(self) -> bool:
         if self._nmcli_available is None:
             rc, _, _ = _run(["which", "nmcli"])
             self._nmcli_available = rc == 0
         return self._nmcli_available
+
+    def _has_netplan(self) -> bool:
+        if self._netplan_available is None:
+            rc, _, _ = _run(["which", "netplan"])
+            self._netplan_available = rc == 0
+        return self._netplan_available
 
     # -----------------------------------------------------------------------
     # Чтение текущего состояния
@@ -128,6 +139,39 @@ class NetworkManagerAdapter:
             interfaces.append(current)
         return interfaces
 
+    def detect_ethernet_interface(self) -> str:
+        """Определить имя ethernet-интерфейса (end0, eth0, enp0s3, ...)."""
+        for iface in self.list_interfaces():
+            name = iface.get("name", "")
+            # Пропускаем lo и wlan
+            if name == "lo" or name.startswith("wl"):
+                continue
+            if iface.get("state") in ("up", "unknown"):
+                return name
+        # Fallback: ищем через /sys/class/net
+        try:
+            for name in sorted(os.listdir("/sys/class/net")):
+                if name == "lo" or name.startswith("wl"):
+                    continue
+                return name
+        except OSError:
+            pass
+        return "eth0"
+
+    def detect_wifi_interface(self) -> str:
+        """Определить имя Wi-Fi-интерфейса (wlan0, wlp2s0, ...)."""
+        for iface in self.list_interfaces():
+            name = iface.get("name", "")
+            if name.startswith("wl"):
+                return name
+        try:
+            for name in sorted(os.listdir("/sys/class/net")):
+                if name.startswith("wl"):
+                    return name
+        except OSError:
+            pass
+        return "wlan0"
+
     # -----------------------------------------------------------------------
     # Применение настроек
     # -----------------------------------------------------------------------
@@ -183,18 +227,156 @@ class NetworkManagerAdapter:
     def _apply_ethernet(self, eth_cfg: dict[str, Any]) -> dict[str, Any]:
         if not eth_cfg:
             return _ok("ethernet не задан")
+        if self._has_netplan():
+            return self._apply_via_netplan("ethernet", eth_cfg)
         if self._has_nmcli():
             return self._apply_via_nmcli("ethernet", eth_cfg)
-        return _err("не найден NetworkManager (nmcli)")
+        return _err("не найден netplan или NetworkManager (nmcli)")
 
     def _apply_wifi(self, wifi_cfg: dict[str, Any]) -> dict[str, Any]:
         if not wifi_cfg:
             return _ok("wifi не задан")
         if not wifi_cfg.get("enabled"):
             return _ok("wifi выключен")
+        if self._has_netplan():
+            return self._apply_via_netplan("wifi", wifi_cfg)
         if self._has_nmcli():
             return self._apply_via_nmcli("wifi", wifi_cfg)
-        return _err("не найден NetworkManager (nmcli)")
+        return _err("не найден netplan или NetworkManager (nmcli)")
+
+    # -----------------------------------------------------------------------
+    # netplan + systemd-networkd
+    # -----------------------------------------------------------------------
+
+    _NETPLAN_DIR = "/etc/netplan"
+    _NETPLAN_FILE = "/etc/netplan/10-scud-controller.yaml"
+
+    def _apply_via_netplan(
+        self, conn_type: str, cfg: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Применить настройки через netplan."""
+        interface = cfg.get("interface", "")
+        if not interface:
+            return _err("не указан interface")
+
+        # Читаем существующий netplan-конфиг или начинаем с нуля
+        netplan_cfg = self._read_netplan()
+
+        # Гарантируем базовую структуру
+        if "network" not in netplan_cfg:
+            netplan_cfg["network"] = {}
+        if "version" not in netplan_cfg["network"]:
+            netplan_cfg["network"]["version"] = 2
+        if "renderer" not in netplan_cfg["network"]:
+            netplan_cfg["network"]["renderer"] = "networkd"
+
+        if conn_type == "wifi":
+            wifi_section = self._build_netplan_wifi(interface, cfg)
+            netplan_cfg["network"]["wifis"] = {interface: wifi_section}
+            # Удаляем ethernet-секцию для этого интерфейса, если была
+            ethernets = netplan_cfg["network"].get("ethernets", {})
+            ethernets.pop(interface, None)
+            if ethernets:
+                netplan_cfg["network"]["ethernets"] = ethernets
+            else:
+                netplan_cfg["network"].pop("ethernets", None)
+        else:
+            eth_section = self._build_netplan_ethernet(interface, cfg)
+            if "ethernets" not in netplan_cfg["network"]:
+                netplan_cfg["network"]["ethernets"] = {}
+            netplan_cfg["network"]["ethernets"][interface] = eth_section
+
+        # Записываем
+        try:
+            os.makedirs(self._NETPLAN_DIR, exist_ok=True)
+            import yaml
+            with open(self._NETPLAN_FILE, "w", encoding="utf-8") as f:
+                yaml.safe_dump(netplan_cfg, f, default_flow_style=False, sort_keys=False)
+        except PermissionError:
+            return _err(f"нет прав на запись {self._NETPLAN_FILE}")
+        except OSError as exc:
+            return _err(str(exc))
+
+        # Применяем
+        rc, out, err = _run(["netplan", "apply"], timeout=30.0)
+        if rc != 0:
+            return _err(err or out)
+        return _ok(f"{conn_type} применён через netplan")
+
+    def _read_netplan(self) -> dict[str, Any]:
+        """Прочитать наш netplan-конфиг, если есть."""
+        if not os.path.exists(self._NETPLAN_FILE):
+            return {}
+        try:
+            import yaml
+            with open(self._NETPLAN_FILE, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            return data if data else {}
+        except Exception:
+            return {}
+
+    def _build_netplan_ethernet(self, interface: str, cfg: dict[str, Any]) -> dict[str, Any]:
+        """Построить секцию ethernets для netplan."""
+        method = cfg.get("method", "dhcp")
+        section: dict[str, Any] = {
+            "match": {"name": interface},
+        }
+        if method == "static":
+            address = cfg.get("address", "")
+            netmask = cfg.get("netmask", "")
+            gateway = cfg.get("gateway", "")
+            dns = cfg.get("dns", [])
+            if address:
+                cidr = self._netmask_to_cidr(netmask) if netmask else 24
+                section["addresses"] = [f"{address}/{cidr}"]
+            if gateway:
+                section["routes"] = [{"to": "default", "via": gateway}]
+            if dns:
+                section["nameservers"] = {"addresses": dns}
+            section["dhcp4"] = False
+            section["dhcp6"] = False
+        else:
+            section["dhcp4"] = True
+            section["dhcp6"] = True
+        return section
+
+    def _build_netplan_wifi(self, interface: str, cfg: dict[str, Any]) -> dict[str, Any]:
+        """Построить секцию wifis для netplan."""
+        ssid = cfg.get("ssid", "")
+        password = cfg.get("password", "")
+        method = cfg.get("method", "dhcp")
+
+        section: dict[str, Any] = {
+            "match": {"name": interface},
+            "access-points": {},
+        }
+        ap: dict[str, Any] = {}
+        if password:
+            ap["password"] = password
+        section["access-points"][ssid] = ap
+
+        if method == "static":
+            address = cfg.get("address", "")
+            netmask = cfg.get("netmask", "")
+            gateway = cfg.get("gateway", "")
+            dns = cfg.get("dns", [])
+            if address:
+                cidr = self._netmask_to_cidr(netmask) if netmask else 24
+                section["addresses"] = [f"{address}/{cidr}"]
+            if gateway:
+                section["routes"] = [{"to": "default", "via": gateway}]
+            if dns:
+                section["nameservers"] = {"addresses": dns}
+            section["dhcp4"] = False
+            section["dhcp6"] = False
+        else:
+            section["dhcp4"] = True
+            section["dhcp6"] = True
+        return section
+
+    # -----------------------------------------------------------------------
+    # nmcli (fallback)
+    # -----------------------------------------------------------------------
 
     def _apply_via_nmcli(
         self, conn_type: str, cfg: dict[str, Any],

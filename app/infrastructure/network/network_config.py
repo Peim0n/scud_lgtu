@@ -70,11 +70,11 @@ def defaults() -> dict[str, Any]:
     """Дефолтная структура сетевого конфига."""
     return {
         "network": {
-            "hostname": "lgtu-controller",
+            "hostname": "scud-controller",
             "timezone": "Europe/Moscow",
             "ntp_servers": ["0.ru.pool.ntp.org"],
             "ethernet": {
-                "interface": "eth0",
+                "interface": "end0",
                 "method": "dhcp",
                 "address": "",
                 "netmask": "",
