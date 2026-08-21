@@ -45,6 +45,64 @@ from app.infrastructure.sound.player import SoundPlayer
 logger = logging.getLogger(__name__)
 
 
+def _resolve_config_path(config_path: str | None) -> str:
+    if config_path is not None:
+        return config_path
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(script_dir, "config.yml")
+
+
+def _configure_logging(config: dict) -> None:
+    """Настройка логирования из конфига — общая для build_application и build_backend_client."""
+    logging_config = config.get("logging", {})
+    log_level = logging_config.get("level", "INFO")
+    log_format = logging_config.get("format", "%(asctime)s %(name)s [%(levelname)s] %(message)s")
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format=log_format,
+    )
+
+    # Детальная настройка по модулям
+    loggers_config = logging_config.get("loggers", {})
+    for logger_name, logger_level in loggers_config.items():
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(getattr(logging, logger_level.upper()))
+
+
+def build_backend_client(
+    config_path: str | None = None, ensure_bootstrap: bool = True,
+) -> tuple[BackendClient, Any]:
+    """
+    Собрать только backend-часть (RestClient/BackendClient/CertificateManager)
+    без остального приложения (ScudEngine и GPIO).
+
+    Нужна для CLI-утилиты управления сертификатом (``manage.py``) и в
+    перспективе для веб-интерфейса администрирования — им нельзя дёргать
+    ``build_application()``, т.к. это поднимет GPIO/ScudEngine и приведёт к
+    конфликту с уже запущенным основным процессом контроллера (единственным
+    владельцем GPIO-пинов).
+
+    Parameters
+    ----------
+    config_path : str, optional
+        Путь к файлу конфигурации.
+    ensure_bootstrap : bool
+        Выполнить ``CertificateManager.ensure_bootstrapped()`` сразу после
+        сборки (как это всегда делает ``build_application()``). Для команд
+        вроде ``cert status`` это не нужно — False, чтобы не дёргать
+        KMS/бэкенд лишний раз.
+
+    Returns
+    -------
+    tuple[BackendClient, CertificateManager | None]
+    """
+    config_path = _resolve_config_path(config_path)
+    config = load(config_path)
+    _configure_logging(config)
+    base_dir = os.path.dirname(config_path)
+    return _build_backend_client(config, base_dir, ensure_bootstrap=ensure_bootstrap)
+
+
 def build_application(config_path: str | None = None) -> LGTUApplication:
     """
     Собрать приложение LGTU со всеми зависимостями.
@@ -59,27 +117,9 @@ def build_application(config_path: str | None = None) -> LGTUApplication:
     LGTUApplication
         Сконфигурированное приложение
     """
-    # Загрузить конфигурацию
-    if config_path is None:
-        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(script_dir, "config.yml")
-
+    config_path = _resolve_config_path(config_path)
     config = load(config_path)
-
-    # Настройка логирования из конфига
-    logging_config = config.get("logging", {})
-    log_level = logging_config.get("level", "INFO")
-    log_format = logging_config.get("format", "%(asctime)s %(name)s [%(levelname)s] %(message)s")
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        format=log_format,
-    )
-
-    # Детальная настройка по модулям
-    loggers_config = logging_config.get("loggers", {})
-    for logger_name, logger_level in loggers_config.items():
-        logger = logging.getLogger(logger_name)
-        logger.setLevel(getattr(logging, logger_level.upper()))
+    _configure_logging(config)
 
     # Загрузить тайминги (нужно до создания ScudEngine)
     timings = config.get("timings", {})
@@ -188,10 +228,19 @@ def build_application(config_path: str | None = None) -> LGTUApplication:
     return application
 
 
-def _build_backend_client(config: dict, base_dir: str) -> tuple[BackendClient, Any]:
+def _build_backend_client(
+    config: dict, base_dir: str, ensure_bootstrap: bool = True,
+) -> tuple[BackendClient, Any]:
     """
     Собрать ``BackendClient`` с mTLS-транспортом и (при наличии сертификатов)
     ``CertificateManager`` для первичного обмена/ротации (§5.4.1).
+
+    Parameters
+    ----------
+    ensure_bootstrap : bool
+        Вызвать ``CertificateManager.ensure_bootstrapped()`` сразу после
+        создания. False — для случаев, когда лишний сетевой запрос не нужен
+        (например, CLI-команда ``cert status``).
 
     Returns
     -------
@@ -265,7 +314,8 @@ def _build_backend_client(config: dict, base_dir: str) -> tuple[BackendClient, A
                 access_point_id=access_point_id,
                 user_agent=user_agent,
             )
-            cert_manager.ensure_bootstrapped()
+            if ensure_bootstrap:
+                cert_manager.ensure_bootstrapped()
         except ImportError:
             logger.warning("CertificateManager не инициализирован: модуль cryptography не установлен.")
             cert_manager = None

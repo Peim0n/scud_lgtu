@@ -32,7 +32,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 try:
@@ -153,6 +153,47 @@ class CertificateManager:
     def has_working_certificate(self) -> bool:
         return os.path.exists(self._working_cert_path) and os.path.exists(self._working_key_path)
 
+    def import_initial_certificate(self, cert_pem: str, key_pem: str) -> None:
+        """
+        Вручную задать первичный сертификат/ключ — альтернатива
+        автоматическому получению с KMS (например, когда KMS недоступен, а
+        первичный сертификат выдан администратором вручную, вне контроллера).
+
+        Валидирует, что ``cert_pem``/``key_pem`` вообще разбираются как
+        X.509-сертификат и приватный ключ (соответствие ключа сертификату
+        всё равно в итоге проверит бэкенд при обмене ``cert/get``).
+        Сохраняет их по путям ``initial_cert_path``/``initial_key_path`` из
+        конфига (если не заданы явно — использует дефолтные внутри
+        ``cert_dir``), чтобы следующий вызов ``ensure_bootstrapped()`` их
+        подхватил без обращения к KMS.
+
+        Raises
+        ------
+        ValueError
+            Если сертификат или ключ не удаётся разобрать.
+        """
+        try:
+            x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
+        except Exception as exc:
+            raise ValueError(f"Невалидный сертификат: {exc}") from exc
+        try:
+            serialization.load_pem_private_key(key_pem.encode("utf-8"), password=None)
+        except Exception as exc:
+            raise ValueError(f"Невалидный приватный ключ: {exc}") from exc
+
+        cert_path = self._initial_cert_path or os.path.join(self._cert_dir, "initial_cert.pem")
+        key_path = self._initial_key_path or os.path.join(self._cert_dir, "initial_key.pem")
+
+        with open(cert_path, "w", encoding="utf-8") as f:
+            f.write(cert_pem)
+        with open(key_path, "w", encoding="utf-8") as f:
+            f.write(key_pem)
+        os.chmod(key_path, 0o600)
+
+        self._initial_cert_path = cert_path
+        self._initial_key_path = key_path
+        logger.info("CertificateManager: первичный сертификат импортирован вручную (%s)", cert_path)
+
     def ensure_bootstrapped(self) -> None:
         """
         Убедиться, что у контроллера есть рабочий сертификат.
@@ -243,6 +284,79 @@ class CertificateManager:
             return False
 
         return True
+
+    def force_rotate(self) -> bool:
+        """
+        Немедленно попытаться обменять рабочий сертификат, игнорируя порог
+        остатка срока действия и троттлинг повторных попыток — для ручного
+        администрирования (CLI/веб) и диагностики. Требует уже
+        существующего рабочего сертификата; для первичной выдачи
+        используйте ``ensure_bootstrapped()``.
+
+        Returns
+        -------
+        bool
+            True, если обмен прошёл успешно.
+        """
+        if not self.has_working_certificate:
+            logger.warning(
+                "CertificateManager: force_rotate() вызван без рабочего сертификата — "
+                "сначала нужен ensure_bootstrapped()"
+            )
+            return False
+        try:
+            self._exchange_and_activate()
+        except BackendApiError:
+            logger.exception("CertificateManager: принудительная ротация не удалась")
+            return False
+        return True
+
+    def get_status(self) -> dict[str, Any]:
+        """
+        Снимок текущего состояния сертификата — для CLI/веб-администрирования.
+
+        Returns
+        -------
+        dict
+            ``has_working_certificate``, ``has_initial_certificate``,
+            ``rotation_threshold_fraction``, ``rotation_retry_interval_days``
+            всегда присутствуют. Если рабочий сертификат есть и читается —
+            добавляются ``not_before``/``not_after`` (ISO 8601, UTC),
+            ``total_lifetime_days``, ``remaining_days``,
+            ``remaining_fraction``, ``due_for_rotation``.
+        """
+        status: dict[str, Any] = {
+            "has_working_certificate": self.has_working_certificate,
+            "has_initial_certificate": bool(
+                self._initial_cert_path and self._initial_key_path
+                and os.path.exists(self._initial_cert_path)
+                and os.path.exists(self._initial_key_path)
+            ),
+            "rotation_threshold_fraction": self._rotation_threshold,
+            "rotation_retry_interval_days": self._retry_interval_s / 86400,
+        }
+        if not self.has_working_certificate:
+            return status
+
+        try:
+            valid_from, valid_until = self._read_working_cert_validity()
+        except Exception:
+            logger.exception("CertificateManager: не удалось прочитать срок действия рабочего сертификата")
+            status["error"] = "не удалось прочитать срок действия сертификата"
+            return status
+
+        now = self._clock()
+        total_lifetime = valid_until - valid_from
+        remaining = valid_until - now
+        status.update({
+            "not_before": datetime.fromtimestamp(valid_from, tz=timezone.utc).isoformat(),
+            "not_after": datetime.fromtimestamp(valid_until, tz=timezone.utc).isoformat(),
+            "total_lifetime_days": total_lifetime / 86400,
+            "remaining_days": remaining / 86400,
+            "remaining_fraction": (remaining / total_lifetime) if total_lifetime > 0 else None,
+            "due_for_rotation": total_lifetime > 0 and remaining <= total_lifetime * self._rotation_threshold,
+        })
+        return status
 
     # ------------------------------------------------------------------
     # Внутренние операции

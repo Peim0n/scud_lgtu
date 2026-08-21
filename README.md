@@ -62,7 +62,23 @@
 
 ### Слой интерфейсов (`app/interfaces/`)
 Точки входа в систему:
-- `cli.py` - командный интерфейс для управления и диагностики
+- `cli.py` - командный интерфейс для управления и диагностики. Две группы команд:
+  - `cert` - управление mTLS-сертификатом контроллера (статус, ручной импорт
+    первичного сертификата вместо KMS, принудительный bootstrap/ротация).
+    Не поднимает GPIO — безопасно запускать параллельно с уже работающим
+    `run_lgtu_controller.py`:
+    ```bash
+    python -m app.interfaces.cli cert status
+    python -m app.interfaces.cli cert import-initial <cert.pem> <key.pem>
+    python -m app.interfaces.cli cert bootstrap
+    python -m app.interfaces.cli cert rotate [--force]
+    ```
+  - `engine` - интерактивное управление отдельным экземпляром движка для
+    разработки/отладки на стенде (поднимает GPIO — не запускать одновременно
+    с systemd-сервисом на одном устройстве):
+    ```bash
+    python -m app.interfaces.cli engine --interactive
+    ```
 
 ### Точка запуска
 - `run_lgtu_controller.py` - запуск контроллера

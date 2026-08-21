@@ -6,6 +6,7 @@ import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from app.infrastructure.backend.certificate_manager import (
     CertificateManager,
@@ -417,3 +418,133 @@ def test_kms_bootstrap_no_kms_url_does_nothing(tmp_path, subject):
 
     assert not manager.has_working_certificate
     assert rest.calls == []
+
+
+# ── get_status / force_rotate / import_initial_certificate (CLI-операции) ──
+
+
+def _make_self_signed_cert_and_key(common_name: str = "test", days: float = 90) -> tuple[str, str]:
+    """Отдельная самоподписанная пара cert+key для тестов import_initial_certificate."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
+    now = datetime.now(tz=timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now)
+        .not_valid_after(now + timedelta(days=days))
+        .sign(key, hashes.SHA256())
+    )
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
+    key_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    return cert_pem, key_pem
+
+
+def test_get_status_without_any_certificate(tmp_path, subject):
+    rest = FakeRestClient()
+    manager = CertificateManager(rest, cert_dir=str(tmp_path / "certs"), subject=subject)
+
+    status = manager.get_status()
+
+    assert status == {
+        "has_working_certificate": False,
+        "has_initial_certificate": False,
+        "rotation_threshold_fraction": 0.5,
+        "rotation_retry_interval_days": 1.0,
+    }
+
+
+def test_get_status_with_working_certificate(tmp_path, subject, initial_cert_files):
+    initial_cert_path, initial_key_path = initial_cert_files
+    now = [1_700_000_000.0]
+    rest = FakeRestClient(clock=lambda: now[0], cert_validity_days=90)
+    manager = CertificateManager(
+        rest, cert_dir=str(tmp_path / "certs"), subject=subject,
+        initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
+        rotation_threshold_fraction=0.5, clock=lambda: now[0],
+    )
+    manager.ensure_bootstrapped()
+
+    status = manager.get_status()
+
+    assert status["has_working_certificate"] is True
+    assert pytest.approx(status["total_lifetime_days"], rel=1e-3) == 90
+    assert pytest.approx(status["remaining_days"], rel=1e-3) == 90
+    assert status["due_for_rotation"] is False
+
+    # Через 46 суток (>50% срока прошло) статус должен отразить, что пора.
+    now[0] += 46 * 86400
+    status_later = manager.get_status()
+    assert status_later["due_for_rotation"] is True
+    assert status_later["remaining_fraction"] < 0.5
+
+
+def test_force_rotate_ignores_threshold(tmp_path, subject, initial_cert_files):
+    """force_rotate() обменивает сертификат немедленно, не дожидаясь порога."""
+    initial_cert_path, initial_key_path = initial_cert_files
+    now = [1_700_000_000.0]
+    rest = FakeRestClient(clock=lambda: now[0])
+    manager = CertificateManager(
+        rest, cert_dir=str(tmp_path / "certs"), subject=subject,
+        initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
+        rotation_threshold_fraction=0.5, clock=lambda: now[0],
+    )
+    manager.ensure_bootstrapped()
+    old_cert_content = open(manager._working_cert_path).read()
+    calls_after_bootstrap = len(rest.calls)
+
+    # Прошло всего 5 суток — по обычной логике maybe_rotate() ещё рано.
+    now[0] += 5 * 86400
+    assert manager.maybe_rotate(now[0]) is False
+
+    rotated = manager.force_rotate()
+
+    assert rotated is True
+    assert len(rest.calls) == calls_after_bootstrap + 1
+    assert open(manager._working_cert_path).read() != old_cert_content
+
+
+def test_force_rotate_without_working_certificate_returns_false(tmp_path, subject):
+    rest = FakeRestClient()
+    manager = CertificateManager(rest, cert_dir=str(tmp_path / "certs"), subject=subject)
+
+    assert manager.force_rotate() is False
+    assert rest.calls == []
+
+
+def test_import_initial_certificate_enables_bootstrap(tmp_path, subject):
+    """import_initial_certificate() — альтернатива KMS: кладём файлы вручную."""
+    rest = FakeRestClient()
+    manager = CertificateManager(rest, cert_dir=str(tmp_path / "certs"), subject=subject)
+    cert_pem, key_pem = _make_self_signed_cert_and_key()
+
+    manager.import_initial_certificate(cert_pem, key_pem)
+    manager.ensure_bootstrapped()
+
+    assert manager.has_working_certificate
+    assert len(rest.calls) == 1
+
+
+def test_import_initial_certificate_rejects_invalid_cert(tmp_path, subject):
+    rest = FakeRestClient()
+    manager = CertificateManager(rest, cert_dir=str(tmp_path / "certs"), subject=subject)
+    _cert_pem, key_pem = _make_self_signed_cert_and_key()
+
+    with pytest.raises(ValueError, match="сертификат"):
+        manager.import_initial_certificate("not a certificate", key_pem)
+
+
+def test_import_initial_certificate_rejects_invalid_key(tmp_path, subject):
+    rest = FakeRestClient()
+    manager = CertificateManager(rest, cert_dir=str(tmp_path / "certs"), subject=subject)
+    cert_pem, _key_pem = _make_self_signed_cert_and_key()
+
+    with pytest.raises(ValueError, match="ключ"):
+        manager.import_initial_certificate(cert_pem, "not a key")
