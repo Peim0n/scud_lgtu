@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Шаг 3. Проверить получение ключей через controller/v1/keys/get.
+Шаг 3. Проверить получение ключей через POST controller/v1/keys/get (формат ТЗ).
 
 Использует рабочий сертификат, полученный на шаге 2.
 """
@@ -11,6 +11,8 @@ import os
 import urllib3
 
 import requests
+
+from _config import USER_AGENT
 
 CONTROLLER_URL = os.environ.get("CONTROLLER_URL", "https://195.34.235.89:8448").rstrip("/")
 API_PREFIX = "/controller/v1"
@@ -33,11 +35,12 @@ def main() -> None:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     session.verify = False
 
-    url = f"{CONTROLLER_URL}{API_PREFIX}/keys"
-    print(f"GET {url}")
-    response = session.get(
+    url = f"{CONTROLLER_URL}{API_PREFIX}/keys/get"
+    print(f"POST {url}")
+    response = session.post(
         url,
-        headers={"Accept": "application/json"},
+        data=b"null",
+        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT},
         timeout=10,
     )
     response.raise_for_status()

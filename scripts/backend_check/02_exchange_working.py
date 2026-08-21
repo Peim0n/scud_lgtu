@@ -23,6 +23,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
+from _config import USER_AGENT
+
 CONTROLLER_URL = os.environ.get("CONTROLLER_URL", "https://195.34.235.89:8448").rstrip("/")
 API_PREFIX = "/controller/v1"
 OUT_DIR = os.environ.get("OUT_DIR", os.path.join(os.path.dirname(__file__), "certs"))
@@ -63,12 +65,12 @@ def main() -> None:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     session.verify = False
 
-    url = f"{CONTROLLER_URL}{API_PREFIX}/cert"
+    url = f"{CONTROLLER_URL}{API_PREFIX}/cert/get"
     print(f"POST {url}")
     response = session.post(
         url,
         data=json.dumps({"csr": csr_pem}, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT},
         timeout=10,
     )
     response.raise_for_status()
