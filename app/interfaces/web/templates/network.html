@@ -6,8 +6,8 @@
 <section>
     <h2>Текущее состояние</h2>
     <table>
-        <tr><th>Hostname</th><td>{{ current.hostname }}</td></tr>
-        <tr><th>Timezone</th><td>{{ current.timezone }}</td></tr>
+        <tr><th>Имя хоста</th><td>{{ current.hostname }}</td></tr>
+        <tr><th>Часовой пояс</th><td>{{ current.timezone }}</td></tr>
     </table>
     <table>
         <thead>
@@ -27,8 +27,14 @@
 
 <form method="post" action="{{ url_for('network_save') }}">
     <h2>Системные параметры</h2>
-    <label>Hostname <input type="text" name="hostname" value="{{ cfg.network.hostname }}"></label>
-    <label>Часовой пояс <input type="text" name="timezone" value="{{ cfg.network.timezone }}"></label>
+    <label>Имя хоста (hostname) <input type="text" name="hostname" value="{{ cfg.network.hostname }}"></label>
+    <label>Часовой пояс
+        <select name="timezone">
+            {% for tz in timezones %}
+                <option value="{{ tz }}" {% if cfg.network.timezone == tz %}selected{% endif %}>{{ tz }}</option>
+            {% endfor %}
+        </select>
+    </label>
     <label>NTP-серверы (по одному на строку)
         <textarea name="ntp_servers" rows="3">{{ cfg.network.ntp_servers | join('\n') }}</textarea>
     </label>

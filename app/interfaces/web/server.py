@@ -131,7 +131,14 @@ def network_page() -> str:
         "timezone": nm.get_timezone(),
         "interfaces": nm.list_interfaces(),
     }
-    return render_template("network.html", cfg=net_cfg, current=current)
+    # Реальный hostname и timezone из системы — приоритет над конфигом
+    if current["hostname"]:
+        net_cfg["network"]["hostname"] = current["hostname"]
+    if current["timezone"]:
+        net_cfg["network"]["timezone"] = current["timezone"]
+    # Список доступных часовых поясов
+    available_timezones = _list_timezones()
+    return render_template("network.html", cfg=net_cfg, current=current, timezones=available_timezones)
 
 
 def network_save() -> Any:
@@ -356,8 +363,40 @@ def _parse_network_form(form: Any) -> dict[str, Any]:
                 "gateway": form.get("wifi_gateway", "").strip(),
                 "dns": wifi_dns,
             },
-        }
+        },
     }
+
+
+def _list_timezones() -> list[str]:
+    """Получить список доступных часовых поясов из системы."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["timedatectl", "list-timezones"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            zones = [z.strip() for z in result.stdout.splitlines() if z.strip()]
+            if zones:
+                return zones
+    except Exception:
+        pass
+    # Fallback — базовый список частых поясов
+    return [
+        "Europe/Moscow",
+        "Europe/Kaliningrad",
+        "Europe/Samara",
+        "Europe/Yekaterinburg",
+        "Europe/Omsk",
+        "Europe/Krasnoyarsk",
+        "Asia/Novosibirsk",
+        "Asia/Irkutsk",
+        "Asia/Yakutsk",
+        "Asia/Vladivostok",
+        "Asia/Magadan",
+        "Asia/Kamchatka",
+        "UTC",
+    ]
 
 
 # ---------------------------------------------------------------------------
