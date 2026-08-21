@@ -131,11 +131,13 @@ def network_page() -> str:
         "timezone": nm.get_timezone(),
         "interfaces": nm.list_interfaces(),
     }
-    # Автоопределяем имена интерфейсов из системы, если конфиг пустой
-    if not net_cfg.get("network", {}).get("ethernet", {}).get("interface"):
-        net_cfg.setdefault("network", {}).setdefault("ethernet", {})["interface"] = nm.detect_ethernet_interface()
-    if not net_cfg.get("network", {}).get("wifi", {}).get("interface"):
-        net_cfg.setdefault("network", {}).setdefault("wifi", {})["interface"] = nm.detect_wifi_interface()
+    # Всегда берём реальные имена интерфейсов из системы — поле readonly
+    detected_eth = nm.detect_ethernet_interface()
+    detected_wifi = nm.detect_wifi_interface()
+    if detected_eth:
+        net_cfg.setdefault("network", {}).setdefault("ethernet", {})["interface"] = detected_eth
+    if detected_wifi:
+        net_cfg.setdefault("network", {}).setdefault("wifi", {})["interface"] = detected_wifi
     # Если конфиг пустой (нет network_config.yml), берём системные hostname/timezone как стартовые
     if not net_cfg.get("network", {}).get("hostname") and current["hostname"]:
         net_cfg["network"]["hostname"] = current["hostname"]
@@ -165,11 +167,15 @@ def network_apply() -> Any:
 
     nm = NetworkManagerAdapter()
     result = nm.apply(net_cfg)
+    logger.info("network_apply result: %s", result)
     if result.get("ok"):
         flash("Сетевые настройки применены.", "success")
     else:
-        failed = [k for k, v in result.items() if isinstance(v, dict) and not v.get("ok")]
-        flash(f"Ошибка применения: {', '.join(failed)}.", "error")
+        failed = []
+        for k, v in result.items():
+            if isinstance(v, dict) and not v.get("ok"):
+                failed.append(f"{k}: {v.get('message', 'неизвестная ошибка')}")
+        flash(f"Ошибка применения: {'; '.join(failed)}", "error")
     return redirect(url_for("network_page"))
 
 
