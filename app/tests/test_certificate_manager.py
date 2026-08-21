@@ -178,9 +178,9 @@ def test_maybe_rotate_triggers_when_remaining_lifetime_below_threshold(tmp_path,
     assert not os.path.exists(manager._working_key_path + ".old")
     new_cert_content = open(manager._working_cert_path).read()
     assert new_cert_content != old_cert_content
-    # После успешной ротации новый сертификат снова "молодой" — файл
-    # последней попытки ротации подчищен.
-    assert not os.path.exists(manager._last_rotation_attempt_path)
+    # После успешной ротации новый сертификат снова "молодой" — отметка
+    # последней попытки ротации (в памяти, на диск не пишется) сброшена.
+    assert manager._last_rotation_attempt is None
 
 
 def test_maybe_rotate_does_not_retry_within_retry_interval(tmp_path, subject, initial_cert_files):

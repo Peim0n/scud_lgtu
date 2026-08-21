@@ -132,7 +132,10 @@ class CertificateManager:
         self._working_key_path = os.path.join(cert_dir, "working_key.pem")
         # Время последней ПОПЫТКИ ротации (не обязательно успешной) — для
         # троттлинга повторных попыток, см. _rotation_threshold/_retry_interval_s.
-        self._last_rotation_attempt_path = os.path.join(cert_dir, "working_cert.last_rotation_attempt")
+        # Живёт только в памяти процесса: переживать перезапуск ей не нужно —
+        # после перезапуска контроллер просто попробует сразу же, это не
+        # страшно (в отличие от лишней записи на flash при каждой попытке).
+        self._last_rotation_attempt: Optional[float] = None
 
         # Если CA не задан в конфиге, но ранее был получен от KMS и сохранён на
         # диск — используем его для проверки controller-сервера.
@@ -217,15 +220,14 @@ class CertificateManager:
         if total_lifetime <= 0 or remaining > total_lifetime * self._rotation_threshold:
             return False  # ещё не пора — остатка срока действия больше порога
 
-        last_attempt = self._read_last_rotation_attempt()
-        if last_attempt is not None and (now - last_attempt) < self._retry_interval_s:
+        if self._last_rotation_attempt is not None and (now - self._last_rotation_attempt) < self._retry_interval_s:
             return False  # уже пробовали недавно, ждём следующего интервала
 
         logger.info(
             "CertificateManager: остаток срока действия сертификата %.1f%% (порог %.0f%%) — пробуем обновить",
             max(remaining, 0) / total_lifetime * 100, self._rotation_threshold * 100,
         )
-        self._write_last_rotation_attempt(now)
+        self._last_rotation_attempt = now
         try:
             # Важно: НЕ трогаем действующие working_cert/working_key файлы до
             # успешного ответа бэкенда — RestClient.call() ниже сам
@@ -273,10 +275,9 @@ class CertificateManager:
         os.replace(tmp_key_path, self._working_key_path)
 
         # Новый сертификат снова "молодой" — забытая попытка ротации больше
-        # не нужна (следующая проверка порога всё равно её проигнорирует, но
-        # чище явно убрать файл).
-        if os.path.exists(self._last_rotation_attempt_path):
-            os.remove(self._last_rotation_attempt_path)
+        # не актуальна (следующая проверка порога всё равно её проигнорирует,
+        # но чище явно сбросить).
+        self._last_rotation_attempt = None
         self._rest_client.set_client_cert(self._working_cert_path, self._working_key_path)
         logger.info("CertificateManager: рабочий сертификат активирован")
 
@@ -403,16 +404,3 @@ class CertificateManager:
         if not_after is None:
             not_after = cert.not_valid_after.replace(tzinfo=timezone.utc)
         return not_before.timestamp(), not_after.timestamp()
-
-    def _read_last_rotation_attempt(self) -> Optional[float]:
-        if not os.path.exists(self._last_rotation_attempt_path):
-            return None
-        with open(self._last_rotation_attempt_path, "r", encoding="utf-8") as f:
-            try:
-                return float(f.read().strip())
-            except ValueError:
-                return None
-
-    def _write_last_rotation_attempt(self, timestamp: float) -> None:
-        with open(self._last_rotation_attempt_path, "w", encoding="utf-8") as f:
-            f.write(str(timestamp))
