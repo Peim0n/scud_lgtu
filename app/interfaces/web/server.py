@@ -212,7 +212,7 @@ def backend_save() -> Any:
             logger.warning("Пропуск поля %s: %s", dotted_path, exc)
 
     obj_cfg.save(override, cfg_path)
-    flash("Объектный конфиг сохранён. Перезапустите сервис для применения.", "success")
+    flash("Настройки сохранены. Нажмите «Применить настройки» для активации.", "success")
     return redirect(url_for("backend_page"))
 
 
@@ -222,7 +222,7 @@ def backend_save() -> Any:
 
 
 def restart_service() -> Any:
-    """Перезапустить systemd-сервис scud_lgtu."""
+    """Перезапустить systemd-сервис scud_lgtu (применить настройки)."""
     import subprocess
     try:
         result = subprocess.run(
@@ -230,11 +230,11 @@ def restart_service() -> Any:
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode == 0:
-            flash("Сервис scud_lgtu перезапущен.", "success")
+            flash("Настройки применены. Контроллер перезапущен.", "success")
         else:
-            flash(f"Ошибка перезапуска: {result.stderr or result.stdout}", "error")
+            flash(f"Ошибка применения: {result.stderr or result.stdout}", "error")
     except Exception as exc:
-        flash(f"Ошибка перезапуска: {exc}", "error")
+        flash(f"Ошибка применения: {exc}", "error")
     return redirect(url_for("backend_page"))
 
 

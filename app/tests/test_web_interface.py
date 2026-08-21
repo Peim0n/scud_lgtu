@@ -103,7 +103,7 @@ def test_backend_save_updates_object_config(client):
         follow_redirects=True,
     )
     assert resp.status_code == 200
-    assert "Объектный конфиг сохран".encode() in resp.data
+    assert "Настройки сохранены".encode() in resp.data
 
     # Проверим, что object_config.yml обновился
     from app.infrastructure.config import object_config as obj_cfg
