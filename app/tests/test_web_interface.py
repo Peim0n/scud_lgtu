@@ -193,3 +193,37 @@ def test_auth_save_rejects_mismatched_passwords(client):
     )
     assert resp.status_code == 200
     assert "Пароли не совпадают".encode() in resp.data
+
+
+def test_cert_page_renders(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.interfaces.cli.cmd_cert_status",
+        lambda cfg_path: {"has_working_certificate": True},
+    )
+    resp = client.get("/cert", headers=_auth_header())
+    assert resp.status_code == 200
+    assert "mTLS".encode() in resp.data
+
+
+def test_cert_bootstrap_dispatch(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.interfaces.cli.cmd_cert_bootstrap",
+        lambda cfg_path: {"has_working_certificate": True},
+    )
+    resp = client.post("/cert/bootstrap", headers=_auth_header())
+    assert resp.status_code == 302
+
+
+def test_cert_rotate_dispatch(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.interfaces.cli.cmd_cert_rotate",
+        lambda cfg_path, force: {"rotated": True},
+    )
+    resp = client.post("/cert/rotate", headers=_auth_header(), data={"force": "on"})
+    assert resp.status_code == 302
+
+
+def test_cert_import_no_files(client):
+    resp = client.post("/cert/import", headers=_auth_header(), follow_redirects=True)
+    assert resp.status_code == 200
+    assert "Нужно выбрать оба файла".encode() in resp.data

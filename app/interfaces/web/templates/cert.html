@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Сертификат — IS SCUD Admin{% endblock %}
+{% block content %}
+<h1>mTLS-сертификат контроллера</h1>
+
+{% if status.error %}
+    <div class="flash flash-error">{{ status.error }}</div>
+{% else %}
+    <section>
+        <h2>Текущее состояние</h2>
+        <table>
+            {% for key, value in status.items() %}
+            <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+            {% endfor %}
+        </table>
+    </section>
+{% endif %}
+
+<section>
+    <h2>Получить через KMS</h2>
+    <p>Выполнить первичный обмен сертификатом через KMS-сервер (нужен доступ к <code>kms_url</code>).</p>
+    <form method="post" action="{{ url_for('cert_bootstrap') }}">
+        <button type="submit">Получить через KMS</button>
+    </form>
+</section>
+
+<section>
+    <h2>Загрузить файл вручную</h2>
+    <p>Загрузить первичный сертификат и приватный ключ (PEM-файлы). После загрузки выполните обмен через KMS.</p>
+    <form method="post" action="{{ url_for('cert_import') }}" enctype="multipart/form-data">
+        <label>Сертификат (.pem) <input type="file" name="cert_file" accept=".pem,.crt,.txt"></label>
+        <label>Приватный ключ (.pem) <input type="file" name="key_file" accept=".pem,.key,.txt"></label>
+        <div class="actions">
+            <button type="submit">Загрузить</button>
+        </div>
+    </form>
+</section>
+
+<section>
+    <h2>Ротация</h2>
+    <p>Принудительно обменять рабочий сертификат на новый (игнорируя порог и троттлинг).</p>
+    <form method="post" action="{{ url_for('cert_rotate') }}">
+        <label class="checkbox">
+            <input type="checkbox" name="force" checked> Принудительная ротация (--force)
+        </label>
+        <div class="actions">
+            <button type="submit" class="danger">Ротировать</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

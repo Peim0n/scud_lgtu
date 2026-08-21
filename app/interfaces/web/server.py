@@ -98,6 +98,10 @@ def _register_routes(app: Flask) -> None:
     app.route("/backend/save", methods=["POST"])(require_auth(backend_save))
     app.route("/auth")(require_auth(auth_page))
     app.route("/auth/save", methods=["POST"])(require_auth(auth_save))
+    app.route("/cert")(require_auth(cert_page))
+    app.route("/cert/bootstrap", methods=["POST"])(require_auth(cert_bootstrap))
+    app.route("/cert/import", methods=["POST"])(require_auth(cert_import))
+    app.route("/cert/rotate", methods=["POST"])(require_auth(cert_rotate))
 
 
 def index() -> str:
@@ -187,6 +191,82 @@ def backend_save() -> Any:
     obj_cfg.save(override, cfg_path)
     flash("Объектный конфиг сохранён.", "success")
     return redirect(url_for("backend_page"))
+
+
+# ---------------------------------------------------------------------------
+# Cert: управление mTLS-сертификатом (KMS или загрузка файла)
+# ---------------------------------------------------------------------------
+
+
+def cert_page() -> str:
+    """Страница управления сертификатом."""
+    from app.interfaces.cli import cmd_cert_status
+    cfg_path = _config_path(current_app)
+    status = cmd_cert_status(cfg_path)
+    return render_template("cert.html", status=status)
+
+
+def cert_bootstrap() -> Any:
+    """Выполнить первичный обмен через KMS."""
+    from app.interfaces.cli import cmd_cert_bootstrap as do_bootstrap
+    cfg_path = _config_path(current_app)
+    result = do_bootstrap(cfg_path)
+    if "error" in result:
+        flash(f"Ошибка: {result['error']}", "error")
+    else:
+        flash("Первичный обмен выполнен через KMS.", "success")
+    return redirect(url_for("cert_page"))
+
+
+def cert_import() -> Any:
+    """Импортировать первичный сертификат/ключ из загруженных файлов."""
+    from app.interfaces.cli import cmd_cert_import_initial
+    cfg_path = _config_path(current_app)
+
+    cert_file = request.files.get("cert_file")
+    key_file = request.files.get("key_file")
+    if not cert_file or not key_file:
+        flash("Нужно выбрать оба файла: сертификат и ключ.", "error")
+        return redirect(url_for("cert_page"))
+
+    try:
+        cert_pem = cert_file.read().decode("utf-8")
+        key_pem = key_file.read().decode("utf-8")
+    except UnicodeDecodeError:
+        flash("Файлы должны быть в текстовом формате PEM.", "error")
+        return redirect(url_for("cert_page"))
+
+    # Сохраняем во временные файлы и переиспользуем cmd_cert_import_initial
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cert_path = os.path.join(tmpdir, "cert.pem")
+        key_path = os.path.join(tmpdir, "key.pem")
+        with open(cert_path, "w", encoding="utf-8") as f:
+            f.write(cert_pem)
+        with open(key_path, "w", encoding="utf-8") as f:
+            f.write(key_pem)
+        result = cmd_cert_import_initial(cfg_path, cert_path, key_path)
+
+    if "error" in result:
+        flash(f"Ошибка: {result['error']}", "error")
+    else:
+        flash("Первичный сертификат импортирован. Теперь выполните обмен через KMS.", "success")
+    return redirect(url_for("cert_page"))
+
+
+def cert_rotate() -> Any:
+    """Принудительная ротация рабочего сертификата."""
+    from app.interfaces.cli import cmd_cert_rotate as do_rotate
+    cfg_path = _config_path(current_app)
+    force = request.form.get("force") == "on"
+    result = do_rotate(cfg_path, force)
+    if "error" in result:
+        flash(f"Ошибка: {result['error']}", "error")
+    elif result.get("rotated"):
+        flash("Сертификат ротирован.", "success")
+    else:
+        flash("Ротация не требуется (порог не достигнут).", "info")
+    return redirect(url_for("cert_page"))
 
 
 # ---------------------------------------------------------------------------
