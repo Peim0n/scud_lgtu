@@ -26,6 +26,7 @@ CLI управления СКУД (см. ARCHITECTURE.md, слой Interfaces).
     python -m app.interfaces.cli settings get backend.access_point_id
     python -m app.interfaces.cli settings set backend.access_point_id 2
     python -m app.interfaces.cli settings show
+    python -m app.interfaces.cli web [--host 0.0.0.0] [--port 8080]
     python -m app.interfaces.cli engine --interactive
 """
 from __future__ import annotations
@@ -39,6 +40,7 @@ from app.application.commands import ScudCommand
 from app.infrastructure.bootstrap import build_application, build_backend_client
 from app.infrastructure.config import load as load_config, resolve_config_path
 from app.infrastructure.config import object_config as obj_cfg
+from app.interfaces.web.server import create_app
 
 # ---------------------------------------------------------------------------
 # cert: управление mTLS-сертификатом контроллера (без GPIO)
@@ -220,6 +222,21 @@ def _run_settings_command(args: argparse.Namespace) -> int:
 
     _print_settings_result(result, args.json)
     return 1 if "error" in result else 0
+
+
+# ---------------------------------------------------------------------------
+# web: веб-интерфейс администрирования (без GPIO, отдельный сервис)
+# ---------------------------------------------------------------------------
+
+
+def cmd_web(
+    config_path: str | None, host: str, port: int, debug: bool,
+) -> int:
+    """Запустить веб-интерфейс администрирования."""
+    logging.basicConfig(level=logging.INFO)
+    app = create_app(config_path)
+    app.run(host=host, port=port, debug=debug)
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -405,6 +422,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     settings_sub.add_parser("show", help="Показать текущий объектный конфиг")
 
+    web_parser = subparsers.add_parser(
+        "web", help="Запустить веб-интерфейс администрирования (без GPIO)",
+    )
+    web_parser.add_argument("--host", default="0.0.0.0", help="Хост для прослушивания")
+    web_parser.add_argument("--port", type=int, default=8080, help="Порт")
+    web_parser.add_argument("--debug", action="store_true", help="Режим отладки Flask")
+
     engine_parser = subparsers.add_parser(
         "engine", help="Интерактивное управление движком СКУД для разработки (поднимает GPIO!)",
     )
@@ -424,6 +448,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_cert_command(args)
     if args.command == "settings":
         return _run_settings_command(args)
+    if args.command == "web":
+        return cmd_web(args.config, args.host, args.port, args.debug)
     if args.command == "engine":
         return _run_engine_command(args)
     parser.error(f"неизвестная команда: {args.command}")  # pragma: no cover

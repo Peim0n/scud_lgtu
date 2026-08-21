@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Сеть — LGTU SCUD Admin{% endblock %}
+{% block content %}
+<h1>Сетевые настройки</h1>
+
+<section>
+    <h2>Текущее состояние</h2>
+    <table>
+        <tr><th>Hostname</th><td>{{ current.hostname }}</td></tr>
+        <tr><th>Timezone</th><td>{{ current.timezone }}</td></tr>
+    </table>
+    <table>
+        <thead>
+            <tr><th>Интерфейс</th><th>Состояние</th><th>Адреса</th></tr>
+        </thead>
+        <tbody>
+            {% for iface in current.interfaces %}
+            <tr>
+                <td>{{ iface.name }}</td>
+                <td>{{ iface.state }}</td>
+                <td>{{ iface.addresses | join(', ') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<form method="post" action="{{ url_for('network_save') }}">
+    <h2>Системные параметры</h2>
+    <label>Hostname <input type="text" name="hostname" value="{{ cfg.network.hostname }}"></label>
+    <label>Часовой пояс <input type="text" name="timezone" value="{{ cfg.network.timezone }}"></label>
+    <label>NTP-серверы (по одному на строку)
+        <textarea name="ntp_servers" rows="3">{{ cfg.network.ntp_servers | join('\n') }}</textarea>
+    </label>
+
+    <h2>Ethernet</h2>
+    <label>Интерфейс <input type="text" name="ethernet_interface" value="{{ cfg.network.ethernet.interface }}"></label>
+    <label>Метод
+        <select name="ethernet_method">
+            <option value="dhcp" {% if cfg.network.ethernet.method == 'dhcp' %}selected{% endif %}>DHCP</option>
+            <option value="static" {% if cfg.network.ethernet.method == 'static' %}selected{% endif %}>Static</option>
+        </select>
+    </label>
+    <label>IP-адрес <input type="text" name="ethernet_address" value="{{ cfg.network.ethernet.address }}"></label>
+    <label>Маска <input type="text" name="ethernet_netmask" value="{{ cfg.network.ethernet.netmask }}"></label>
+    <label>Шлюз <input type="text" name="ethernet_gateway" value="{{ cfg.network.ethernet.gateway }}"></label>
+    <label>DNS (через запятую) <input type="text" name="ethernet_dns" value="{{ cfg.network.ethernet.dns | join(', ') }}"></label>
+
+    <h2>Wi-Fi</h2>
+    <label class="checkbox">
+        <input type="checkbox" name="wifi_enabled" {% if cfg.network.wifi.enabled %}checked{% endif %}> Включить Wi-Fi
+        <input type="hidden" name="wifi_enabled" value="off">
+    </label>
+    <label>Интерфейс <input type="text" name="wifi_interface" value="{{ cfg.network.wifi.interface }}"></label>
+    <label>SSID <input type="text" name="wifi_ssid" value="{{ cfg.network.wifi.ssid }}"></label>
+    <label>Пароль <input type="password" name="wifi_password" value="{{ cfg.network.wifi.password }}"></label>
+    <label>Метод
+        <select name="wifi_method">
+            <option value="dhcp" {% if cfg.network.wifi.method == 'dhcp' %}selected{% endif %}>DHCP</option>
+            <option value="static" {% if cfg.network.wifi.method == 'static' %}selected{% endif %}>Static</option>
+        </select>
+    </label>
+    <label>IP-адрес <input type="text" name="wifi_address" value="{{ cfg.network.wifi.address }}"></label>
+    <label>Маска <input type="text" name="wifi_netmask" value="{{ cfg.network.wifi.netmask }}"></label>
+    <label>Шлюз <input type="text" name="wifi_gateway" value="{{ cfg.network.wifi.gateway }}"></label>
+    <label>DNS (через запятую) <input type="text" name="wifi_dns" value="{{ cfg.network.wifi.dns | join(', ') }}"></label>
+
+    <div class="actions">
+        <button type="submit">Сохранить</button>
+    </div>
+</form>
+
+<form method="post" action="{{ url_for('network_apply') }}" class="inline-form">
+    <button type="submit" class="danger">Применить к системе</button>
+</form>
+{% endblock %}

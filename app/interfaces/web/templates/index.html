@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Статус — LGTU SCUD Admin{% endblock %}
+{% block content %}
+<h1>Статус контроллера</h1>
+
+<section>
+    <h2>Система</h2>
+    <table>
+        <tr><th>Hostname</th><td>{{ status.hostname }}</td></tr>
+        <tr><th>Timezone</th><td>{{ status.timezone }}</td></tr>
+    </table>
+</section>
+
+<section>
+    <h2>Интерфейсы</h2>
+    <table>
+        <thead>
+            <tr><th>Интерфейс</th><th>Состояние</th><th>Адреса</th></tr>
+        </thead>
+        <tbody>
+            {% for iface in status.interfaces %}
+            <tr>
+                <td>{{ iface.name }}</td>
+                <td>{{ iface.state }}</td>
+                <td>{{ iface.addresses | join(', ') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h2>Бэкенд</h2>
+    <table>
+        <tr><th>Base URL</th><td>{{ status.backend.base_url }}</td></tr>
+        <tr><th>KMS URL</th><td>{{ status.backend.kms_url }}</td></tr>
+        <tr><th>Access point ID</th><td>{{ status.backend.access_point_id }}</td></tr>
+        <tr><th>User-Agent</th><td>{{ status.backend.user_agent }}</td></tr>
+    </table>
+</section>
+{% endblock %}
