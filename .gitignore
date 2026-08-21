@@ -12,7 +12,12 @@ deploy/
 
 # Рантайм-артефакты бэкенд-интеграции (сертификаты, персистентные события,
 # локальный кэш доступа) — не должны попадать в репозиторий.
-scud_lgtu/infrastructure/certs/
-scud_lgtu/infrastructure/persistence/events.json
-scud_lgtu/infrastructure/cache/local_access.json
+app/infrastructure/certs/
+app/infrastructure/persistence/events.json
+app/infrastructure/cache/local_access.json
+
+# Диагностические скрипты ручной проверки backend (scripts/backend_check/):
+# рабочие mTLS-сертификаты/ключи и сохранённые ответы бэкенда — секреты и
+# рантайм-артефакты, не должны попадать в репозиторий.
+scripts/backend_check/certs/
 
