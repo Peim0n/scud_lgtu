@@ -212,15 +212,22 @@ backend:
   kms_url: "https://kms-scud-dev.admlr.lipetsk.ru"
   # Путь к CA-сертификату для проверки сервера; null — системное хранилище.
   ca_bundle: null
-  # Переопределение путей и методов отдельных endpoint'ов реального backend.
-  endpoint_map:
-    cert/get: "/controller/v1/cert"
-    keys/get: "/controller/v1/keys"
-  method_map:
-    keys/get: "GET"
+  # Идентификатор точки доступа — обязательный query-параметр для KMS
+  # /bootstrap (?access_point_id=...). Сейчас тестовый контроллер id=2.
+  access_point_id: 2
+  # Backend вернулся к формату ТЗ (POST /controller/v1/<resource>/<action>
+  # для всех ресурсов) — переопределения путей/методов больше не нужны,
+  # дефолтное поведение RestClient.call() уже соответствует ТЗ.
+  endpoint_map: {}
+  method_map: {}
   # Пока коннектимся к controller по IP, имя хоста в сертификате не совпадает.
   # Для тестового доступа отключаем проверку hostname (CA всё равно проверяется).
   verify_hostname: false
+  # User-Agent для запросов к KMS и controller. WAF на бэкенде блокирует
+  # "ботовские" UA (в т.ч. дефолтный python-requests/x.y) — используем свой
+  # чёткий UA вместо маскировки под браузер; бэкенд-команда должна внести
+  # его в allowlist WAF.
+  user_agent: "LGTU-SCUD-Controller/1.0"
   request_timeout_s: 10.0
   # TCP keepalive (п. 6.4 ТЗ)
   tcp_keepalive_time_s: 300

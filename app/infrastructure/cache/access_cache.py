@@ -81,9 +81,16 @@ class LocalAccessCache:
         self._users.clear()
         for item in data["id"]:
             id_type = item.get("type")
-            values = set(item.get("list", []))
-            if id_type:
-                self._allowed[id_type] = values
+            if not id_type:
+                continue
+            # Бэкенд может прислать идентификаторы как в сыром виде (тип без
+            # суффикса "_h", например "phone"/"maxid" — тогда их нужно
+            # хешировать здесь же, чтобы is_allowed() мог сравнивать хеш
+            # токена от считывателя с хешем из кэша), так и уже хешированными
+            # (тип "*_h") — self._hash() в этом случае вернёт значение как есть.
+            self._allowed[id_type] = {
+                self._hash(id_type, normalize(value)) for value in item.get("list", [])
+            }
         for user_id, user in data.get("users", {}).items():
             try:
                 uid = int(user_id)

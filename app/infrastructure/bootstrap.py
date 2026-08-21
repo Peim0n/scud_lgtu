@@ -28,7 +28,7 @@ from app.infrastructure.backend.certificate_manager import (
 )
 from app.infrastructure.backend.client import BackendClient
 from app.infrastructure.backend.gateway import BackendGatewayAdapter
-from app.infrastructure.backend.rest_client import RestClient
+from app.infrastructure.backend.rest_client import DEFAULT_USER_AGENT, RestClient
 from app.infrastructure.cache.access_cache import LocalAccessCache
 from app.infrastructure.cache.repository import AccessRepositoryAdapter
 from app.infrastructure.config import load
@@ -212,6 +212,7 @@ def _build_backend_client(config: dict, base_dir: str) -> tuple[BackendClient, A
     endpoint_map = backend_cfg.get("endpoint_map")
     method_map = backend_cfg.get("method_map")
     verify_hostname = backend_cfg.get("verify_hostname", True)
+    user_agent = backend_cfg.get("user_agent", DEFAULT_USER_AGENT)
 
     rest_client = RestClient(
         base_url,
@@ -224,6 +225,7 @@ def _build_backend_client(config: dict, base_dir: str) -> tuple[BackendClient, A
         endpoint_map=endpoint_map,
         method_map=method_map,
         verify_hostname=verify_hostname,
+        user_agent=user_agent,
     )
     backend = BackendClient(rest_client=rest_client)
 
@@ -245,6 +247,7 @@ def _build_backend_client(config: dict, base_dir: str) -> tuple[BackendClient, A
             initial_key_path = os.path.join(base_dir, initial_key_path)
 
         kms_url = backend_cfg.get("kms_url")
+        access_point_id = backend_cfg.get("access_point_id")
 
         try:
             cert_manager = CertificateManager(
@@ -258,6 +261,8 @@ def _build_backend_client(config: dict, base_dir: str) -> tuple[BackendClient, A
                 rsa_key_size=int(cert_cfg.get("rsa_key_size", 2048)),
                 kms_url=kms_url,
                 ca_bundle=ca_bundle,
+                access_point_id=access_point_id,
+                user_agent=user_agent,
             )
             cert_manager.ensure_bootstrapped()
         except ImportError:

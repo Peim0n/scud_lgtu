@@ -238,8 +238,6 @@ def test_build_application_against_fake_backend(server, ca_bundle_path, tmp_path
     config["backend"]["cert"]["cert_dir"] = "certs"
     config["backend"]["cert"]["initial_cert_path"] = "initial_cert.pem"
     config["backend"]["cert"]["initial_key_path"] = "initial_key.pem"
-    # /data/keys недоступен для записи в тестовой среде — переопределяем.
-    config["qr_decoder"]["keys_dir"] = "qrkeys"
 
     test_config_path = tmp_path / "config.yml"
     with open(test_config_path, "w", encoding="utf-8") as f:
@@ -263,5 +261,7 @@ def test_build_application_against_fake_backend(server, ca_bundle_path, tmp_path
     for service in app._periodic_services:
         service.tick(time.time())
 
-    assert os.path.exists(str(tmp_path / "qrkeys" / "public_key.1"))
+    # Ключи QR-кодов хранятся только в оперативной памяти (ТЗ), на диск не
+    # пишутся — проверяем, что набор ключей с num=1 загружен в QRDecoder.
+    assert 1 in app._qr_decoder._keys
     assert server.accesspoint_data.get("mac")

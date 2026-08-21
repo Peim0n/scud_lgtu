@@ -43,7 +43,11 @@ except ImportError:
     _requests_lib = None  # type: ignore[assignment]
     _REQUESTS_AVAILABLE = False
 
-from app.infrastructure.backend.rest_client import RestClient, BackendApiError
+from app.infrastructure.backend.rest_client import (
+    DEFAULT_USER_AGENT,
+    BackendApiError,
+    RestClient,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +79,8 @@ class CertificateManager:
         kms_url: Optional[str] = None,
         ca_bundle: Optional[str] = None,
         kms_session: Optional[Any] = None,
+        access_point_id: Optional[str] = None,
+        user_agent: str = DEFAULT_USER_AGENT,
     ) -> None:
         if not CRYPTOGRAPHY_AVAILABLE:
             raise ImportError("Модуль cryptography не установлен. Установите: pip install cryptography")
@@ -94,6 +100,13 @@ class CertificateManager:
         self._rsa_key_size = rsa_key_size
         self._kms_url = kms_url.rstrip("/") if kms_url else None
         self._ca_bundle = ca_bundle
+        # Обязательный query-параметр для KMS /bootstrap — идентификатор
+        # точки доступа, для которой запрашивается первичный сертификат.
+        self._access_point_id = access_point_id
+        # WAF на KMS блокирует "ботовские" User-Agent — используем тот же
+        # чёткий UA, что и RestClient для controller (бэкенд-команда должна
+        # добавить его в allowlist WAF).
+        self._user_agent = user_agent
         # Для тестов: подмена HTTP-сессии KMS-запроса.
         self._kms_session = kms_session
 
@@ -259,6 +272,7 @@ class CertificateManager:
             True, если сертификат успешно получен и сохранён на диск.
         """
         url = f"{self._kms_url}/bootstrap"
+        params = {"access_point_id": self._access_point_id} if self._access_point_id is not None else None
         try:
             if self._kms_session is not None:
                 session = self._kms_session
@@ -272,7 +286,8 @@ class CertificateManager:
 
             response = session.get(
                 url,
-                headers={"Accept": "application/json"},
+                params=params,
+                headers={"Accept": "application/json", "User-Agent": self._user_agent},
                 timeout=self._rest_client._timeout if hasattr(self._rest_client, "_timeout") else 10.0,
             )
             if response.status_code != 200:

@@ -38,6 +38,11 @@ _DEFAULT_TCP_KEEPALIVE_INTVL_S = 20
 
 _DEFAULT_API_PATH_PREFIX = "/controller/v1"
 
+# WAF на бэкенде блокирует "ботовские" User-Agent (в т.ч. дефолтный
+# python-requests/x.y) — используем свой чёткий UA, который бэкенд-команда
+# должна внести в allowlist WAF (вместо маскировки под браузер).
+DEFAULT_USER_AGENT = "LGTU-SCUD-Controller/1.0"
+
 
 class BackendApiError(Exception):
     """Ошибка запроса к бэкенду (сетевая, HTTP-код или status=error в ответе)."""
@@ -113,6 +118,7 @@ class RestClient:
         endpoint_map: Optional[dict[str, str]] = None,
         method_map: Optional[dict[str, str]] = None,
         verify_hostname: bool = True,
+        user_agent: str = DEFAULT_USER_AGENT,
     ) -> None:
         if not REQUESTS_AVAILABLE and session is None:
             raise ImportError("Модуль requests не установлен. Установите: pip install requests")
@@ -125,6 +131,7 @@ class RestClient:
         self._endpoint_map = endpoint_map or {}
         self._method_map = method_map or {}
         self._verify_hostname = verify_hostname
+        self._user_agent = user_agent
         self._tcp_keepalive_time = tcp_keepalive_time
         self._tcp_keepalive_intvl = tcp_keepalive_intvl
         self._tcp_keepalive_probes = tcp_keepalive_probes
@@ -220,10 +227,11 @@ class RestClient:
         url = f"{self._base_url}{path}" if path.startswith("/") else f"{self._base_url}/{path}"
         method = self._method_map.get(key, "POST")
 
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", "User-Agent": self._user_agent}
         try:
             if method.upper() == "GET":
-                response = self._session.get(url, headers=headers, timeout=self._timeout)
+                # GET не имеет тела — параметры (если есть) передаются в query string.
+                response = self._session.get(url, params=payload, headers=headers, timeout=self._timeout)
             elif method.upper() == "POST":
                 body = json.dumps(payload, ensure_ascii=False) if payload is not None else "null"
                 headers["Content-Type"] = "application/json"
