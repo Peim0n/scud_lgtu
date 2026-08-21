@@ -1,7 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Бэкенд / доступ — IS SCUD Admin{% endblock %}
+
+{% set device_types = ['turnstile', 'gate', 'door', 'locker'] %}
+
 {% macro render_field(path, value) %}
-    {% if value is none %}
+    {% if path == 'device.type' %}
+        <label>{{ path }}
+            <select name="{{ path }}">
+                {% for dt in device_types %}
+                    <option value="{{ dt }}" {% if value == dt %}selected{% endif %}>{{ dt }}</option>
+                {% endfor %}
+            </select>
+        </label>
+    {% elif value is none %}
         <label>{{ path }} <input type="text" name="{{ path }}" value="null"></label>
     {% elif value is sameas true or value is sameas false %}
         <label class="checkbox">
