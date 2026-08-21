@@ -21,3 +21,8 @@ app/infrastructure/cache/local_access.json
 # рантайм-артефакты, не должны попадать в репозиторий.
 scripts/backend_check/certs/
 
+# Локальные тестовые ключи для generate_qr.py (симулятор системы выпуска
+# QR-кодов для офлайн-тестирования считывателя). Само приложение (QRDecoder)
+# ключи на диск не пишет и не читает — только в память через KeySyncService.
+qr_test_keys/
+

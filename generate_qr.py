@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
 """
-Скрипт для генерации QR-кода доступа.
+Скрипт для генерации QR-кода доступа (симулятор системы выпуска QR — нужен
+только для офлайн-тестирования QR-считывателя/QRDecoder, к рантайму
+приложения не относится).
+
+ВАЖНО: само приложение (QRDecoder) НИКОГДА не хранит и не читает ключи с
+диска — только в памяти, полученные от бэкенда через KeySyncService
+(см. app/infrastructure/firmware/serial/qr_decoder.py). Ключи в QR_KEYS_DIR
+ниже — это локальный тестовый набор для данного скрипта, в config.yml
+приложения такого параметра нет и быть не должно.
 
 Использование:
     python generate_qr.py <max_id> [key_id]
 
 Пример:
     python generate_qr.py 12345 13
+
+Переменные окружения:
+    QR_KEYS_DIR - где лежат тестовые ключи (по умолчанию ./qr_test_keys,
+                  см. .gitignore — эта директория не должна попадать в git)
 """
 import os
 import sys
 import time
 
-from app.infrastructure.config import load as load_config
 from app.infrastructure.firmware.serial.qr_decoder import encode_qr
 
 
@@ -25,11 +36,8 @@ def main():
     max_id = int(sys.argv[1])
     key_id = int(sys.argv[2]) if len(sys.argv) > 2 else 13
 
-    # Загружаем ключи из конфига
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, "app", "config.yml")
-    config = load_config(config_path)
-    keys_dir = config["qr_decoder"]["keys_dir"]
+    keys_dir = os.environ.get("QR_KEYS_DIR", os.path.join(script_dir, "qr_test_keys"))
     private_key_path = os.path.join(keys_dir, f"private_key.{key_id}")
     shared_key_path = os.path.join(keys_dir, f"shared_key.{key_id}")
 
