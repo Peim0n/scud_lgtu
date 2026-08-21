@@ -158,3 +158,38 @@ def test_cli_web_dispatch(monkeypatch):
     exit_code = cli.main(["--config", "/tmp/x.yml", "web", "--host", "127.0.0.1", "--port", "9000", "--debug"])
     assert exit_code == 0
     assert called == {"config_path": "/tmp/x.yml", "host": "127.0.0.1", "port": 9000, "debug": True}
+
+
+def test_auth_page_renders(client):
+    resp = client.get("/auth", headers=_auth_header())
+    assert resp.status_code == 200
+    assert "Учётные данные".encode() in resp.data
+
+
+def test_auth_save_changes_credentials(client):
+    resp = client.post(
+        "/auth/save",
+        headers=_auth_header(),
+        data={"username": "newadmin", "new_password": "secret123", "confirm_password": "secret123"},
+    )
+    assert resp.status_code == 302
+
+    # Старые учётные данные больше не работают
+    resp = client.get("/", headers=_auth_header())
+    assert resp.status_code == 401
+
+    # Новые работают
+    new_creds = base64.b64encode(b"newadmin:secret123").decode()
+    resp = client.get("/", headers={"Authorization": f"Basic {new_creds}"})
+    assert resp.status_code == 200
+
+
+def test_auth_save_rejects_mismatched_passwords(client):
+    resp = client.post(
+        "/auth/save",
+        headers=_auth_header(),
+        data={"username": "admin", "new_password": "pass1", "confirm_password": "pass2"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "Пароли не совпадают".encode() in resp.data

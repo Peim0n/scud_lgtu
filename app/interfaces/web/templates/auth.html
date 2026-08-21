@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Учётные данные — LGTU SCUD Admin{% endblock %}
+{% block content %}
+<h1>Учётные данные веб-интерфейса</h1>
+
+<p>Пароль хранится в виде SHA-256 хеша в файле <code>web_auth.yml</code>.</p>
+
+<form method="post" action="{{ url_for('auth_save') }}">
+    <label>Логин <input type="text" name="username" value="{{ username }}"></label>
+    <label>Новый пароль <input type="password" name="new_password"></label>
+    <label>Подтвердите пароль <input type="password" name="confirm_password"></label>
+    <div class="actions">
+        <button type="submit">Сохранить</button>
+    </div>
+</form>
+{% endblock %}

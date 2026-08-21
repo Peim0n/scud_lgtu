@@ -28,6 +28,7 @@ from app.infrastructure.config import load as load_config, resolve_config_path
 from app.infrastructure.config import object_config as obj_cfg
 from app.infrastructure.network import defaults as network_defaults, load as load_network, save as save_network
 from app.infrastructure.network.network_manager import NetworkManagerAdapter
+from app.interfaces.web.auth_config import check as check_auth, load as load_auth, save as save_auth
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +36,10 @@ logger = logging.getLogger(__name__)
 # Auth
 # ---------------------------------------------------------------------------
 
-DEFAULT_USERNAME = "admin"
-DEFAULT_PASSWORD = "admin"
-
 
 def _check_auth(username: str, password: str) -> bool:
-    return username == DEFAULT_USERNAME and password == DEFAULT_PASSWORD
+    cfg_path = _config_path(current_app)
+    return check_auth(username, password, cfg_path)
 
 
 def _authenticate() -> Response:
@@ -97,6 +96,8 @@ def _register_routes(app: Flask) -> None:
     app.route("/network/apply", methods=["POST"])(require_auth(network_apply))
     app.route("/backend")(require_auth(backend_page))
     app.route("/backend/save", methods=["POST"])(require_auth(backend_save))
+    app.route("/auth")(require_auth(auth_page))
+    app.route("/auth/save", methods=["POST"])(require_auth(auth_save))
 
 
 def index() -> str:
@@ -186,6 +187,40 @@ def backend_save() -> Any:
     obj_cfg.save(override, cfg_path)
     flash("Объектный конфиг сохранён.", "success")
     return redirect(url_for("backend_page"))
+
+
+# ---------------------------------------------------------------------------
+# Auth: смена логина/пароля
+# ---------------------------------------------------------------------------
+
+
+def auth_page() -> str:
+    """Страница смены учётных данных."""
+    cfg_path = _config_path(current_app)
+    creds = load_auth(cfg_path)
+    return render_template("auth.html", username=creds["username"])
+
+
+def auth_save() -> Any:
+    """Сохранить новые логин/пароль."""
+    cfg_path = _config_path(current_app)
+    username = request.form.get("username", "").strip()
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if not username:
+        flash("Логин не может быть пустым.", "error")
+        return redirect(url_for("auth_page"))
+    if not new_password:
+        flash("Пароль не может быть пустым.", "error")
+        return redirect(url_for("auth_page"))
+    if new_password != confirm_password:
+        flash("Пароли не совпадают.", "error")
+        return redirect(url_for("auth_page"))
+
+    save_auth(username, new_password, cfg_path)
+    flash("Учётные данные обновлены. При следующем входе используйте новый логин/пароль.", "success")
+    return redirect(url_for("auth_page"))
 
 
 # ---------------------------------------------------------------------------

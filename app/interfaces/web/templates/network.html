@@ -34,7 +34,7 @@
     </label>
 
     <h2>Ethernet</h2>
-    <label>Интерфейс <input type="text" name="ethernet_interface" value="{{ cfg.network.ethernet.interface }}"></label>
+    <label>Интерфейс <input type="text" name="ethernet_interface" value="{{ cfg.network.ethernet.interface }}" readonly class="readonly"></label>
     <label>Метод
         <select name="ethernet_method">
             <option value="dhcp" {% if cfg.network.ethernet.method == 'dhcp' %}selected{% endif %}>DHCP</option>
@@ -51,7 +51,7 @@
         <input type="checkbox" name="wifi_enabled" {% if cfg.network.wifi.enabled %}checked{% endif %}> Включить Wi-Fi
         <input type="hidden" name="wifi_enabled" value="off">
     </label>
-    <label>Интерфейс <input type="text" name="wifi_interface" value="{{ cfg.network.wifi.interface }}"></label>
+    <label>Интерфейс <input type="text" name="wifi_interface" value="{{ cfg.network.wifi.interface }}" readonly class="readonly"></label>
     <label>SSID <input type="text" name="wifi_ssid" value="{{ cfg.network.wifi.ssid }}"></label>
     <label>Пароль <input type="password" name="wifi_password" value="{{ cfg.network.wifi.password }}"></label>
     <label>Метод
