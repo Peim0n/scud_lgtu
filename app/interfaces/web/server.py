@@ -30,6 +30,7 @@ from app.infrastructure.network import defaults as network_defaults, load as loa
 from app.infrastructure.network.network_manager import NetworkManagerAdapter
 from app.interfaces.web.auth_config import check as check_auth, load as load_auth, save as save_auth
 from app.interfaces.web.field_labels import DESCRIPTIONS, LABELS
+from app.infrastructure.devices.device_factory import available_device_types
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,7 @@ def backend_page() -> str:
     cfg_path = _config_path(current_app)
     merged = load_config(cfg_path)
     override = obj_cfg.load(cfg_path)
-    return render_template("backend.html", merged=merged, override=override, labels=LABELS, descriptions=DESCRIPTIONS)
+    return render_template("backend.html", merged=merged, override=override, labels=LABELS, descriptions=DESCRIPTIONS, device_types=available_device_types())
 
 
 def backend_save() -> Any:

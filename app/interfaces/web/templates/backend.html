@@ -1,8 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Бэкенд / доступ — IS SCUD Admin{% endblock %}
 
-{% set device_types = ['turnstile', 'gate', 'door', 'locker'] %}
-
 {% macro render_field(path, value) %}
     {% set label = labels.get(path, path) %}
     {% set desc = descriptions.get(path) %}
