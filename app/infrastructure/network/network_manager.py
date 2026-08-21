@@ -292,6 +292,8 @@ class NetworkManagerAdapter:
             import yaml
             with open(self._NETPLAN_FILE, "w", encoding="utf-8") as f:
                 yaml.safe_dump(netplan_cfg, f, default_flow_style=False, sort_keys=False)
+            # Netplan требует права 600 — иначе ругается
+            os.chmod(self._NETPLAN_FILE, 0o600)
         except PermissionError:
             return _err(f"нет прав на запись {self._NETPLAN_FILE}")
         except OSError as exc:
@@ -341,13 +343,16 @@ class NetworkManagerAdapter:
         return section
 
     def _build_netplan_wifi(self, interface: str, cfg: dict[str, Any]) -> dict[str, Any]:
-        """Построить секцию wifis для netplan."""
+        """Построить секцию wifis для netplan.
+
+        Внимание: networkd backend не поддерживает match для wifis —
+        имя интерфейса используется как ключ секции напрямую.
+        """
         ssid = cfg.get("ssid", "")
         password = cfg.get("password", "")
         method = cfg.get("method", "dhcp")
 
         section: dict[str, Any] = {
-            "match": {"name": interface},
             "access-points": {},
         }
         ap: dict[str, Any] = {}

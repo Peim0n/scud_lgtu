@@ -104,6 +104,7 @@ def _register_routes(app: Flask) -> None:
     app.route("/cert/bootstrap", methods=["POST"])(require_auth(cert_bootstrap))
     app.route("/cert/import", methods=["POST"])(require_auth(cert_import))
     app.route("/cert/rotate", methods=["POST"])(require_auth(cert_rotate))
+    app.route("/restart-service", methods=["POST"])(require_auth(restart_service))
 
 
 def index() -> str:
@@ -211,7 +212,29 @@ def backend_save() -> Any:
             logger.warning("Пропуск поля %s: %s", dotted_path, exc)
 
     obj_cfg.save(override, cfg_path)
-    flash("Объектный конфиг сохранён.", "success")
+    flash("Объектный конфиг сохранён. Перезапустите сервис для применения.", "success")
+    return redirect(url_for("backend_page"))
+
+
+# ---------------------------------------------------------------------------
+# Restart scud_lgtu service
+# ---------------------------------------------------------------------------
+
+
+def restart_service() -> Any:
+    """Перезапустить systemd-сервис scud_lgtu."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["systemctl", "restart", "scud_lgtu"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0:
+            flash("Сервис scud_lgtu перезапущен.", "success")
+        else:
+            flash(f"Ошибка перезапуска: {result.stderr or result.stdout}", "error")
+    except Exception as exc:
+        flash(f"Ошибка перезапуска: {exc}", "error")
     return redirect(url_for("backend_page"))
 
 
