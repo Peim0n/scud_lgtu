@@ -144,3 +144,10 @@ input.readonly, input[readonly] {
     color: #6a737d;
     cursor: not-allowed;
 }
+
+.field-description {
+    font-size: 0.85rem;
+    color: #6a737d;
+    margin: -0.5rem 0 0.75rem 0;
+    padding-left: 0.25rem;
+}

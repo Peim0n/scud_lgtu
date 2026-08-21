@@ -160,6 +160,18 @@ def test_cli_web_dispatch(monkeypatch):
     assert called == {"config_path": "/tmp/x.yml", "host": "127.0.0.1", "port": 9000, "debug": True}
 
 
+def test_cli_web_disabled(monkeypatch, tmp_path):
+    """Если web.enabled = false, команда web завершается с ошибкой."""
+    from app.interfaces import cli
+
+    cfg_path = tmp_path / "config.yml"
+    cfg_path.write_text("web:\n  enabled: false\n", encoding="utf-8")
+    (tmp_path / "object_config.yml").write_text("web:\n  enabled: false\n", encoding="utf-8")
+
+    exit_code = cli.main(["--config", str(cfg_path), "web"])
+    assert exit_code == 1
+
+
 def test_auth_page_renders(client):
     resp = client.get("/auth", headers=_auth_header())
     assert resp.status_code == 200

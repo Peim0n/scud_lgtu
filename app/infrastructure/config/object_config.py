@@ -17,7 +17,7 @@ import yaml
 
 from app.infrastructure.config.config_loader import _deep_merge
 
-_EDITABLE_TOP_KEYS = {"access", "qr_decoder", "backend", "device"}
+_EDITABLE_TOP_KEYS = {"access", "qr_decoder", "backend", "device", "web"}
 
 
 def _object_config_path(config_path: str) -> str:

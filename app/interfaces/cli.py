@@ -145,7 +145,7 @@ def cmd_settings_get(config_path: str | None, dotted_path: str) -> dict[str, Any
         return {
             "error": (
                 f"путь '{dotted_path}' не относится к редактируемым "
-                f"секциям (access, qr_decoder, backend, device)"
+                f"секциям (access, qr_decoder, backend, device, web)"
             ),
         }
     try:
@@ -167,7 +167,7 @@ def cmd_settings_set(
         return {
             "error": (
                 f"путь '{dotted_path}' не относится к редактируемым "
-                f"секциям (access, qr_decoder, backend, device)"
+                f"секциям (access, qr_decoder, backend, device, web)"
             ),
         }
     try:
@@ -231,12 +231,29 @@ def _run_settings_command(args: argparse.Namespace) -> int:
 
 
 def cmd_web(
-    config_path: str | None, host: str, port: int, debug: bool,
+    config_path: str | None, host: str | None, port: int | None, debug: bool,
 ) -> int:
-    """Запустить веб-интерфейс администрирования."""
+    """Запустить веб-интерфейс администрирования.
+
+    Параметры host/port берутся из object_config.yml (секция web),
+    если не переданы явно через аргументы CLI. Если web.enabled = false,
+    команда завершается с сообщением.
+    """
+    resolved = resolve_config_path(config_path)
+    cfg = load_config(resolved)
+    web_cfg = cfg.get("web", {})
+
+    if not web_cfg.get("enabled", True):
+        print("Веб-интерфейс отключён (web.enabled = false).")
+        print("Включите: python -m app.interfaces.cli settings set web.enabled true")
+        return 1
+
+    actual_host = host or web_cfg.get("host", "0.0.0.0")
+    actual_port = port or int(web_cfg.get("port", 8080))
+
     logging.basicConfig(level=logging.INFO)
     app = create_app(config_path)
-    app.run(host=host, port=port, debug=debug)
+    app.run(host=actual_host, port=actual_port, debug=debug)
     return 0
 
 
@@ -406,19 +423,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     settings_parser = subparsers.add_parser(
-        "settings", help="Редактирование объектного конфига (access, qr_decoder, backend)",
+        "settings", help="Редактирование объектного конфига (access, qr_decoder, backend, device, web)",
     )
     settings_sub = settings_parser.add_subparsers(dest="settings_command", required=True)
 
     settings_get = settings_sub.add_parser(
         "get", help="Прочитать значение по dotted-пути (например backend.access_point_id)",
     )
-    settings_get.add_argument("key", help="dotted-путь внутри access/qr_decoder/backend")
+    settings_get.add_argument("key", help="dotted-путь внутри access/qr_decoder/backend/device/web")
 
     settings_set = settings_sub.add_parser(
         "set", help="Записать значение по dotted-пути в object_config.yml",
     )
-    settings_set.add_argument("key", help="dotted-путь внутри access/qr_decoder/backend")
+    settings_set.add_argument("key", help="dotted-путь внутри access/qr_decoder/backend/device/web")
     settings_set.add_argument("value", help="новое значение (int/float/bool/null/string/JSON)")
 
     settings_sub.add_parser("show", help="Показать текущий объектный конфиг")
@@ -426,8 +443,8 @@ def _build_parser() -> argparse.ArgumentParser:
     web_parser = subparsers.add_parser(
         "web", help="Запустить веб-интерфейс администрирования (без GPIO)",
     )
-    web_parser.add_argument("--host", default="0.0.0.0", help="Хост для прослушивания")
-    web_parser.add_argument("--port", type=int, default=8080, help="Порт")
+    web_parser.add_argument("--host", default=None, help="Хост для прослушивания (по умолчанию из config.yml)")
+    web_parser.add_argument("--port", type=int, default=None, help="Порт (по умолчанию из config.yml)")
     web_parser.add_argument("--debug", action="store_true", help="Режим отладки Flask")
 
     engine_parser = subparsers.add_parser(

@@ -29,6 +29,7 @@ from app.infrastructure.config import object_config as obj_cfg
 from app.infrastructure.network import defaults as network_defaults, load as load_network, save as save_network
 from app.infrastructure.network.network_manager import NetworkManagerAdapter
 from app.interfaces.web.auth_config import check as check_auth, load as load_auth, save as save_auth
+from app.interfaces.web.field_labels import DESCRIPTIONS, LABELS
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,7 @@ def backend_page() -> str:
     cfg_path = _config_path(current_app)
     merged = load_config(cfg_path)
     override = obj_cfg.load(cfg_path)
-    return render_template("backend.html", merged=merged, override=override)
+    return render_template("backend.html", merged=merged, override=override, labels=LABELS, descriptions=DESCRIPTIONS)
 
 
 def backend_save() -> Any:
