@@ -41,7 +41,11 @@
 <p>Изменения сохраняются в <code>object_config.yml</code> и перекрывают значения из <code>config.yml</code>.</p>
 
 <form method="post" action="{{ url_for('backend_save') }}">
-    {{ render_section('', {'access': merged.access, 'qr_decoder': merged.qr_decoder, 'backend': merged.backend}) }}
+    {% set backend_filtered = {} %}
+    {% for key, value in merged.backend.items() if key != 'cert' %}
+        {% set _ = backend_filtered.update({key: value}) %}
+    {% endfor %}
+    {{ render_section('', {'access': merged.access, 'qr_decoder': merged.qr_decoder, 'device': merged.device, 'backend': backend_filtered}) }}
     <div class="actions">
         <button type="submit">Сохранить</button>
     </div>

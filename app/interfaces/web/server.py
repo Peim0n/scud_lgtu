@@ -173,6 +173,9 @@ def backend_save() -> Any:
     for dotted_path, raw_value in request.form.items():
         if not obj_cfg.is_editable_path(dotted_path):
             continue
+        # backend.cert.* — пути к сертификатам, не редактируется через веб
+        if dotted_path.startswith("backend.cert."):
+            continue
         try:
             current_value = obj_cfg.get(merged, dotted_path)
             parsed = _parse_backend_value(raw_value, current_value)
