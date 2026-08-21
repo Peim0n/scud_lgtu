@@ -22,8 +22,6 @@ backend:
   kms_url: "https://kms-scud-dev.admlr.lipetsk.ru"
   ca_bundle: null
   access_point_id: 2
-  endpoint_map: {}
-  method_map: {}
   verify_hostname: false
   user_agent: "LGTU-SCUD-Controller/1.0"
   request_timeout_s: 10.0

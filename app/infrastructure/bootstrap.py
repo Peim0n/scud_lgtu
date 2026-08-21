@@ -258,8 +258,6 @@ def _build_backend_client(
     tcp_keepalive_time = int(backend_cfg.get("tcp_keepalive_time_s", 300))
     tcp_keepalive_probes = int(backend_cfg.get("tcp_keepalive_probes", 3))
     tcp_keepalive_intvl = int(backend_cfg.get("tcp_keepalive_intvl_s", 20))
-    endpoint_map = backend_cfg.get("endpoint_map")
-    method_map = backend_cfg.get("method_map")
     verify_hostname = backend_cfg.get("verify_hostname", True)
     user_agent = backend_cfg.get("user_agent", DEFAULT_USER_AGENT)
 
@@ -271,8 +269,6 @@ def _build_backend_client(
         tcp_keepalive_time=tcp_keepalive_time,
         tcp_keepalive_probes=tcp_keepalive_probes,
         tcp_keepalive_intvl=tcp_keepalive_intvl,
-        endpoint_map=endpoint_map,
-        method_map=method_map,
         verify_hostname=verify_hostname,
         user_agent=user_agent,
     )

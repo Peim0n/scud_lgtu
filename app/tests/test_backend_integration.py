@@ -241,9 +241,6 @@ def test_build_application_against_fake_backend(server, ca_bundle_path, tmp_path
 
     config["backend"]["base_url"] = server.base_url
     config["backend"]["ca_bundle"] = ca_bundle_path
-    # Для фейкового сервера используем стандартные пути /resource/action.
-    config["backend"].pop("endpoint_map", None)
-    config["backend"].pop("method_map", None)
     config["backend"]["cert"]["cert_dir"] = "certs"
     config["backend"]["cert"]["initial_cert_path"] = "initial_cert.pem"
     config["backend"]["cert"]["initial_key_path"] = "initial_key.pem"

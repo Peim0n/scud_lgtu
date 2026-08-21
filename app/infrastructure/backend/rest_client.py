@@ -115,8 +115,6 @@ class RestClient:
         tcp_keepalive_time: int = _DEFAULT_TCP_KEEPALIVE_TIME_S,
         tcp_keepalive_probes: int = _DEFAULT_TCP_KEEPALIVE_PROBES,
         tcp_keepalive_intvl: int = _DEFAULT_TCP_KEEPALIVE_INTVL_S,
-        endpoint_map: Optional[dict[str, str]] = None,
-        method_map: Optional[dict[str, str]] = None,
         verify_hostname: bool = True,
         user_agent: str = DEFAULT_USER_AGENT,
     ) -> None:
@@ -128,8 +126,6 @@ class RestClient:
         self._timeout = timeout
         self._client_cert = client_cert
         self._ca_bundle = ca_bundle
-        self._endpoint_map = endpoint_map or {}
-        self._method_map = method_map or {}
         self._verify_hostname = verify_hostname
         self._user_agent = user_agent
         self._tcp_keepalive_time = tcp_keepalive_time
@@ -194,11 +190,8 @@ class RestClient:
         """
         Выполнить HTTP-запрос к backend.
 
-        URL формируется как ``<api_path_prefix>/<resource>/<action>``,
-        но может быть переопределён через ``endpoint_map`` (например,
-        ``{"cert/get": "/controller/v1/cert"}``). Метод по умолчанию — POST,
-        но для конкретного ``resource/action`` можно задать другой через
-        ``method_map`` (например, ``{"keys/get": "GET"}``).
+        URL формируется как ``<api_path_prefix>/<resource>/<action>``.
+        Метод — всегда POST (формат ТЗ).
 
         Parameters
         ----------
@@ -219,38 +212,21 @@ class RestClient:
         BackendApiError
             При сетевой ошибке, неожиданном HTTP-коде или ``status=error``.
         """
-        key = f"{resource}/{action}" if action else resource
-        default_path = f"/{self._api_path_prefix}/{resource}"
+        path = f"/{self._api_path_prefix}/{resource}"
         if action:
-            default_path += f"/{action}"
-        path = self._endpoint_map.get(key, default_path)
-        url = f"{self._base_url}{path}" if path.startswith("/") else f"{self._base_url}/{path}"
-        method = self._method_map.get(key, "POST")
+            path += f"/{action}"
+        url = f"{self._base_url}{path}"
 
         headers = {"Accept": "application/json", "User-Agent": self._user_agent}
         try:
-            if method.upper() == "GET":
-                # GET не имеет тела — параметры (если есть) передаются в query string.
-                response = self._session.get(url, params=payload, headers=headers, timeout=self._timeout)
-            elif method.upper() == "POST":
-                body = json.dumps(payload, ensure_ascii=False) if payload is not None else "null"
-                headers["Content-Type"] = "application/json"
-                response = self._session.post(
-                    url,
-                    data=body.encode("utf-8"),
-                    headers=headers,
-                    timeout=self._timeout,
-                )
-            else:
-                body = json.dumps(payload, ensure_ascii=False) if payload is not None else "null"
-                headers["Content-Type"] = "application/json"
-                response = self._session.request(
-                    method,
-                    url,
-                    data=body.encode("utf-8"),
-                    headers=headers,
-                    timeout=self._timeout,
-                )
+            body = json.dumps(payload, ensure_ascii=False) if payload is not None else "null"
+            headers["Content-Type"] = "application/json"
+            response = self._session.post(
+                url,
+                data=body.encode("utf-8"),
+                headers=headers,
+                timeout=self._timeout,
+            )
         except Exception as exc:
             raise BackendApiError(f"Сетевая ошибка при вызове {resource}/{action}: {exc}") from exc
 

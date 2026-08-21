@@ -221,11 +221,6 @@ backend:
   # Идентификатор точки доступа — обязательный query-параметр для KMS
   # /bootstrap (?access_point_id=...). Сейчас тестовый контроллер id=2.
   access_point_id: 2
-  # Backend вернулся к формату ТЗ (POST /controller/v1/<resource>/<action>
-  # для всех ресурсов) — переопределения путей/методов больше не нужны,
-  # дефолтное поведение RestClient.call() уже соответствует ТЗ.
-  endpoint_map: {}
-  method_map: {}
   # Пока коннектимся к controller по IP, имя хоста в сертификате не совпадает.
   # Для тестового доступа отключаем проверку hostname (CA всё равно проверяется).
   verify_hostname: false
