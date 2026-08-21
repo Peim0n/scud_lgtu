@@ -4,48 +4,106 @@
 <h1>mTLS-сертификат контроллера</h1>
 
 {% if status.error %}
-    <div class="flash flash-error">{{ status.error }}</div>
+    <div class="flash flash-error">
+        <strong>Ошибка:</strong> {{ status.error }}
+    </div>
 {% else %}
     <section>
         <h2>Текущее состояние</h2>
-        <table>
-            {% for key, value in status.items() %}
-            <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
-            {% endfor %}
-        </table>
+        {% if status.has_working_certificate %}
+            <p><strong>Рабочий сертификат:</strong> установлен и активен</p>
+            {% if status.not_before and status.not_after %}
+            <table>
+                <tr>
+                    <th>Действителен с</th>
+                    <td>{{ status.not_before }}</td>
+                </tr>
+                <tr>
+                    <th>Действителен до</th>
+                    <td>{{ status.not_after }}</td>
+                </tr>
+                <tr>
+                    <th>Общий срок действия</th>
+                    <td>{{ "%.1f"|format(status.total_lifetime_days) }} дней</td>
+                </tr>
+                <tr>
+                    <th>Осталось дней</th>
+                    <td>{{ "%.1f"|format(status.remaining_days) }}</td>
+                </tr>
+                <tr>
+                    <th>Осталось срока</th>
+                    <td>{{ "%.0f"|format((status.remaining_fraction or 0) * 100) }}%</td>
+                </tr>
+                <tr>
+                    <th>Требуется ротация</th>
+                    <td>{% if status.due_for_rotation %}Да{% else %}Нет{% endif %}</td>
+                </tr>
+            </table>
+            {% endif %}
+        {% else %}
+            <p><strong>Рабочий сертификат:</strong> отсутствует</p>
+        {% endif %}
+
+        <p><strong>Первичный сертификат:</strong>
+            {% if status.has_initial_certificate %}
+                загружен (готов к обмену на рабочий)
+            {% else %}
+                отсутствует
+            {% endif %}
+        </p>
+
+        {% if status.has_working_certificate %}
+        <p class="field-description">
+            Порог ротации: {{ "%.0f"|format((status.rotation_threshold_fraction or 0) * 100) }}% от срока действия.
+            Интервал между попытками ротации: {{ "%.1f"|format(status.rotation_retry_interval_days) }} дней.
+        </p>
+        {% endif %}
     </section>
 {% endif %}
 
 <section>
     <h2>Получить через KMS</h2>
-    <p>Выполнить первичный обмен сертификатом через KMS-сервер (нужен доступ к <code>kms_url</code>).</p>
+    <p>
+        Запросить первичный сертификат у KMS-сервера и обменять его на рабочий.
+        Используется при первом запуске контроллера или после утери сертификата.
+    </p>
     <form method="post" action="{{ url_for('cert_bootstrap') }}">
-        <button type="submit">Получить через KMS</button>
+        <button type="submit">Получить сертификат через KMS</button>
     </form>
 </section>
 
 <section>
     <h2>Загрузить файл вручную</h2>
-    <p>Загрузить первичный сертификат и приватный ключ (PEM-файлы). После загрузки выполните обмен через KMS.</p>
+    <p>
+        Загрузить первичный сертификат и приватный ключ в формате PEM.
+        Альтернатива получению через KMS — если KMS недоступен или
+        сертификат выдан вручную. После загрузки нажмите
+        «Получить сертификат через KMS» для обмена на рабочий.
+    </p>
     <form method="post" action="{{ url_for('cert_import') }}" enctype="multipart/form-data">
-        <label>Сертификат (.pem) <input type="file" name="cert_file" accept=".pem,.crt,.txt"></label>
-        <label>Приватный ключ (.pem) <input type="file" name="key_file" accept=".pem,.key,.txt"></label>
+        <label>Файл сертификата (.pem) <input type="file" name="cert_file" accept=".pem,.crt,.txt"></label>
+        <label>Файл приватного ключа (.pem) <input type="file" name="key_file" accept=".pem,.key,.txt"></label>
         <div class="actions">
             <button type="submit">Загрузить</button>
         </div>
     </form>
 </section>
 
+{% if status.has_working_certificate %}
 <section>
     <h2>Ротация</h2>
-    <p>Принудительно обменять рабочий сертификат на новый (игнорируя порог и троттлинг).</p>
+    <p>
+        Принудительно обменять рабочий сертификат на новый, даже если
+        порог ротации ещё не достигнут.
+    </p>
     <form method="post" action="{{ url_for('cert_rotate') }}">
         <label class="checkbox">
-            <input type="checkbox" name="force" checked> Принудительная ротация (--force)
+            <input type="checkbox" name="force" checked> Принудительная ротация
         </label>
         <div class="actions">
-            <button type="submit" class="danger">Ротировать</button>
+            <button type="submit" class="danger">Ротировать сертификат</button>
         </div>
     </form>
 </section>
+{% endif %}
 {% endblock %}

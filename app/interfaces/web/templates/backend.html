@@ -37,7 +37,9 @@
             <legend>{{ labels.get(path, path) }}</legend>
             {% for key, value in node.items() %}
                 {% set child_path = (path + '.' + key) if path else key %}
-                {{ render_section(child_path, value) }}
+                {% if not hidden_fields or child_path not in hidden_fields %}
+                    {{ render_section(child_path, value) }}
+                {% endif %}
             {% endfor %}
         </fieldset>
     {% elif node is sequence and node is not string %}

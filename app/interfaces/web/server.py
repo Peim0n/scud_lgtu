@@ -29,7 +29,7 @@ from app.infrastructure.config import object_config as obj_cfg
 from app.infrastructure.network import defaults as network_defaults, load as load_network, save as save_network
 from app.infrastructure.network.network_manager import NetworkManagerAdapter
 from app.interfaces.web.auth_config import check as check_auth, load as load_auth, save as save_auth
-from app.interfaces.web.field_labels import DESCRIPTIONS, LABELS
+from app.interfaces.web.field_labels import DESCRIPTIONS, HIDDEN_FIELDS, LABELS
 from app.infrastructure.devices.device_factory import available_device_types
 
 logger = logging.getLogger(__name__)
@@ -167,7 +167,7 @@ def backend_page() -> str:
     cfg_path = _config_path(current_app)
     merged = load_config(cfg_path)
     override = obj_cfg.load(cfg_path)
-    return render_template("backend.html", merged=merged, override=override, labels=LABELS, descriptions=DESCRIPTIONS, device_types=available_device_types())
+    return render_template("backend.html", merged=merged, override=override, labels=LABELS, descriptions=DESCRIPTIONS, device_types=available_device_types(), hidden_fields=HIDDEN_FIELDS)
 
 
 def backend_save() -> Any:
@@ -182,6 +182,9 @@ def backend_save() -> Any:
             continue
         # backend.cert.* — пути к сертификатам, не редактируется через веб
         if dotted_path.startswith("backend.cert."):
+            continue
+        # Скрытые инфраструктурные поля
+        if dotted_path in HIDDEN_FIELDS:
             continue
         try:
             current_value = obj_cfg.get(merged, dotted_path)

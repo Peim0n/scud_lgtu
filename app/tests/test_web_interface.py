@@ -210,11 +210,23 @@ def test_auth_save_rejects_mismatched_passwords(client):
 def test_cert_page_renders(client, monkeypatch):
     monkeypatch.setattr(
         "app.interfaces.cli.cmd_cert_status",
-        lambda cfg_path: {"has_working_certificate": True},
+        lambda cfg_path: {
+            "has_working_certificate": True,
+            "has_initial_certificate": False,
+            "rotation_threshold_fraction": 0.5,
+            "rotation_retry_interval_days": 1.0,
+            "not_before": "2026-01-01T00:00:00+00:00",
+            "not_after": "2026-04-01T00:00:00+00:00",
+            "total_lifetime_days": 90.0,
+            "remaining_days": 45.0,
+            "remaining_fraction": 0.5,
+            "due_for_rotation": False,
+        },
     )
     resp = client.get("/cert", headers=_auth_header())
     assert resp.status_code == 200
     assert "mTLS".encode() in resp.data
+    assert "установлен и активен".encode() in resp.data
 
 
 def test_cert_bootstrap_dispatch(client, monkeypatch):
