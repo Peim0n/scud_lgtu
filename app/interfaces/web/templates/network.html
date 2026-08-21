@@ -4,11 +4,17 @@
 <h1>Сетевые настройки</h1>
 
 <section>
-    <h2>Текущее состояние</h2>
+    <h2>Текущее состояние (система)</h2>
     <table>
         <tr><th>Имя хоста</th><td>{{ current.hostname }}</td></tr>
         <tr><th>Часовой пояс</th><td>{{ current.timezone }}</td></tr>
     </table>
+    {% if cfg.network.hostname and current.hostname and cfg.network.hostname != current.hostname %}
+    <p class="field-description">⚠ Сохранённое имя хоста ({{ cfg.network.hostname }}) отличается от системного. Нажмите «Применить к системе».</p>
+    {% endif %}
+    {% if cfg.network.timezone and current.timezone and cfg.network.timezone != current.timezone %}
+    <p class="field-description">⚠ Сохранённый часовой пояс ({{ cfg.network.timezone }}) отличается от системного. Нажмите «Применить к системе».</p>
+    {% endif %}
     <table>
         <thead>
             <tr><th>Интерфейс</th><th>Состояние</th><th>Адреса</th></tr>

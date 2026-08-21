@@ -131,12 +131,13 @@ def network_page() -> str:
         "timezone": nm.get_timezone(),
         "interfaces": nm.list_interfaces(),
     }
-    # Реальный hostname и timezone из системы — приоритет над конфигом
-    if current["hostname"]:
+    # В форме показываем значения из конфига (то, что сохранено),
+    # а в "Текущее состояние" — реальные системные.
+    # Если конфиг пустой (нет network_config.yml), берём системные как стартовые.
+    if not net_cfg.get("network", {}).get("hostname") and current["hostname"]:
         net_cfg["network"]["hostname"] = current["hostname"]
-    if current["timezone"]:
+    if not net_cfg.get("network", {}).get("timezone") and current["timezone"]:
         net_cfg["network"]["timezone"] = current["timezone"]
-    # Список доступных часовых поясов
     available_timezones = _list_timezones()
     return render_template("network.html", cfg=net_cfg, current=current, timezones=available_timezones)
 
