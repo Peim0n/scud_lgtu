@@ -114,3 +114,55 @@ def test_no_command_prints_usage_and_exits():
         assert exc.code != 0
     else:
         raise AssertionError("argparse должен был завершить процесс из-за required=True")
+
+
+def test_settings_get_dispatch(monkeypatch, capsys):
+    called = {}
+
+    def fake_get(config_path, key):
+        called.update(config_path=config_path, key=key)
+        return {"value": 42}
+
+    monkeypatch.setattr(cli, "cmd_settings_get", fake_get)
+
+    exit_code = cli.main(["--config", "/tmp/x.yml", "settings", "get", "backend.access_point_id"])
+
+    assert exit_code == 0
+    assert called == {"config_path": "/tmp/x.yml", "key": "backend.access_point_id"}
+    assert "42" in capsys.readouterr().out
+
+
+def test_settings_set_dispatch(monkeypatch, capsys):
+    called = {}
+
+    def fake_set(config_path, key, value):
+        called.update(config_path=config_path, key=key, value=value)
+        return {"status": "ok", "path": key, "value": 42}
+
+    monkeypatch.setattr(cli, "cmd_settings_set", fake_set)
+
+    exit_code = cli.main(["settings", "set", "backend.access_point_id", "42"])
+
+    assert exit_code == 0
+    assert called == {"config_path": None, "key": "backend.access_point_id", "value": "42"}
+    out = capsys.readouterr().out
+    assert "ok" in out or "42" in out
+
+
+def test_settings_show_dispatch(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "cmd_settings_show", lambda config_path: {"config": {"x": 1}})
+
+    exit_code = cli.main(["settings", "show"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "x" in out
+
+
+def test_settings_error_sets_nonzero_exit(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "cmd_settings_get", lambda config_path, key: {"error": "boom"})
+
+    exit_code = cli.main(["settings", "get", "backend.access_point_id"])
+
+    assert exit_code == 1
+    assert "Ошибка: boom" in capsys.readouterr().out

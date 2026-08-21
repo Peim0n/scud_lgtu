@@ -23,6 +23,9 @@ CLI управления СКУД (см. ARCHITECTURE.md, слой Interfaces).
     python -m app.interfaces.cli cert import-initial <cert.pem> <key.pem>
     python -m app.interfaces.cli cert bootstrap
     python -m app.interfaces.cli cert rotate [--force]
+    python -m app.interfaces.cli settings get backend.access_point_id
+    python -m app.interfaces.cli settings set backend.access_point_id 2
+    python -m app.interfaces.cli settings show
     python -m app.interfaces.cli engine --interactive
 """
 from __future__ import annotations
@@ -34,6 +37,8 @@ from typing import Any
 
 from app.application.commands import ScudCommand
 from app.infrastructure.bootstrap import build_application, build_backend_client
+from app.infrastructure.config import load as load_config, resolve_config_path
+from app.infrastructure.config import object_config as obj_cfg
 
 # ---------------------------------------------------------------------------
 # cert: управление mTLS-сертификатом контроллера (без GPIO)
@@ -122,6 +127,98 @@ def _run_cert_command(args: argparse.Namespace) -> int:
         raise AssertionError(f"неизвестная cert-команда: {args.cert_command}")
 
     _print_cert_result(result, args.json)
+    return 1 if "error" in result else 0
+
+
+# ---------------------------------------------------------------------------
+# settings: редактирование объектного конфига (access/qr_decoder/backend)
+# ---------------------------------------------------------------------------
+
+
+def cmd_settings_get(config_path: str | None, dotted_path: str) -> dict[str, Any]:
+    """Прочитать значение из объединённого конфига по dotted-пути."""
+    resolved = resolve_config_path(config_path)
+    if not obj_cfg.is_editable_path(dotted_path):
+        return {
+            "error": (
+                f"путь '{dotted_path}' не относится к редактируемым "
+                f"секциям (access, qr_decoder, backend)"
+            ),
+        }
+    try:
+        merged = load_config(resolved)
+        value = obj_cfg.get(merged, dotted_path)
+        return {"value": value}
+    except KeyError:
+        return {"error": f"ключ '{dotted_path}' не найден в конфигурации"}
+    except Exception as exc:  # pragma: no cover - защита от неожиданных ошибок
+        return {"error": str(exc)}
+
+
+def cmd_settings_set(
+    config_path: str | None, dotted_path: str, raw_value: str,
+) -> dict[str, Any]:
+    """Установить значение в object_config.yml."""
+    resolved = resolve_config_path(config_path)
+    if not obj_cfg.is_editable_path(dotted_path):
+        return {
+            "error": (
+                f"путь '{dotted_path}' не относится к редактируемым "
+                f"секциям (access, qr_decoder, backend)"
+            ),
+        }
+    try:
+        parsed = obj_cfg.parse_typed_value(raw_value)
+        merged = load_config(resolved)
+        # Запрещаем создавать новые ключи — только менять существующие
+        _ = obj_cfg.get(merged, dotted_path)
+        override = obj_cfg.load(resolved)
+        obj_cfg.set_value(override, dotted_path, parsed)
+        obj_cfg.save(override, resolved)
+        return {"status": "ok", "path": dotted_path, "value": parsed}
+    except KeyError:
+        return {"error": f"ключ '{dotted_path}' не найден в конфигурации"}
+    except ValueError as exc:
+        return {"error": str(exc)}
+    except Exception as exc:  # pragma: no cover
+        return {"error": str(exc)}
+
+
+def cmd_settings_show(config_path: str | None) -> dict[str, Any]:
+    """Показать текущий объектный конфиг."""
+    resolved = resolve_config_path(config_path)
+    override = obj_cfg.load(resolved)
+    return {"config": override}
+
+
+def _print_settings_result(result: dict[str, Any], as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+    if "error" in result:
+        print(f"Ошибка: {result['error']}")
+        return
+    if "value" in result:
+        print(result["value"])
+        return
+    if "config" in result:
+        print(json.dumps(result["config"], indent=2, ensure_ascii=False))
+        return
+    for key, value in result.items():
+        print(f"{key}: {value}")
+
+
+def _run_settings_command(args: argparse.Namespace) -> int:
+    if args.settings_command == "get":
+        result = cmd_settings_get(args.config, args.key)
+    elif args.settings_command == "set":
+        result = cmd_settings_set(args.config, args.key, args.value)
+    elif args.settings_command == "show":
+        result = cmd_settings_show(args.config)
+    else:  # pragma: no cover
+        raise AssertionError(f"неизвестная settings-команда: {args.settings_command}")
+
+    _print_settings_result(result, args.json)
     return 1 if "error" in result else 0
 
 
@@ -265,7 +362,7 @@ def _run_engine_command(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="CLI управления СКУД")
     parser.add_argument("--config", help="Путь к config.yml")
-    parser.add_argument("--json", action="store_true", help="Вывод cert-команд в формате JSON")
+    parser.add_argument("--json", action="store_true", help="Вывод в формате JSON")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     cert_parser = subparsers.add_parser(
@@ -290,6 +387,24 @@ def _build_parser() -> argparse.ArgumentParser:
         "--force", action="store_true", help="Не учитывать порог/троттлинг — обменять прямо сейчас",
     )
 
+    settings_parser = subparsers.add_parser(
+        "settings", help="Редактирование объектного конфига (access, qr_decoder, backend)",
+    )
+    settings_sub = settings_parser.add_subparsers(dest="settings_command", required=True)
+
+    settings_get = settings_sub.add_parser(
+        "get", help="Прочитать значение по dotted-пути (например backend.access_point_id)",
+    )
+    settings_get.add_argument("key", help="dotted-путь внутри access/qr_decoder/backend")
+
+    settings_set = settings_sub.add_parser(
+        "set", help="Записать значение по dotted-пути в object_config.yml",
+    )
+    settings_set.add_argument("key", help="dotted-путь внутри access/qr_decoder/backend")
+    settings_set.add_argument("value", help="новое значение (int/float/bool/null/string/JSON)")
+
+    settings_sub.add_parser("show", help="Показать текущий объектный конфиг")
+
     engine_parser = subparsers.add_parser(
         "engine", help="Интерактивное управление движком СКУД для разработки (поднимает GPIO!)",
     )
@@ -307,6 +422,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "cert":
         return _run_cert_command(args)
+    if args.command == "settings":
+        return _run_settings_command(args)
     if args.command == "engine":
         return _run_engine_command(args)
     parser.error(f"неизвестная команда: {args.command}")  # pragma: no cover

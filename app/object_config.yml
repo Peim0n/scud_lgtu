@@ -1,0 +1,42 @@
+# Параметры конкретного объекта (точки доступа / контроллера).
+# Эти секции перекрывают одноимённые секции в config.yml и могут
+# редактироваться через CLI / будущий веб-интерфейс без риска
+# затронуть базовые аппаратные настройки.
+
+# ── Параметры доступа ──
+access:
+  static_key: "0123456789abcdef0123456789abcdef"
+
+# ── QR декодер ──
+qr_decoder:
+  base_url: "https://pass.lipetsk.ru/?"
+
+# ── Бэкенд (§5.4, §6 ТЗ) ──
+backend:
+  base_url: "https://195.34.235.89:8448"
+  api_path_prefix: "/controller/v1"
+  kms_url: "https://kms-scud-dev.admlr.lipetsk.ru"
+  ca_bundle: null
+  access_point_id: 2
+  endpoint_map: {}
+  method_map: {}
+  verify_hostname: false
+  user_agent: "LGTU-SCUD-Controller/1.0"
+  request_timeout_s: 10.0
+  tcp_keepalive_time_s: 300
+  tcp_keepalive_probes: 3
+  tcp_keepalive_intvl_s: 20
+  network_interface: null
+  cert:
+    cert_dir: "infrastructure/certs"
+    initial_cert_path: "infrastructure/certs/initial_cert.pem"
+    initial_key_path: "infrastructure/certs/initial_key.pem"
+    rotation_threshold_fraction: 0.5
+    rotation_retry_interval_days: 1
+    rsa_key_size: 2048
+    subject:
+      organization: "ЛГТУ"
+      organizational_units:
+        - "Корпус 9"
+        - "КПП Главный вход"
+      common_name: "turnstile-01"
