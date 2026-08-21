@@ -33,7 +33,7 @@ from app.infrastructure.cache.access_cache import LocalAccessCache
 from app.infrastructure.cache.repository import AccessRepositoryAdapter
 from app.infrastructure.config import load
 from app.infrastructure.config.module_resolver import ModuleResolver
-from app.infrastructure.devices.turnstile.turnstile_device import TurnstileDevice
+from app.infrastructure.devices.device_factory import create_device
 from app.infrastructure.engine import ScudEngine
 from app.infrastructure.firmware.gpio.actuator import ShiftRegisterActuator
 from app.infrastructure.firmware.serial.qr_decoder import QRDecoder
@@ -179,7 +179,7 @@ def build_application(config_path: str | None = None) -> LGTUApplication:
     # Доменные компоненты
     auth_timeout = resolver.get_timing("business", "auth_timeout_s")
 
-    device_logic = TurnstileDevice(auth_timeout=auth_timeout, timings=timings, resolver=resolver)
+    device_logic = create_device(config, timings=timings, resolver=resolver)
     access_policy = AccessPolicy(repository=access_repository)
     passage_tracker = PassageTracker()
 

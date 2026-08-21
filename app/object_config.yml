@@ -11,6 +11,10 @@ access:
 qr_decoder:
   base_url: "https://pass.lipetsk.ru/?"
 
+# ── Тип управляемого устройства ──
+device:
+  type: "turnstile"
+
 # ── Бэкенд (§5.4, §6 ТЗ) ──
 backend:
   base_url: "https://195.34.235.89:8448"

@@ -16,6 +16,8 @@ def _auth_header():
 def client(tmp_path):
     cfg_path = tmp_path / "config.yml"
     cfg_path.write_text(
+        "device:\n"
+        "  type: turnstile\n"
         "backend:\n"
         "  base_url: https://example.com\n"
         "  access_point_id: 1\n"
@@ -111,6 +113,19 @@ def test_backend_save_updates_object_config(client):
     assert override["backend"]["verify_hostname"] is True
     assert override["qr_decoder"]["base_url"] == "https://new.qr/?"
     assert override["access"]["static_key"] == "0011223344"
+
+
+def test_backend_save_device_type(client):
+    resp = client.post(
+        "/backend/save",
+        headers=_auth_header(),
+        data={"device.type": "gate"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    from app.infrastructure.config import object_config as obj_cfg
+    override = obj_cfg.load(client.application.config["config_path"])
+    assert override["device"]["type"] == "gate"
 
 
 def test_network_apply_reports_result(monkeypatch, client):

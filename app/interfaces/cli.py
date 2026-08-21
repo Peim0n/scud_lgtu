@@ -145,7 +145,7 @@ def cmd_settings_get(config_path: str | None, dotted_path: str) -> dict[str, Any
         return {
             "error": (
                 f"путь '{dotted_path}' не относится к редактируемым "
-                f"секциям (access, qr_decoder, backend)"
+                f"секциям (access, qr_decoder, backend, device)"
             ),
         }
     try:
@@ -167,7 +167,7 @@ def cmd_settings_set(
         return {
             "error": (
                 f"путь '{dotted_path}' не относится к редактируемым "
-                f"секциям (access, qr_decoder, backend)"
+                f"секциям (access, qr_decoder, backend, device)"
             ),
         }
     try:

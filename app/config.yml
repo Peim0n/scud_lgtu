@@ -185,6 +185,12 @@ turnstile:
   exit_green: "outer_indicator_success"
   exit_red: "outer_indicator_fail"
 
+# ── Тип управляемого устройства ──
+# Возможные значения: turnstile (и в будущем gate, door, locker и т.п.).
+# Конкретный тип относится к объекту, поэтому перекрывается в object_config.yml.
+device:
+  type: "turnstile"
+
 # ── Параметры доступа ──
 # STATIC_KEY — уникален для точки доступа (16 байт в hex). ВАЖНО: этот же
 # ключ должен быть прописан в самих Wiegand-считывателях (ЭРА/аналоги) через
