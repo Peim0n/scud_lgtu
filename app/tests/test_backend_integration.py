@@ -91,23 +91,32 @@ def test_certificate_bootstrap_over_real_mtls(server, ca_bundle_path, tmp_path):
 
 
 def test_certificate_rotation_over_real_mtls(server, ca_bundle_path, tmp_path):
+    """
+    Сервер выдаёт notBefore/notAfter по реальным часам (datetime.now()), а не
+    по искусственно переведённым — поэтому вместо "перемотки времени" делаем
+    рабочий сертификат коротким (notBefore на сутки в прошлом, см. sign_csr,
+    notAfter = "сейчас" + 1 сутки), тогда сразу после выдачи остаётся ровно
+    половина срока действия — гарантированно за порогом ротации (по
+    умолчанию 0.5), но сертификат ещё валиден и mTLS-запрос ротации проходит.
+    """
     initial_cert_pem, initial_key_pem = server.issue_initial_client_certificate("turnstile-01")
     initial_cert_path = _write(str(tmp_path / "initial_cert.pem"), initial_cert_pem)
     initial_key_path = _write(str(tmp_path / "initial_key.pem"), initial_key_pem)
+    server.working_cert_validity_days = 1
 
     rest = RestClient(server.base_url, ca_bundle=ca_bundle_path, timeout=5.0)
     subject = CertificateSubject(organization="Школа №1", organizational_units=["Корпус 1"], common_name="turnstile-01")
-    fake_now = [1_700_000_000.0]
     manager = CertificateManager(
         rest, cert_dir=str(tmp_path / "certs"), subject=subject,
         initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
-        rotation_period_days=30, clock=lambda: fake_now[0],
+        rotation_threshold_fraction=0.5,
     )
     manager.ensure_bootstrapped()
     old_cert = open(manager._working_cert_path).read()
 
-    fake_now[0] += 31 * 86400
-    rotated = manager.maybe_rotate(fake_now[0])
+    # notBefore выдан с суточным "запасом назад" (см. sign_csr) — при
+    # 2-суточной валидности уже сразу после выдачи остаётся <=50% срока.
+    rotated = manager.maybe_rotate()
 
     assert rotated is True
     assert len(server.cert_requests) == 2

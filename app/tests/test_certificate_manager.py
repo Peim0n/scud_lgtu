@@ -1,20 +1,57 @@
 """Тесты жизненного цикла mTLS-сертификата контроллера (п. 5.4.1 ТЗ)."""
-import hashlib
 import os
+from datetime import datetime, timedelta, timezone
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
-from app.infrastructure.backend.certificate_manager import CertificateManager, CertificateSubject
+from app.infrastructure.backend.certificate_manager import (
+    CertificateManager,
+    CertificateSubject,
+)
 from app.infrastructure.backend.rest_client import BackendApiError
+
+# Реальная валидность рабочего сертификата, выдаваемого бэкендом (см. docstring
+# CertificateManager) — используется как дефолт в FakeRestClient, чтобы тесты
+# ротации проверяли настоящий разбор notBefore/notAfter, а не фиктивный PEM.
+CERT_VALIDITY_DAYS_DEFAULT = 90
+
+
+def _sign_csr(csr_pem: str, valid_from: datetime, valid_until: datetime) -> str:
+    """Подписать CSR самоподписанным "сертификатом" с заданным сроком действия.
+
+    Личность издателя тут не важна — тесты не устанавливают реальных TLS-
+    соединений, только проверяют разбор notBefore/notAfter и логику ротации.
+    """
+    csr = x509.load_pem_x509_csr(csr_pem.encode("utf-8"))
+    ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(csr.subject)
+        .issuer_name(csr.subject)
+        .public_key(csr.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(valid_from)
+        .not_valid_after(valid_until)
+        .sign(ca_key, hashes.SHA256())
+    )
+    return cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
 
 
 class FakeRestClient:
-    """Подмена RestClient: подписывает любой CSR фиктивным 'сертификатом'."""
+    """Подмена RestClient: подписывает любой CSR настоящим X.509-сертификатом
+    с настраиваемым сроком действия (для проверки логики ротации по порогу)."""
 
-    def __init__(self, fail: bool = False):
+    def __init__(self, fail: bool = False, cert_validity_days: float = CERT_VALIDITY_DAYS_DEFAULT, clock=None):
         self.fail = fail
         self.calls = []
         self.active_cert = None
+        self.cert_validity_days = cert_validity_days
+        # Тот же clock, что передаётся в CertificateManager — чтобы "время
+        # выдачи" сертификата совпадало с текущим временем теста.
+        self._clock = clock or (lambda: 1_700_000_000.0)
 
     def call(self, resource, action, payload=None):
         self.calls.append((resource, action, payload))
@@ -22,11 +59,9 @@ class FakeRestClient:
             raise BackendApiError("cert/get failed")
         assert resource == "cert" and action == "get"
         csr_pem = payload["csr"]
-        # "Подписываем" CSR - фиктивный PEM, уникальный для каждого CSR
-        # (хеш всего CSR, а не одной строки, т.к. у RSA-CSR с одинаковым
-        # Subject первые строки base64 могут совпадать между разными ключами).
-        digest = hashlib.sha256(csr_pem.encode("utf-8")).hexdigest()
-        crt_pem = f"-----BEGIN CERTIFICATE-----\n{digest}\n-----END CERTIFICATE-----\n"
+        valid_from = datetime.fromtimestamp(self._clock(), tz=timezone.utc)
+        valid_until = valid_from + timedelta(days=self.cert_validity_days)
+        crt_pem = _sign_csr(csr_pem, valid_from, valid_until)
         return {"status": "ok", "crt": crt_pem}
 
     def set_client_cert(self, cert_path, key_path):
@@ -98,39 +133,42 @@ def test_ensure_bootstrapped_is_idempotent(tmp_path, subject, initial_cert_files
     assert len(rest.calls) == calls_after_first
 
 
-def test_maybe_rotate_does_nothing_before_rotation_period(tmp_path, subject, initial_cert_files):
+# ── Ротация по остатку срока действия (не по фиксированному расписанию) ──
+
+
+def test_maybe_rotate_does_nothing_while_remaining_lifetime_above_threshold(tmp_path, subject, initial_cert_files):
     initial_cert_path, initial_key_path = initial_cert_files
-    rest = FakeRestClient()
     now = [1_700_000_000.0]
+    rest = FakeRestClient(clock=lambda: now[0])
     manager = CertificateManager(
         rest, cert_dir=str(tmp_path / "certs"), subject=subject,
         initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
-        rotation_period_days=30, clock=lambda: now[0],
+        rotation_threshold_fraction=0.5, clock=lambda: now[0],
     )
     manager.ensure_bootstrapped()
     calls_after_bootstrap = len(rest.calls)
 
-    now[0] += 10 * 86400  # только 10 суток прошло
+    now[0] += 10 * 86400  # осталось 80/90 суток (>50%) — рано
     rotated = manager.maybe_rotate(now[0])
 
     assert rotated is False
     assert len(rest.calls) == calls_after_bootstrap
 
 
-def test_maybe_rotate_after_period_generates_new_certificate(tmp_path, subject, initial_cert_files):
+def test_maybe_rotate_triggers_when_remaining_lifetime_below_threshold(tmp_path, subject, initial_cert_files):
     initial_cert_path, initial_key_path = initial_cert_files
-    rest = FakeRestClient()
     now = [1_700_000_000.0]
+    rest = FakeRestClient(clock=lambda: now[0])
     manager = CertificateManager(
         rest, cert_dir=str(tmp_path / "certs"), subject=subject,
         initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
-        rotation_period_days=30, clock=lambda: now[0],
+        rotation_threshold_fraction=0.5, clock=lambda: now[0],
     )
     manager.ensure_bootstrapped()
     old_cert_content = open(manager._working_cert_path).read()
     calls_after_bootstrap = len(rest.calls)
 
-    now[0] += 31 * 86400
+    now[0] += 46 * 86400  # осталось 44/90 суток (<50%) — пора
     rotated = manager.maybe_rotate(now[0])
 
     assert rotated is True
@@ -140,42 +178,95 @@ def test_maybe_rotate_after_period_generates_new_certificate(tmp_path, subject, 
     assert not os.path.exists(manager._working_key_path + ".old")
     new_cert_content = open(manager._working_cert_path).read()
     assert new_cert_content != old_cert_content
+    # После успешной ротации новый сертификат снова "молодой" — файл
+    # последней попытки ротации подчищен.
+    assert not os.path.exists(manager._last_rotation_attempt_path)
+
+
+def test_maybe_rotate_does_not_retry_within_retry_interval(tmp_path, subject, initial_cert_files):
+    """Если обмен провалился, повторная попытка раньше retry_interval игнорируется."""
+    initial_cert_path, initial_key_path = initial_cert_files
+    now = [1_700_000_000.0]
+    rest = FakeRestClient(clock=lambda: now[0])
+    manager = CertificateManager(
+        rest, cert_dir=str(tmp_path / "certs"), subject=subject,
+        initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
+        rotation_threshold_fraction=0.5, rotation_retry_interval_days=1, clock=lambda: now[0],
+    )
+    manager.ensure_bootstrapped()
+    rest.fail = True
+
+    now[0] += 46 * 86400  # порог пройден
+    first_attempt = manager.maybe_rotate(now[0])
+    calls_after_first_attempt = len(rest.calls)
+
+    now[0] += 3600  # прошёл всего час — рано для повторной попытки
+    second_attempt = manager.maybe_rotate(now[0])
+
+    assert first_attempt is False
+    assert second_attempt is False
+    # Второй вызов НЕ должен был снова стучаться в бэкенд.
+    assert len(rest.calls) == calls_after_first_attempt
+
+
+def test_maybe_rotate_retries_daily_until_success(tmp_path, subject, initial_cert_files):
+    """Пока обмен не удастся — повтор раз в retry_interval, по кругу."""
+    initial_cert_path, initial_key_path = initial_cert_files
+    now = [1_700_000_000.0]
+    rest = FakeRestClient(clock=lambda: now[0])
+    manager = CertificateManager(
+        rest, cert_dir=str(tmp_path / "certs"), subject=subject,
+        initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
+        rotation_threshold_fraction=0.5, rotation_retry_interval_days=1, clock=lambda: now[0],
+    )
+    manager.ensure_bootstrapped()
+    rest.fail = True
+
+    now[0] += 46 * 86400  # порог пройден, но бэкенд недоступен
+    assert manager.maybe_rotate(now[0]) is False
+
+    now[0] += 86400  # сутки спустя — бэкенд снова доступен
+    rest.fail = False
+    rotated = manager.maybe_rotate(now[0])
+
+    assert rotated is True
+    assert manager.has_working_certificate
 
 
 def test_on_exchange_success_callback_called_after_bootstrap_and_rotation(tmp_path, subject, initial_cert_files):
     initial_cert_path, initial_key_path = initial_cert_files
-    rest = FakeRestClient()
     now = [1_700_000_000.0]
+    rest = FakeRestClient(clock=lambda: now[0])
     calls = []
     manager = CertificateManager(
         rest, cert_dir=str(tmp_path / "certs"), subject=subject,
         initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
-        rotation_period_days=30, clock=lambda: now[0],
+        rotation_threshold_fraction=0.5, clock=lambda: now[0],
         on_exchange_success=lambda: calls.append(now[0]),
     )
 
     manager.ensure_bootstrapped()
     assert calls == [now[0]]
 
-    now[0] += 31 * 86400
+    now[0] += 46 * 86400
     manager.maybe_rotate(now[0])
     assert calls == [1_700_000_000.0, now[0]]
 
 
 def test_maybe_rotate_rolls_back_on_backend_failure(tmp_path, subject, initial_cert_files):
     initial_cert_path, initial_key_path = initial_cert_files
-    rest = FakeRestClient()
     now = [1_700_000_000.0]
+    rest = FakeRestClient(clock=lambda: now[0])
     manager = CertificateManager(
         rest, cert_dir=str(tmp_path / "certs"), subject=subject,
         initial_cert_path=initial_cert_path, initial_key_path=initial_key_path,
-        rotation_period_days=30, clock=lambda: now[0],
+        rotation_threshold_fraction=0.5, clock=lambda: now[0],
     )
     manager.ensure_bootstrapped()
     old_cert_content = open(manager._working_cert_path).read()
 
     rest.fail = True
-    now[0] += 31 * 86400
+    now[0] += 46 * 86400
     rotated = manager.maybe_rotate(now[0])
 
     assert rotated is False

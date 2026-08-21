@@ -10,9 +10,17 @@
    Subject, запрос подписывается бэкендом (``cert/get``) через mTLS с
    первичным сертификатом; полученный рабочий сертификат действует 90 суток.
 3. Первичный ключ/сертификат удаляются на контроллере (и на бэкенде).
-4. Каждые 30 суток контроллер повторяет обмен (генерирует новую пару и CSR),
-   но уже используя текущий рабочий сертификат для mTLS; после успешного
-   подключения новым сертификатом старый ключ/сертификат удаляются.
+4. Ротация запускается не по фиксированному расписанию, а когда от реального
+   срока действия рабочего сертификата (берётся из самого сертификата —
+   ``notBefore``/``notAfter``, а не из локально запомненной даты выдачи)
+   остаётся меньше заданной доли (``rotation_threshold_fraction``, по
+   умолчанию половина). Как только порог пройден, контроллер пробует
+   обменять сертификат не чаще раза в ``rotation_retry_interval_days``
+   (по умолчанию раз в сутки) — и так по кругу, пока обмен не удастся;
+   при успехе новый сертификат снова "молодой", и цикл проверки начинается
+   заново. Это ограничивает и число запросов к бэкенду, и число перезаписей
+   working_cert/working_key на диске (ограниченный ресурс перезаписи flash),
+   в отличие от повторной попытки на каждой итерации основного цикла.
 
 Классы
 ------
@@ -20,11 +28,11 @@
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
 from dataclasses import dataclass
+from datetime import timezone
 from typing import Any, Optional
 
 try:
@@ -51,7 +59,8 @@ from app.infrastructure.backend.rest_client import (
 
 logger = logging.getLogger(__name__)
 
-ROTATION_PERIOD_DAYS_DEFAULT = 30
+ROTATION_THRESHOLD_FRACTION_DEFAULT = 0.5
+ROTATION_RETRY_INTERVAL_DAYS_DEFAULT = 1
 
 
 @dataclass
@@ -72,7 +81,8 @@ class CertificateManager:
         subject: CertificateSubject,
         initial_cert_path: Optional[str] = None,
         initial_key_path: Optional[str] = None,
-        rotation_period_days: float = ROTATION_PERIOD_DAYS_DEFAULT,
+        rotation_threshold_fraction: float = ROTATION_THRESHOLD_FRACTION_DEFAULT,
+        rotation_retry_interval_days: float = ROTATION_RETRY_INTERVAL_DAYS_DEFAULT,
         clock: Optional[callable] = None,
         on_exchange_success: Optional[callable] = None,
         rsa_key_size: int = 2048,
@@ -90,7 +100,14 @@ class CertificateManager:
         self._subject = subject
         self._initial_cert_path = initial_cert_path
         self._initial_key_path = initial_key_path
-        self._rotation_period_s = rotation_period_days * 86400
+        # Доля оставшегося срока действия сертификата, после которой начинаем
+        # пробовать ротацию (0.5 — как только осталось меньше половины).
+        self._rotation_threshold = rotation_threshold_fraction
+        # Минимальный интервал между ПОПЫТКАМИ ротации (не путать с периодом
+        # самой ротации) — не даёт долбить бэкенд/flash на каждой итерации
+        # основного цикла, если сертификат уже "просрочен по порогу", но
+        # обмен пока не удаётся.
+        self._retry_interval_s = rotation_retry_interval_days * 86400
         self._clock = clock or time.time
         # Вызывается после КАЖДОГО успешного обмена (первичного или
         # ротации) — используется, например, чтобы пометить BackendClient
@@ -113,7 +130,9 @@ class CertificateManager:
         os.makedirs(cert_dir, exist_ok=True)
         self._working_cert_path = os.path.join(cert_dir, "working_cert.pem")
         self._working_key_path = os.path.join(cert_dir, "working_key.pem")
-        self._issued_at_path = os.path.join(cert_dir, "working_cert.issued_at")
+        # Время последней ПОПЫТКИ ротации (не обязательно успешной) — для
+        # троттлинга повторных попыток, см. _rotation_threshold/_retry_interval_s.
+        self._last_rotation_attempt_path = os.path.join(cert_dir, "working_cert.last_rotation_attempt")
 
         # Если CA не задан в конфиге, но ранее был получен от KMS и сохранён на
         # диск — используем его для проверки controller-сервера.
@@ -169,8 +188,13 @@ class CertificateManager:
 
     def maybe_rotate(self, now: Optional[float] = None) -> bool:
         """
-        Проверить возраст рабочего сертификата и, если истёк период ротации
-        (по умолчанию 30 суток), выполнить ротацию (п. 5.4.1, шаг 4).
+        Проверить реальный остаток срока действия рабочего сертификата и,
+        если он упал ниже порога (по умолчанию половина), попробовать
+        ротацию (п. 5.4.1, шаг 4) — но не чаще, чем раз в
+        ``rotation_retry_interval_days``, даже если предыдущая попытка
+        провалилась. Пока обмен не удастся, попытки продолжаются с этим
+        интервалом; после успеха новый сертификат снова "молодой", и до
+        следующего пересечения порога ротация не запускается вовсе.
 
         Returns
         -------
@@ -181,11 +205,27 @@ class CertificateManager:
             return False
 
         now = now if now is not None else self._clock()
-        issued_at = self._read_issued_at()
-        if issued_at is None or (now - issued_at) < self._rotation_period_s:
+
+        try:
+            valid_from, valid_until = self._read_working_cert_validity()
+        except Exception:
+            logger.exception("CertificateManager: не удалось прочитать срок действия рабочего сертификата")
             return False
 
-        logger.info("CertificateManager: истёк период ротации (%s суток), обновляем сертификат", self._rotation_period_s / 86400)
+        total_lifetime = valid_until - valid_from
+        remaining = valid_until - now
+        if total_lifetime <= 0 or remaining > total_lifetime * self._rotation_threshold:
+            return False  # ещё не пора — остатка срока действия больше порога
+
+        last_attempt = self._read_last_rotation_attempt()
+        if last_attempt is not None and (now - last_attempt) < self._retry_interval_s:
+            return False  # уже пробовали недавно, ждём следующего интервала
+
+        logger.info(
+            "CertificateManager: остаток срока действия сертификата %.1f%% (порог %.0f%%) — пробуем обновить",
+            max(remaining, 0) / total_lifetime * 100, self._rotation_threshold * 100,
+        )
+        self._write_last_rotation_attempt(now)
         try:
             # Важно: НЕ трогаем действующие working_cert/working_key файлы до
             # успешного ответа бэкенда — RestClient.call() ниже сам
@@ -194,7 +234,10 @@ class CertificateManager:
             # заранее, сам запрос ротации сломается (путь для mTLS исчезнет).
             self._exchange_and_activate()
         except BackendApiError:
-            logger.exception("CertificateManager: ротация не удалась, остаёмся на старом сертификате")
+            logger.exception(
+                "CertificateManager: ротация не удалась, остаёмся на старом сертификате "
+                "(следующая попытка не раньше чем через %.0f ч.)", self._retry_interval_s / 3600,
+            )
             return False
 
         return True
@@ -229,7 +272,11 @@ class CertificateManager:
         os.replace(tmp_cert_path, self._working_cert_path)
         os.replace(tmp_key_path, self._working_key_path)
 
-        self._write_issued_at(self._clock())
+        # Новый сертификат снова "молодой" — забытая попытка ротации больше
+        # не нужна (следующая проверка порога всё равно её проигнорирует, но
+        # чище явно убрать файл).
+        if os.path.exists(self._last_rotation_attempt_path):
+            os.remove(self._last_rotation_attempt_path)
         self._rest_client.set_client_cert(self._working_cert_path, self._working_key_path)
         logger.info("CertificateManager: рабочий сертификат активирован")
 
@@ -345,15 +392,27 @@ class CertificateManager:
                 os.remove(path)
         logger.info("CertificateManager: первичный сертификат удалён с контроллера")
 
-    def _read_issued_at(self) -> Optional[float]:
-        if not os.path.exists(self._issued_at_path):
+    def _read_working_cert_validity(self) -> tuple[float, float]:
+        """Прочитать реальный ``notBefore``/``notAfter`` рабочего сертификата (epoch, UTC)."""
+        with open(self._working_cert_path, "rb") as f:
+            cert = x509.load_pem_x509_certificate(f.read())
+        not_before = getattr(cert, "not_valid_before_utc", None)
+        not_after = getattr(cert, "not_valid_after_utc", None)
+        if not_before is None:  # cryptography < 42: только наивные UTC-датумы
+            not_before = cert.not_valid_before.replace(tzinfo=timezone.utc)
+        if not_after is None:
+            not_after = cert.not_valid_after.replace(tzinfo=timezone.utc)
+        return not_before.timestamp(), not_after.timestamp()
+
+    def _read_last_rotation_attempt(self) -> Optional[float]:
+        if not os.path.exists(self._last_rotation_attempt_path):
             return None
-        with open(self._issued_at_path, "r", encoding="utf-8") as f:
+        with open(self._last_rotation_attempt_path, "r", encoding="utf-8") as f:
             try:
                 return float(f.read().strip())
             except ValueError:
                 return None
 
-    def _write_issued_at(self, timestamp: float) -> None:
-        with open(self._issued_at_path, "w", encoding="utf-8") as f:
+    def _write_last_rotation_attempt(self, timestamp: float) -> None:
+        with open(self._last_rotation_attempt_path, "w", encoding="utf-8") as f:
             f.write(str(timestamp))

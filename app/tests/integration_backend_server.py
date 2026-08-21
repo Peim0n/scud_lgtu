@@ -214,6 +214,10 @@ class FakeBackendServer:
         self.accesspoint_data: dict[str, str] = {}
         self.events: list[dict] = []
         self.cert_requests: list[str] = []
+        # Срок действия рабочего сертификата, выдаваемого через cert/get —
+        # настраивается тестами ротации, чтобы не зависеть от искусственного
+        # "перевода часов" (сервер всегда использует реальный datetime.now()).
+        self.working_cert_validity_days = 90
 
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
@@ -293,7 +297,7 @@ class FakeBackendServer:
             if not csr_pem:
                 raise _HttpError(400, "csr required")
             self.cert_requests.append(csr_pem)
-            crt_pem = sign_csr(self._ca_cert, self._ca_key, csr_pem)
+            crt_pem = sign_csr(self._ca_cert, self._ca_key, csr_pem, days=self.working_cert_validity_days)
             return {"status": "ok", "crt": crt_pem}
         if key == ("access", "get"):
             self.access_requests.append(payload.get("update", 1))
