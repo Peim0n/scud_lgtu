@@ -104,6 +104,7 @@ def _register_routes(app: Flask) -> None:
     app.route("/cert/bootstrap", methods=["POST"])(require_auth(cert_bootstrap))
     app.route("/cert/import", methods=["POST"])(require_auth(cert_import))
     app.route("/cert/rotate", methods=["POST"])(require_auth(cert_rotate))
+    app.route("/cert/reset", methods=["POST"])(require_auth(cert_reset))
     app.route("/restart-service", methods=["POST"])(require_auth(restart_service))
 
 
@@ -315,6 +316,28 @@ def cert_rotate() -> Any:
         flash("Принудительная ротация не удалась — проверьте логи.", "error")
     else:
         flash("Ротация не требуется (порог не достигнут).", "info")
+    return redirect(url_for("cert_page"))
+
+
+def cert_reset() -> Any:
+    """Удалить рабочий и первичный сертификаты (полный сброс)."""
+    cfg_path = _config_path(current_app)
+    config = load_config(cfg_path)
+    base_dir = os.path.dirname(os.path.abspath(cfg_path))
+    cert_cfg = config.get("backend", {}).get("cert", {})
+    cert_dir = os.path.join(base_dir, cert_cfg.get("cert_dir", "infrastructure/certs"))
+
+    removed = []
+    for name in ("working_cert.pem", "working_key.pem", "initial_cert.pem", "initial_key.pem"):
+        path = os.path.join(cert_dir, name)
+        if os.path.exists(path):
+            os.remove(path)
+            removed.append(name)
+
+    if removed:
+        flash(f"Удалены: {', '.join(removed)}. Сертификаты сброшены.", "success")
+    else:
+        flash("Сертификатов не найдено — нечего удалять.", "info")
     return redirect(url_for("cert_page"))
 
 

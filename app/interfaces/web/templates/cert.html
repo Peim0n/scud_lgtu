@@ -130,4 +130,19 @@
     </form>
 </section>
 {% endif %}
+
+<section>
+    <h2>Сброс сертификатов</h2>
+    <p>
+        Удалить рабочий и первичный сертификаты. Используется для полной
+        перенастройки — после сброса нужно заново получить сертификат
+        через KMS или загрузить вручную.
+    </p>
+    <form method="post" action="{{ url_for('cert_reset') }}"
+          onsubmit="return confirm('Удалить все сертификаты? Это действие необратимо.')">
+        <div class="actions">
+            <button type="submit" class="danger">Сбросить сертификаты</button>
+        </div>
+    </form>
+</section>
 {% endblock %}
