@@ -306,7 +306,7 @@ class CertificateManager:
             return False
         try:
             self._exchange_and_activate()
-        except BackendApiError:
+        except Exception:
             logger.exception("CertificateManager: принудительная ротация не удалась")
             return False
         return True
@@ -356,6 +356,18 @@ class CertificateManager:
             "remaining_fraction": (remaining / total_lifetime) if total_lifetime > 0 else None,
             "due_for_rotation": total_lifetime > 0 and remaining <= total_lifetime * self._rotation_threshold,
         })
+
+        # SHA-256 fingerprint рабочего сертификата — чтобы было видно,
+        # поменялся ли сертификат после ротации/обмена.
+        try:
+            with open(self._working_cert_path, "rb") as f:
+                cert = x509.load_pem_x509_certificate(f.read())
+            fingerprint = cert.fingerprint(hashes.SHA256()).hex()
+            status["fingerprint_sha256"] = fingerprint
+            status["subject"] = cert.subject.rfc4514_string()
+        except Exception:
+            pass
+
         return status
 
     # ------------------------------------------------------------------
@@ -364,17 +376,22 @@ class CertificateManager:
 
     def _exchange_and_activate(self) -> None:
         """Сгенерировать пару ключей+CSR, обменять на подписанный сертификат, активировать."""
-        # При первичном обмене (используется первичный сертификат) Subject CSR
-        # должен совпадать с Subject первичного сертификата — бэкенд проверяет это.
-        # При ротации (используется рабочий сертификат) Subject берётся из конфига.
-        use_initial_subject = (
-            self._initial_cert_path
-            and os.path.exists(self._initial_cert_path)
-            and not self.has_working_certificate
-        )
-        if use_initial_subject:
-            private_key_pem, csr_pem = self._generate_keypair_and_csr_from_initial()
+        # Бэкенд проверяет, что Subject CSR совпадает с Subject предъявленного
+        # клиентского сертификата. При первичном обмене используется первичный
+        # сертификат, при ротации — рабочий. В обоих случаях берём Subject
+        # из соответствующего сертификата, а не из конфига.
+        if self.has_working_certificate:
+            # Ротация — Subject из рабочего сертификата
+            private_key_pem, csr_pem = self._generate_keypair_and_csr_from_cert(
+                self._working_cert_path
+            )
+        elif self._initial_cert_path and os.path.exists(self._initial_cert_path):
+            # Первичный обмен — Subject из первичного сертификата
+            private_key_pem, csr_pem = self._generate_keypair_and_csr_from_cert(
+                self._initial_cert_path
+            )
         else:
+            # Fallback — Subject из конфига
             private_key_pem, csr_pem = self._generate_keypair_and_csr()
 
         # Запрос выполняется ДО какой-либо записи на working_cert/working_key —
@@ -435,21 +452,21 @@ class CertificateManager:
         csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode("utf-8")
         return private_key_pem, csr_pem
 
-    def _generate_keypair_and_csr_from_initial(self) -> tuple[str, str]:
-        """Сгенерировать ключ+CSR с Subject из первичного сертификата.
+    def _generate_keypair_and_csr_from_cert(self, cert_path: str) -> tuple[str, str]:
+        """Сгенерировать ключ+CSR с Subject из указанного сертификата.
 
         Бэкенд проверяет, что Subject CSR совпадает с Subject предъявленного
-        клиентского сертификата. При первичном обмене используется первичный
-        сертификат от KMS — значит и CSR должен иметь тот же Subject.
+        клиентского сертификата. Используется для первичного обмена (Subject
+        из initial_cert) и для ротации (Subject из working_cert).
         Если прочитать сертификат не удалось — fallback на Subject из конфига.
         """
         subject = None
         try:
-            with open(self._initial_cert_path, "rb") as f:
-                initial_cert = x509.load_pem_x509_certificate(f.read())
-            subject = initial_cert.subject
+            with open(cert_path, "rb") as f:
+                cert = x509.load_pem_x509_certificate(f.read())
+            subject = cert.subject
         except Exception:
-            logger.warning("CertificateManager: не удалось прочитать Subject из первичного сертификата — используем конфиг")
+            logger.warning("CertificateManager: не удалось прочитать Subject из %s — используем конфиг", cert_path)
 
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=self._rsa_key_size)
 

@@ -38,6 +38,18 @@
                     <th>Требуется ротация</th>
                     <td>{% if status.due_for_rotation %}Да{% else %}Нет{% endif %}</td>
                 </tr>
+                {% if status.fingerprint_sha256 %}
+                <tr>
+                    <th>Fingerprint (SHA-256)</th>
+                    <td><code>{{ status.fingerprint_sha256[:32] }}…</code></td>
+                </tr>
+                {% endif %}
+                {% if status.subject %}
+                <tr>
+                    <th>Subject</th>
+                    <td><code>{{ status.subject }}</code></td>
+                </tr>
+                {% endif %}
             </table>
             {% endif %}
         {% else %}

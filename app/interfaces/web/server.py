@@ -308,7 +308,11 @@ def cert_rotate() -> Any:
     if "error" in result:
         flash(f"Ошибка: {result['error']}", "error")
     elif result.get("rotated"):
-        flash("Сертификат ротирован.", "success")
+        fp = result.get("fingerprint_sha256", "")
+        fp_short = fp[:16] if fp else ""
+        flash(f"Сертификат ротирован. Новый fingerprint: {fp_short}…", "success")
+    elif force:
+        flash("Принудительная ротация не удалась — проверьте логи.", "error")
     else:
         flash("Ротация не требуется (порог не достигнут).", "info")
     return redirect(url_for("cert_page"))
