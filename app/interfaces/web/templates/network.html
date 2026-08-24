@@ -48,34 +48,40 @@
     <h2>Ethernet</h2>
     <label>Интерфейс <input type="text" name="ethernet_interface" value="{{ cfg.network.ethernet.interface }}" readonly class="readonly"></label>
     <label>Метод
-        <select name="ethernet_method">
+        <select name="ethernet_method" id="ethernet_method" onchange="toggleStaticFields('ethernet')">
             <option value="dhcp" {% if cfg.network.ethernet.method == 'dhcp' %}selected{% endif %}>DHCP</option>
             <option value="static" {% if cfg.network.ethernet.method == 'static' %}selected{% endif %}>Static</option>
         </select>
     </label>
-    <label>IP-адрес <input type="text" name="ethernet_address" value="{{ cfg.network.ethernet.address }}"></label>
-    <label>Маска <input type="text" name="ethernet_netmask" value="{{ cfg.network.ethernet.netmask }}"></label>
-    <label>Шлюз <input type="text" name="ethernet_gateway" value="{{ cfg.network.ethernet.gateway }}"></label>
-    <label>DNS (через запятую) <input type="text" name="ethernet_dns" value="{{ cfg.network.ethernet.dns | join(', ') }}"></label>
+    <div id="ethernet_static" class="static-fields" {% if cfg.network.ethernet.method != 'static' %}style="display:none"{% endif %}>
+        <label>IP-адрес <input type="text" name="ethernet_address" value="{{ cfg.network.ethernet.address }}"></label>
+        <label>Маска <input type="text" name="ethernet_netmask" value="{{ cfg.network.ethernet.netmask }}"></label>
+        <label>Шлюз <input type="text" name="ethernet_gateway" value="{{ cfg.network.ethernet.gateway }}"></label>
+        <label>DNS (через запятую) <input type="text" name="ethernet_dns" value="{{ cfg.network.ethernet.dns | join(', ') }}"></label>
+    </div>
 
     <h2>Wi-Fi</h2>
     <label class="checkbox">
-        <input type="checkbox" name="wifi_enabled" {% if cfg.network.wifi.enabled %}checked{% endif %}> Включить Wi-Fi
+        <input type="checkbox" name="wifi_enabled" id="wifi_enabled" {% if cfg.network.wifi.enabled %}checked{% endif %}> Включить Wi-Fi
         <input type="hidden" name="wifi_enabled" value="off">
     </label>
-    <label>Интерфейс <input type="text" name="wifi_interface" value="{{ cfg.network.wifi.interface }}" readonly class="readonly"></label>
-    <label>SSID <input type="text" name="wifi_ssid" value="{{ cfg.network.wifi.ssid }}"></label>
-    <label>Пароль <input type="password" name="wifi_password" value="{{ cfg.network.wifi.password }}"></label>
-    <label>Метод
-        <select name="wifi_method">
-            <option value="dhcp" {% if cfg.network.wifi.method == 'dhcp' %}selected{% endif %}>DHCP</option>
-            <option value="static" {% if cfg.network.wifi.method == 'static' %}selected{% endif %}>Static</option>
-        </select>
-    </label>
-    <label>IP-адрес <input type="text" name="wifi_address" value="{{ cfg.network.wifi.address }}"></label>
-    <label>Маска <input type="text" name="wifi_netmask" value="{{ cfg.network.wifi.netmask }}"></label>
-    <label>Шлюз <input type="text" name="wifi_gateway" value="{{ cfg.network.wifi.gateway }}"></label>
-    <label>DNS (через запятую) <input type="text" name="wifi_dns" value="{{ cfg.network.wifi.dns | join(', ') }}"></label>
+    <div id="wifi_settings" {% if not cfg.network.wifi.enabled %}style="display:none"{% endif %}>
+        <label>Интерфейс <input type="text" name="wifi_interface" value="{{ cfg.network.wifi.interface }}" readonly class="readonly"></label>
+        <label>SSID <input type="text" name="wifi_ssid" value="{{ cfg.network.wifi.ssid }}"></label>
+        <label>Пароль <input type="password" name="wifi_password" value="{{ cfg.network.wifi.password }}"></label>
+        <label>Метод
+            <select name="wifi_method" id="wifi_method" onchange="toggleStaticFields('wifi')">
+                <option value="dhcp" {% if cfg.network.wifi.method == 'dhcp' %}selected{% endif %}>DHCP</option>
+                <option value="static" {% if cfg.network.wifi.method == 'static' %}selected{% endif %}>Static</option>
+            </select>
+        </label>
+        <div id="wifi_static" class="static-fields" {% if cfg.network.wifi.method != 'static' %}style="display:none"{% endif %}>
+            <label>IP-адрес <input type="text" name="wifi_address" value="{{ cfg.network.wifi.address }}"></label>
+            <label>Маска <input type="text" name="wifi_netmask" value="{{ cfg.network.wifi.netmask }}"></label>
+            <label>Шлюз <input type="text" name="wifi_gateway" value="{{ cfg.network.wifi.gateway }}"></label>
+            <label>DNS (через запятую) <input type="text" name="wifi_dns" value="{{ cfg.network.wifi.dns | join(', ') }}"></label>
+        </div>
+    </div>
 
     <div class="actions">
         <button type="submit">Сохранить</button>
@@ -85,4 +91,27 @@
 <form method="post" action="{{ url_for('network_apply') }}" class="inline-form">
     <button type="submit" class="danger">Применить к системе</button>
 </form>
+
+<script>
+function toggleStaticFields(prefix) {
+    var method = document.getElementById(prefix + '_method');
+    var staticDiv = document.getElementById(prefix + '_static');
+    if (method && staticDiv) {
+        staticDiv.style.display = (method.value === 'static') ? '' : 'none';
+    }
+}
+
+// Показ/скрытие настроек Wi-Fi при включении/выключении чекбокса
+document.addEventListener('DOMContentLoaded', function() {
+    var wifiCheckbox = document.getElementById('wifi_enabled');
+    if (wifiCheckbox) {
+        wifiCheckbox.addEventListener('change', function() {
+            var settings = document.getElementById('wifi_settings');
+            if (settings) {
+                settings.style.display = wifiCheckbox.checked ? '' : 'none';
+            }
+        });
+    }
+});
+</script>
 {% endblock %}
