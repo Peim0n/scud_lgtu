@@ -62,19 +62,19 @@
         {% set _ = backend_filtered.update({key: value}) %}
     {% endfor %}
     {{ render_section('', {'device': merged.device, 'access': merged.access, 'qr_decoder': merged.qr_decoder, 'backend': backend_filtered}) }}
+    <div class="actions">
+        <button type="submit">Сохранить</button>
+    </div>
 </form>
 
 <section>
-    <h2>Применение настроек</h2>    
+    <h2>Применение настроек</h2>
     <p class="field-description">
         «Сохранить» — записывает значения в object_config.yml.
         «Применить настройки» — перезапускает сервис контроллера,
         чтобы изменения вступили в силу.
     </p>
     <form method="post" action="{{ url_for('restart_service') }}">
-        <div class="actions">
-            <button type="submit">Сохранить</button>
-        </div>
         <div class="actions">
             <button type="submit" class="danger">Применить настройки</button>
         </div>
