@@ -138,6 +138,7 @@ def test_network_apply_reports_result(monkeypatch, client):
             "get_hostname": lambda self: "h",
             "get_timezone": lambda self: "UTC",
             "list_interfaces": lambda self: [],
+            "get_ntp_status": lambda self: {"ok": False, "message": "no ntp"},
             "detect_ethernet_interface": lambda self: "end0",
             "detect_wifi_interface": lambda self: "wlan0",
             "apply": lambda self, cfg: {"ok": True, "hostname": {"ok": True}},

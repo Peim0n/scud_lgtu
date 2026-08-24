@@ -29,6 +29,16 @@
             {% endfor %}
         </tbody>
     </table>
+    {% if current.ntp and current.ntp.ok %}
+    <table>
+        <tr><th>NTP</th><td>
+            {% set ntp = current.ntp.status %}
+            Синхронизация: {% if ntp.NTPSynchronized == 'yes' %}✓ да{% else %}✗ нет{% endif %}
+            {% if ntp.ServerName %}<br>Сервер: {{ ntp.ServerName }}{% endif %}
+            {% if ntp.ServerAddress %}<br>Адрес: {{ ntp.ServerAddress }}{% endif %}
+        </td></tr>
+    </table>
+    {% endif %}
 </section>
 
 <form method="post" action="{{ url_for('network_save') }}">

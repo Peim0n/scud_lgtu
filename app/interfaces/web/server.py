@@ -133,6 +133,7 @@ def network_page() -> str:
         "hostname": nm.get_hostname(),
         "timezone": nm.get_timezone(),
         "interfaces": nm.list_interfaces(),
+        "ntp": nm.get_ntp_status(),
     }
     # Всегда берём реальные имена интерфейсов из системы — поле readonly
     detected_eth = nm.detect_ethernet_interface()
