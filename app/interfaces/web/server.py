@@ -105,6 +105,7 @@ def _register_routes(app: Flask) -> None:
     app.route("/cert/import", methods=["POST"])(require_auth(cert_import))
     app.route("/cert/rotate", methods=["POST"])(require_auth(cert_rotate))
     app.route("/cert/reset", methods=["POST"])(require_auth(cert_reset))
+    app.route("/cert/exchange", methods=["POST"])(require_auth(cert_exchange))
     app.route("/restart-service", methods=["POST"])(require_auth(restart_service))
 
 
@@ -338,6 +339,20 @@ def cert_reset() -> Any:
         flash(f"Удалены: {', '.join(removed)}. Сертификаты сброшены.", "success")
     else:
         flash("Сертификатов не найдено — нечего удалять.", "info")
+    return redirect(url_for("cert_page"))
+
+
+def cert_exchange() -> Any:
+    """Обменять первичный сертификат на рабочий через бэкенд (без KMS)."""
+    from app.interfaces.cli import cmd_cert_bootstrap as do_bootstrap
+    cfg_path = _config_path(current_app)
+    result = do_bootstrap(cfg_path)
+    if "error" in result:
+        flash(f"Ошибка: {result['error']}", "error")
+    else:
+        fp = result.get("fingerprint_sha256", "")
+        fp_short = fp[:16] if fp else ""
+        flash(f"Рабочий сертификат получен. Fingerprint: {fp_short}…", "success")
     return redirect(url_for("cert_page"))
 
 

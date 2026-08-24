@@ -97,12 +97,11 @@
 </section>
 
 <section>
-    <h2>Загрузить файл вручную</h2>
+    <h2>Загрузить первичный сертификат вручную</h2>
     <p>
         Загрузить первичный сертификат и приватный ключ в формате PEM.
         Альтернатива получению через KMS — если KMS недоступен или
-        сертификат выдан вручную. После загрузки нажмите
-        «Получить сертификат через KMS» для обмена на рабочий.
+        сертификат выдан вручную. После загрузки нажмите «Обменять на рабочий».
     </p>
     <form method="post" action="{{ url_for('cert_import') }}" enctype="multipart/form-data">
         <label>Файл сертификата (.pem) <input type="file" name="cert_file" accept=".pem,.crt,.txt"></label>
@@ -111,6 +110,12 @@
             <button type="submit">Загрузить</button>
         </div>
     </form>
+    {% if status.has_initial_certificate and not status.has_working_certificate %}
+    <form method="post" action="{{ url_for('cert_exchange') }}" class="inline-form">
+        <p class="field-description">Первичный сертификат загружен. Обменять его на рабочий через бэкенд.</p>
+        <button type="submit">Обменять на рабочий</button>
+    </form>
+    {% endif %}
 </section>
 
 {% if status.has_working_certificate %}
