@@ -148,6 +148,9 @@ class RestClient:
             )
             self._session = requests.Session()
             self._session.mount("https://", adapter_cls())
+            # Не используем прокси из env — бэкенд доступен напрямую,
+            # а прокси может возвращать 403 на CONNECT к нестандартным портам.
+            self._session.trust_env = False
             if client_cert is not None:
                 self._session.cert = client_cert
             if ca_bundle is not None:
@@ -244,8 +247,9 @@ class RestClient:
 
         if status_code != 200:
             description = data.get("description", "") if isinstance(data, dict) else ""
+            body_preview = getattr(response, "text", "")[:200]
             raise BackendApiError(
-                f"{resource}/{action}: HTTP {status_code}",
+                f"{resource}/{action}: HTTP {status_code} — {description or body_preview}",
                 http_status=status_code,
                 description=description,
             )

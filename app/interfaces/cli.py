@@ -88,8 +88,14 @@ def cmd_cert_bootstrap(config_path: str | None) -> dict[str, Any]:
     _backend, cert_manager = build_backend_client(config_path, ensure_bootstrap=False)
     if cert_manager is None:
         return {"error": _NOT_CONFIGURED_ERROR}
-    cert_manager.ensure_bootstrapped()
-    return cert_manager.get_status()
+    try:
+        cert_manager.ensure_bootstrapped()
+    except Exception as exc:
+        return {"error": f"ошибка при обмене сертификата: {exc}"}
+    status = cert_manager.get_status()
+    if not status.get("has_working_certificate"):
+        return {"error": "не удалось получить рабочий сертификат — проверьте доступность KMS/бэкенда и логи"}
+    return status
 
 
 def cmd_cert_rotate(config_path: str | None, force: bool) -> dict[str, Any]:
