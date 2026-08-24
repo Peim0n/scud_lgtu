@@ -61,6 +61,10 @@
     {% for key, value in merged.backend.items() if key != 'cert' %}
         {% set _ = backend_filtered.update({key: value}) %}
     {% endfor %}
+    {# Включаем только subject из cert, остальное скрыто #}
+    {% if merged.backend.cert and merged.backend.cert.subject %}
+        {% set _ = backend_filtered.update({'cert': {'subject': merged.backend.cert.subject}}) %}
+    {% endif %}
     {{ render_section('', {'device': merged.device, 'access': merged.access, 'qr_decoder': merged.qr_decoder, 'backend': backend_filtered}) }}
     <div class="actions">
         <button type="submit">Сохранить</button>

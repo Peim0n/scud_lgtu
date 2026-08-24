@@ -211,8 +211,8 @@ def backend_save() -> Any:
     for dotted_path, raw_value in request.form.items():
         if not obj_cfg.is_editable_path(dotted_path):
             continue
-        # backend.cert.* — пути к сертификатам, не редактируется через веб
-        if dotted_path.startswith("backend.cert."):
+        # backend.cert.* — не редактируется, КРОМЕ backend.cert.subject.*
+        if dotted_path.startswith("backend.cert.") and not dotted_path.startswith("backend.cert.subject."):
             continue
         # Скрытые инфраструктурные поля
         if dotted_path in HIDDEN_FIELDS:

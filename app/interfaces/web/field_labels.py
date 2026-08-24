@@ -31,6 +31,13 @@ LABELS: dict[str, str] = {
     "backend.tcp_keepalive_probes": "TCP keepalive: количество проб",
     "backend.tcp_keepalive_intvl_s": "TCP keepalive: интервал между пробами (сек)",
 
+    # ── backend.cert.subject ──
+    "backend.cert": "Сертификат",
+    "backend.cert.subject": "Subject клиентского сертификата",
+    "backend.cert.subject.organization": "Организация (O)",
+    "backend.cert.subject.organizational_units": "Подразделения (OU, по одному на строку)",
+    "backend.cert.subject.common_name": "Общее имя (CN)",
+
     # ── web ──
     "web": "Веб-интерфейс",
     "web.enabled": "Включён",
@@ -98,6 +105,12 @@ DESCRIPTIONS: dict[str, str] = {
 HIDDEN_FIELDS: set[str] = {
     "backend.ca_bundle",
     "backend.network_interface",
+    "backend.cert.cert_dir",
+    "backend.cert.initial_cert_path",
+    "backend.cert.initial_key_path",
+    "backend.cert.rotation_threshold_fraction",
+    "backend.cert.rotation_retry_interval_days",
+    "backend.cert.rsa_key_size",
 }
 
 
