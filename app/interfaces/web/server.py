@@ -107,6 +107,7 @@ def _register_routes(app: Flask) -> None:
     app.route("/cert/reset", methods=["POST"])(require_auth(cert_reset))
     app.route("/cert/exchange", methods=["POST"])(require_auth(cert_exchange))
     app.route("/restart-service", methods=["POST"])(require_auth(restart_service))
+    app.route("/reboot", methods=["POST"])(require_auth(reboot_device))
 
 
 def index() -> str:
@@ -250,6 +251,25 @@ def restart_service() -> Any:
     return redirect(url_for("backend_page"))
 
 
+def reboot_device() -> Any:
+    """Перезагрузить устройство (systemctl reboot)."""
+    import subprocess
+    # Проверка пароля — дополнительная защита от случайного ребута
+    password = request.form.get("reboot_password", "")
+    cfg_path = _config_path(current_app)
+    creds = load_auth(cfg_path)
+    if not check_auth(creds["username"], password, cfg_path):
+        flash("Неверный пароль. Перезагрузка отменена.", "error")
+        return redirect(url_for("index"))
+    try:
+        # Запускаем reboot в фоне — ответ успеет уйти клиенту
+        subprocess.Popen(["systemctl", "reboot"])
+        flash("Устройство перезагружается. Подождите ~1 минуту.", "success")
+    except Exception as exc:
+        flash(f"Ошибка перезагрузки: {exc}", "error")
+    return redirect(url_for("index"))
+
+
 # ---------------------------------------------------------------------------
 # Cert: управление mTLS-сертификатом (KMS или загрузка файла)
 # ---------------------------------------------------------------------------
@@ -387,11 +407,15 @@ def auth_save() -> Any:
     """Сохранить новые логин/пароль."""
     cfg_path = _config_path(current_app)
     username = request.form.get("username", "").strip()
+    old_password = request.form.get("old_password", "")
     new_password = request.form.get("new_password", "")
     confirm_password = request.form.get("confirm_password", "")
 
     if not username:
         flash("Логин не может быть пустым.", "error")
+        return redirect(url_for("auth_page"))
+    if not check_auth(load_auth(cfg_path)["username"], old_password, cfg_path):
+        flash("Неверный текущий пароль.", "error")
         return redirect(url_for("auth_page"))
     if not new_password:
         flash("Пароль не может быть пустым.", "error")

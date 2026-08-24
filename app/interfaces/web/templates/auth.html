@@ -7,8 +7,9 @@
 
 <form method="post" action="{{ url_for('auth_save') }}">
     <label>Логин <input type="text" name="username" value="{{ username }}"></label>
-    <label>Новый пароль <input type="password" name="new_password"></label>
-    <label>Подтвердите пароль <input type="password" name="confirm_password"></label>
+    <label>Текущий пароль <input type="password" name="old_password" required></label>
+    <label>Новый пароль <input type="password" name="new_password" required></label>
+    <label>Подтвердите пароль <input type="password" name="confirm_password" required></label>
     <div class="actions">
         <button type="submit">Сохранить</button>
     </div>

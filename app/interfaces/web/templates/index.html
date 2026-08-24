@@ -38,4 +38,27 @@
         <tr><th>User-Agent</th><td>{{ status.backend.user_agent }}</td></tr>
     </table>
 </section>
+
+<section>
+    <h2>Управление устройством</h2>
+    <p>
+        Перезагрузка контроллера. Требует подтверждения паролем.
+        После перезагрузки веб-интерфейс будет недоступен ~1 минуту.
+    </p>
+    <form method="post" action="{{ url_for('reboot_device') }}"
+          onsubmit="return confirmReboot()">
+        <label>Пароль для подтверждения
+            <input type="password" name="reboot_password" required>
+        </label>
+        <div class="actions">
+            <button type="submit" class="danger">Перезагрузить устройство</button>
+        </div>
+    </form>
+</section>
+
+<script>
+function confirmReboot() {
+    return confirm('Точно перезагрузить устройство? Веб-интерфейс будет недоступен ~1 минуту.');
+}
+</script>
 {% endblock %}

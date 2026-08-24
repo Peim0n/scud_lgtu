@@ -185,7 +185,7 @@ def test_auth_save_changes_credentials(client):
     resp = client.post(
         "/auth/save",
         headers=_auth_header(),
-        data={"username": "newadmin", "new_password": "secret123", "confirm_password": "secret123"},
+        data={"username": "newadmin", "old_password": "admin", "new_password": "secret123", "confirm_password": "secret123"},
     )
     assert resp.status_code == 302
 
@@ -203,11 +203,22 @@ def test_auth_save_rejects_mismatched_passwords(client):
     resp = client.post(
         "/auth/save",
         headers=_auth_header(),
-        data={"username": "admin", "new_password": "pass1", "confirm_password": "pass2"},
+        data={"username": "admin", "old_password": "admin", "new_password": "pass1", "confirm_password": "pass2"},
         follow_redirects=True,
     )
     assert resp.status_code == 200
     assert "Пароли не совпадают".encode() in resp.data
+
+
+def test_auth_save_rejects_wrong_old_password(client):
+    resp = client.post(
+        "/auth/save",
+        headers=_auth_header(),
+        data={"username": "admin", "old_password": "wrong", "new_password": "pass1", "confirm_password": "pass1"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "Неверный текущий пароль".encode() in resp.data
 
 
 def test_cert_page_renders(client, monkeypatch):
