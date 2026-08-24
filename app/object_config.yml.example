@@ -1,0 +1,27 @@
+# Пример объектного конфига (переопределения поверх config.yml).
+# Скопируйте в object_config.yml и отредактируйте под конкретный контроллер.
+# Этот файл НЕ отслеживается git — он создаётся на каждом контроллере
+# через веб-интерфейс или CLI (settings set).
+
+backend:
+  base_url: "https://controller-skud-dev.admlr.lipetsk.ru:8448"
+  kms_url: "https://kms-scud-dev.admlr.lipetsk.ru"
+  ca_bundle: null
+  access_point_id: 2
+  verify_hostname: false
+  user_agent: "LGTU-SCUD-Controller/1.0"
+  request_timeout_s: 10.0
+
+qr_decoder:
+  base_url: "https://pass.lipetsk.ru/?"
+
+access:
+  static_key: "00112233445566778899aabbccddeeff"
+
+device:
+  type: "turnstile"
+
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 443
