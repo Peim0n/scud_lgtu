@@ -86,12 +86,14 @@ def test_sync_respects_interval():
     assert backend.calls == 1
 
 
-def test_sync_skipped_when_backend_offline():
+def test_sync_works_even_when_backend_offline_flag():
+    """KeySyncService всегда пытается получить ключи — is_online() может
+    быть False до первого успешного вызова, но ключи нужны с самого старта."""
     decoder = FakeQRDecoder()
     backend = FakeBackend([_make_key_entry(1)], online=False)
     service = KeySyncService(backend, qr_decoder=decoder, sync_interval_s=86400)
 
     service.tick(now=1000.0)
 
-    assert backend.calls == 0
-    assert len(decoder.keys) == 0
+    assert backend.calls == 1
+    assert 1 in decoder.keys

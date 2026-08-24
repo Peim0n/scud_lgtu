@@ -60,8 +60,6 @@ class KeySyncService:
         self._last_sync = float("-inf")
 
     def _sync(self) -> None:
-        if not self._backend.is_online():
-            return
         try:
             keys = self._backend.get_keys()
         except Exception:
