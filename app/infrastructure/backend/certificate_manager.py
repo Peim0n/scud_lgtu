@@ -364,7 +364,18 @@ class CertificateManager:
 
     def _exchange_and_activate(self) -> None:
         """Сгенерировать пару ключей+CSR, обменять на подписанный сертификат, активировать."""
-        private_key_pem, csr_pem = self._generate_keypair_and_csr()
+        # При первичном обмене (используется первичный сертификат) Subject CSR
+        # должен совпадать с Subject первичного сертификата — бэкенд проверяет это.
+        # При ротации (используется рабочий сертификат) Subject берётся из конфига.
+        use_initial_subject = (
+            self._initial_cert_path
+            and os.path.exists(self._initial_cert_path)
+            and not self.has_working_certificate
+        )
+        if use_initial_subject:
+            private_key_pem, csr_pem = self._generate_keypair_and_csr_from_initial()
+        else:
+            private_key_pem, csr_pem = self._generate_keypair_and_csr()
 
         # Запрос выполняется ДО какой-либо записи на working_cert/working_key —
         # если сейчас идёт ротация, аутентификация этого запроса использует
@@ -415,6 +426,49 @@ class CertificateManager:
             .subject_name(x509.Name(name_attrs))
             .sign(private_key, hashes.SHA256())
         )
+
+        private_key_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode("utf-8")
+        csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode("utf-8")
+        return private_key_pem, csr_pem
+
+    def _generate_keypair_and_csr_from_initial(self) -> tuple[str, str]:
+        """Сгенерировать ключ+CSR с Subject из первичного сертификата.
+
+        Бэкенд проверяет, что Subject CSR совпадает с Subject предъявленного
+        клиентского сертификата. При первичном обмене используется первичный
+        сертификат от KMS — значит и CSR должен иметь тот же Subject.
+        Если прочитать сертификат не удалось — fallback на Subject из конфига.
+        """
+        subject = None
+        try:
+            with open(self._initial_cert_path, "rb") as f:
+                initial_cert = x509.load_pem_x509_certificate(f.read())
+            subject = initial_cert.subject
+        except Exception:
+            logger.warning("CertificateManager: не удалось прочитать Subject из первичного сертификата — используем конфиг")
+
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=self._rsa_key_size)
+
+        if subject is not None:
+            csr = (
+                x509.CertificateSigningRequestBuilder()
+                .subject_name(subject)
+                .sign(private_key, hashes.SHA256())
+            )
+        else:
+            name_attrs = [x509.NameAttribute(NameOID.ORGANIZATION_NAME, self._subject.organization)]
+            for ou in self._subject.organizational_units:
+                name_attrs.append(x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, ou))
+            name_attrs.append(x509.NameAttribute(NameOID.COMMON_NAME, self._subject.common_name))
+            csr = (
+                x509.CertificateSigningRequestBuilder()
+                .subject_name(x509.Name(name_attrs))
+                .sign(private_key, hashes.SHA256())
+            )
 
         private_key_pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
