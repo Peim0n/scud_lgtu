@@ -21,7 +21,10 @@ _EDITABLE_TOP_KEYS = {"access", "qr_decoder", "backend", "device", "web"}
 
 
 def _object_config_path(config_path: str) -> str:
-    """Путь к object_config.yml в той же директории, что и config.yml."""
+    """Путь к object_config.yml: /etc/scud_lgtu/ на проде, рядом с config.yml — в dev."""
+    runtime_dir = "/etc/scud_lgtu"
+    if os.path.isdir(runtime_dir):
+        return os.path.join(runtime_dir, "object_config.yml")
     return os.path.join(os.path.dirname(os.path.abspath(config_path)), "object_config.yml")
 
 
