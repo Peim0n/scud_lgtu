@@ -520,6 +520,9 @@ class CertificateManager:
                 session = self._kms_session
             elif _REQUESTS_AVAILABLE:
                 session = _requests_lib.Session()
+                # Не используем прокси из env — KMS доступен напрямую,
+                # а прокси может сбрасывать соединение.
+                session.trust_env = False
                 if self._ca_bundle is not None:
                     session.verify = self._ca_bundle
             else:
