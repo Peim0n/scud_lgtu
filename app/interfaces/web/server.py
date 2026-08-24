@@ -462,9 +462,14 @@ def main(argv: list[str] | None = None) -> None:
     elif args.cert is None and args.key is None:
         # Авто: ищем сертификат в стандартном месте
         import os
-        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        cert = os.path.join(base, "infrastructure", "certs", "web", "cert.pem")
-        key = os.path.join(base, "infrastructure", "certs", "web", "key.pem")
+        # base_dir — каталог, где лежит config.yml (обычно app/)
+        config_path = args.config or os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "config.yml",
+        )
+        base_dir = os.path.dirname(os.path.abspath(config_path))
+        cert = os.path.join(base_dir, "infrastructure", "certs", "web", "cert.pem")
+        key = os.path.join(base_dir, "infrastructure", "certs", "web", "key.pem")
         if os.path.exists(cert) and os.path.exists(key):
             ssl_context = (cert, key)
 
