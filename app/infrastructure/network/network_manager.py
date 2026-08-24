@@ -20,6 +20,14 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _prefix_to_netmask(prefixlen: int) -> str:
+    """Преобразовать длину префикса (например, 24) в маску (например, 255.255.255.0)."""
+    if prefixlen <= 0 or prefixlen > 32:
+        return ""
+    mask = (0xFFFFFFFF << (32 - prefixlen)) & 0xFFFFFFFF
+    return f"{(mask >> 24) & 0xFF}.{(mask >> 16) & 0xFF}.{(mask >> 8) & 0xFF}.{mask & 0xFF}"
+
+
 def _run(
     cmd: list[str] | str,
     *,
@@ -98,24 +106,55 @@ class NetworkManagerAdapter:
         return {"ok": True, "status": status}
 
     def list_interfaces(self) -> list[dict[str, Any]]:
-        """Вернуть список сетевых интерфейсов с адресами."""
+        """Вернуть список сетевых интерфейсов с адресами, шлюзом, DNS."""
         rc, out, _ = _run(["ip", "-json", "addr", "show"])
         if rc == 0 and out:
             try:
                 data = json.loads(out)
-                return [
-                    {
-                        "name": iface.get("ifname"),
+                # Шлюзы через ip -json route
+                gateways: dict[str, str] = {}
+                rc2, rout, _ = _run(["ip", "-json", "route", "show"])
+                if rc2 == 0 and rout:
+                    try:
+                        for r in json.loads(rout):
+                            if isinstance(r, dict) and r.get("gateway"):
+                                dev = r.get("dev", "")
+                                if dev and dev not in gateways:
+                                    gateways[dev] = r["gateway"]
+                    except json.JSONDecodeError:
+                        pass
+                # DNS через /etc/resolv.conf
+                dns_servers: list[str] = []
+                try:
+                    with open("/etc/resolv.conf", "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith("nameserver "):
+                                dns_servers.append(line.split()[1])
+                except OSError:
+                    pass
+
+                result = []
+                for iface in data:
+                    if not isinstance(iface, dict):
+                        continue
+                    name = iface.get("ifname", "")
+                    addr_info = [
+                        addr for addr in iface.get("addr_info", [])
+                        if addr.get("family") == "inet"
+                    ]
+                    # Берём первый IPv4-адрес
+                    primary = addr_info[0] if addr_info else {}
+                    result.append({
+                        "name": name,
                         "state": iface.get("operstate"),
-                        "addresses": [
-                            addr.get("local")
-                            for addr in iface.get("addr_info", [])
-                            if addr.get("family") == "inet"
-                        ],
-                    }
-                    for iface in data
-                    if isinstance(iface, dict)
-                ]
+                        "addresses": [a.get("local") for a in addr_info],
+                        "address": primary.get("local", ""),
+                        "netmask": _prefix_to_netmask(primary.get("prefixlen", 0)),
+                        "gateway": gateways.get(name, ""),
+                        "dns": dns_servers,
+                    })
+                return result
             except json.JSONDecodeError:
                 pass
 

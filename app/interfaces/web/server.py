@@ -146,8 +146,17 @@ def network_page() -> str:
         net_cfg["network"]["hostname"] = current["hostname"]
     if not net_cfg.get("network", {}).get("timezone") and current["timezone"]:
         net_cfg["network"]["timezone"] = current["timezone"]
+
+    # Текущие системные адреса для интерфейсов — показываем в серых полях при DHCP
+    iface_by_name = {i["name"]: i for i in current["interfaces"]}
+    eth_iface = iface_by_name.get(net_cfg["network"]["ethernet"]["interface"], {})
+    wifi_iface = iface_by_name.get(net_cfg["network"]["wifi"].get("interface", ""), {})
+
     available_timezones = _list_timezones()
-    return render_template("network.html", cfg=net_cfg, current=current, timezones=available_timezones)
+    return render_template(
+        "network.html", cfg=net_cfg, current=current, timezones=available_timezones,
+        eth_current=eth_iface, wifi_current=wifi_iface,
+    )
 
 
 def network_save() -> Any:

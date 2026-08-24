@@ -53,11 +53,27 @@
             <option value="static" {% if cfg.network.ethernet.method == 'static' %}selected{% endif %}>Static</option>
         </select>
     </label>
-    <div id="ethernet_static" class="static-fields" {% if cfg.network.ethernet.method != 'static' %}style="display:none"{% endif %}>
-        <label>IP-адрес <input type="text" name="ethernet_address" value="{{ cfg.network.ethernet.address }}"></label>
-        <label>Маска <input type="text" name="ethernet_netmask" value="{{ cfg.network.ethernet.netmask }}"></label>
-        <label>Шлюз <input type="text" name="ethernet_gateway" value="{{ cfg.network.ethernet.gateway }}"></label>
-        <label>DNS (через запятую) <input type="text" name="ethernet_dns" value="{{ cfg.network.ethernet.dns | join(', ') }}"></label>
+    <div id="ethernet_static_fields" class="static-fields">
+        <label>IP-адрес
+            <input type="text" name="ethernet_address"
+                   value="{% if cfg.network.ethernet.method == 'static' %}{{ cfg.network.ethernet.address }}{% else %}{{ eth_current.address or '' }}{% endif %}"
+                   {% if cfg.network.ethernet.method != 'static' %}disabled class="readonly"{% endif %}>
+        </label>
+        <label>Маска
+            <input type="text" name="ethernet_netmask"
+                   value="{% if cfg.network.ethernet.method == 'static' %}{{ cfg.network.ethernet.netmask }}{% else %}{{ eth_current.netmask or '' }}{% endif %}"
+                   {% if cfg.network.ethernet.method != 'static' %}disabled class="readonly"{% endif %}>
+        </label>
+        <label>Шлюз
+            <input type="text" name="ethernet_gateway"
+                   value="{% if cfg.network.ethernet.method == 'static' %}{{ cfg.network.ethernet.gateway }}{% else %}{{ eth_current.gateway or '' }}{% endif %}"
+                   {% if cfg.network.ethernet.method != 'static' %}disabled class="readonly"{% endif %}>
+        </label>
+        <label>DNS (через запятую)
+            <input type="text" name="ethernet_dns"
+                   value="{% if cfg.network.ethernet.method == 'static' %}{{ cfg.network.ethernet.dns | join(', ') }}{% else %}{{ eth_current.dns | join(', ') if eth_current.dns else '' }}{% endif %}"
+                   {% if cfg.network.ethernet.method != 'static' %}disabled class="readonly"{% endif %}>
+        </label>
     </div>
 
     <h2>Wi-Fi</h2>
@@ -75,11 +91,27 @@
                 <option value="static" {% if cfg.network.wifi.method == 'static' %}selected{% endif %}>Static</option>
             </select>
         </label>
-        <div id="wifi_static" class="static-fields" {% if cfg.network.wifi.method != 'static' %}style="display:none"{% endif %}>
-            <label>IP-адрес <input type="text" name="wifi_address" value="{{ cfg.network.wifi.address }}"></label>
-            <label>Маска <input type="text" name="wifi_netmask" value="{{ cfg.network.wifi.netmask }}"></label>
-            <label>Шлюз <input type="text" name="wifi_gateway" value="{{ cfg.network.wifi.gateway }}"></label>
-            <label>DNS (через запятую) <input type="text" name="wifi_dns" value="{{ cfg.network.wifi.dns | join(', ') }}"></label>
+        <div id="wifi_static_fields" class="static-fields">
+            <label>IP-адрес
+                <input type="text" name="wifi_address"
+                       value="{% if cfg.network.wifi.method == 'static' %}{{ cfg.network.wifi.address }}{% else %}{{ wifi_current.address or '' }}{% endif %}"
+                       {% if cfg.network.wifi.method != 'static' %}disabled class="readonly"{% endif %}>
+            </label>
+            <label>Маска
+                <input type="text" name="wifi_netmask"
+                       value="{% if cfg.network.wifi.method == 'static' %}{{ cfg.network.wifi.netmask }}{% else %}{{ wifi_current.netmask or '' }}{% endif %}"
+                       {% if cfg.network.wifi.method != 'static' %}disabled class="readonly"{% endif %}>
+            </label>
+            <label>Шлюз
+                <input type="text" name="wifi_gateway"
+                       value="{% if cfg.network.wifi.method == 'static' %}{{ cfg.network.wifi.gateway }}{% else %}{{ wifi_current.gateway or '' }}{% endif %}"
+                       {% if cfg.network.wifi.method != 'static' %}disabled class="readonly"{% endif %}>
+            </label>
+            <label>DNS (через запятую)
+                <input type="text" name="wifi_dns"
+                       value="{% if cfg.network.wifi.method == 'static' %}{{ cfg.network.wifi.dns | join(', ') }}{% else %}{{ wifi_current.dns | join(', ') if wifi_current.dns else '' }}{% endif %}"
+                       {% if cfg.network.wifi.method != 'static' %}disabled class="readonly"{% endif %}>
+            </label>
         </div>
     </div>
 
@@ -93,12 +125,58 @@
 </form>
 
 <script>
+// Текущие системные значения для подстановки при переключении на DHCP
+var ethCurrent = {
+    address: "{{ eth_current.address or '' }}",
+    netmask: "{{ eth_current.netmask or '' }}",
+    gateway: "{{ eth_current.gateway or '' }}",
+    dns: "{{ eth_current.dns | join(', ') if eth_current.dns else '' }}"
+};
+var wifiCurrent = {
+    address: "{{ wifi_current.address or '' }}",
+    netmask: "{{ wifi_current.netmask or '' }}",
+    gateway: "{{ wifi_current.gateway or '' }}",
+    dns: "{{ wifi_current.dns | join(', ') if wifi_current.dns else '' }}"
+};
+// Сохранённые статические значения из конфига
+var ethSaved = {
+    address: "{{ cfg.network.ethernet.address or '' }}",
+    netmask: "{{ cfg.network.ethernet.netmask or '' }}",
+    gateway: "{{ cfg.network.ethernet.gateway or '' }}",
+    dns: "{{ cfg.network.ethernet.dns | join(', ') }}"
+};
+var wifiSaved = {
+    address: "{{ cfg.network.wifi.address or '' }}",
+    netmask: "{{ cfg.network.wifi.netmask or '' }}",
+    gateway: "{{ cfg.network.wifi.gateway or '' }}",
+    dns: "{{ cfg.network.wifi.dns | join(', ') }}"
+};
+
 function toggleStaticFields(prefix) {
     var method = document.getElementById(prefix + '_method');
-    var staticDiv = document.getElementById(prefix + '_static');
-    if (method && staticDiv) {
-        staticDiv.style.display = (method.value === 'static') ? '' : 'none';
-    }
+    var fieldsDiv = document.getElementById(prefix + '_static_fields');
+    if (!method || !fieldsDiv) return;
+
+    var isStatic = (method.value === 'static');
+    var inputs = fieldsDiv.querySelectorAll('input');
+    var saved = (prefix === 'ethernet') ? ethSaved : wifiSaved;
+    var current = (prefix === 'ethernet') ? ethCurrent : wifiCurrent;
+    var fieldNames = ['address', 'netmask', 'gateway', 'dns'];
+
+    inputs.forEach(function(inp) {
+        var fieldName = inp.name.replace(prefix + '_', '');
+        if (isStatic) {
+            // Static: поле редактируемое, значения из конфига
+            inp.disabled = false;
+            inp.classList.remove('readonly');
+            inp.value = saved[fieldName] || '';
+        } else {
+            // DHCP: поле серое, значения из системы
+            inp.disabled = true;
+            inp.classList.add('readonly');
+            inp.value = current[fieldName] || '';
+        }
+    });
 }
 
 // Показ/скрытие настроек Wi-Fi при включении/выключении чекбокса
