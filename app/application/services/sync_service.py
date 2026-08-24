@@ -69,8 +69,8 @@ class SyncService:
         """
         try:
             last_confirmed = self._backend.get_last_event()
-        except Exception:  # noqa: BLE001
-            logger.warning("SyncService: не удалось сверить event_id с бэкендом, попробуем на следующем цикле")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("SyncService: не удалось сверить event_id с бэкендом (%s), попробуем на следующем цикле", exc)
             return
 
         self._events_reconciled = True
