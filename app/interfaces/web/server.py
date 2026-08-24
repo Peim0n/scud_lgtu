@@ -449,11 +449,26 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--host", default="0.0.0.0", help="Хост для прослушивания")
     parser.add_argument("--port", type=int, default=8080, help="Порт")
     parser.add_argument("--debug", action="store_true", help="Режим отладки Flask")
+    parser.add_argument("--cert", help="Путь к SSL-сертификату (PEM)")
+    parser.add_argument("--key", help="Путь к SSL-ключу (PEM)")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO)
     app = create_app(args.config)
-    app.run(host=args.host, port=args.port, debug=args.debug)
+
+    ssl_context = None
+    if args.cert and args.key:
+        ssl_context = (args.cert, args.key)
+    elif args.cert is None and args.key is None:
+        # Авто: ищем сертификат в стандартном месте
+        import os
+        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        cert = os.path.join(base, "infrastructure", "certs", "web", "cert.pem")
+        key = os.path.join(base, "infrastructure", "certs", "web", "key.pem")
+        if os.path.exists(cert) and os.path.exists(key):
+            ssl_context = (cert, key)
+
+    app.run(host=args.host, port=args.port, debug=args.debug, ssl_context=ssl_context)
 
 
 if __name__ == "__main__":
