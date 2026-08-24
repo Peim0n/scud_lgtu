@@ -526,16 +526,10 @@ class LGTUApplication:
                 return event
             return None
         elif event_type == "serial_data":
-            # Считыватель QR сам расшифровывает код и присылает готовый max_id
-            # (и возможно другие поля). Данные приходят как строка — используем
-            # напрямую как credential value.
+            # Обработка данных из serial порта (QR-код)
             data = scud_event.payload.get("data", "")
             if data:
-                credential = Credential(
-                    token_type=TokenTypeEnum.MAXID,
-                    value=str(data).strip(),
-                    encrypted=False
-                )
+                credential = self._decode_qr_credential(data)
 
                 reader = scud_event.payload.get("reader", "unknown")
                 reader_id = self._get_reader_id(reader)
