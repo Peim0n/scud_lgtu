@@ -121,9 +121,6 @@ class SyncService:
 
     def _sync_access_list(self) -> None:
         """Обновить локальный список доступа (§5.4.3)."""
-        if not self._backend.is_online():
-            return
-
         update_flag = 0 if self._force_full_update else 1
         try:
             response = self._backend.get_access_list(update=update_flag)
