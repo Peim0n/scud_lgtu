@@ -269,6 +269,33 @@ def cmd_web(
     if os.path.exists(cert) and os.path.exists(key):
         ssl_context = (cert, key)
 
+    # Если HTTPS включён — запускаем простейший HTTP→HTTPS редирект на порту 80
+    # в отдельном потоке (тот же процесс, ~0 доп. памяти).
+    if ssl_context and actual_port == 443:
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        class _RedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                host = self.headers.get("Host", "").split(":")[0]
+                self.send_response(301)
+                self.send_header("Location", f"https://{host}{self.path}")
+                self.end_headers()
+
+            def do_POST(self):
+                self.do_GET()
+
+            def log_message(self, *args):
+                pass  # тишина в логах
+
+        try:
+            redirect_server = HTTPServer((actual_host, 80), _RedirectHandler)
+            t = threading.Thread(target=redirect_server.serve_forever, daemon=True)
+            t.start()
+            logging.info("HTTP→HTTPS редирект запущен на порту 80")
+        except OSError:
+            logging.warning("Не удалось запустить HTTP-редирект на порту 80 (порт занят?)")
+
     app.run(host=actual_host, port=actual_port, debug=debug, ssl_context=ssl_context)
     return 0
 
