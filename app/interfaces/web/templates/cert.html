@@ -136,6 +136,7 @@
 </section>
 {% endif %}
 
+{% if status.has_working_certificate or status.has_initial_certificate %}
 <section>
     <h2>Сброс сертификатов</h2>
     <p>
@@ -150,4 +151,5 @@
         </div>
     </form>
 </section>
+{% endif %}
 {% endblock %}
