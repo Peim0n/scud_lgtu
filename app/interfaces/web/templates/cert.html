@@ -40,14 +40,26 @@
                 </tr>
                 {% if status.fingerprint_sha256 %}
                 <tr>
-                    <th>Fingerprint (SHA-256)</th>
-                    <td><code>{{ status.fingerprint_sha256[:32] }}…</code></td>
+                    <th>Отпечаток (SHA-256)</th>
+                    <td><code style="word-break: break-all;">{{ status.fingerprint_sha256 }}</code></td>
                 </tr>
                 {% endif %}
                 {% if status.subject %}
                 <tr>
-                    <th>Subject</th>
-                    <td><code>{{ status.subject }}</code></td>
+                    <th>Владелец</th>
+                    <td><code style="word-break: break-all;">{{ status.subject }}</code></td>
+                </tr>
+                {% endif %}
+                {% if status.issuer %}
+                <tr>
+                    <th>Кем выдан</th>
+                    <td><code style="word-break: break-all;">{{ status.issuer }}</code></td>
+                </tr>
+                {% endif %}
+                {% if status.serial_number %}
+                <tr>
+                    <th>Серийный номер</th>
+                    <td><code>{{ status.serial_number }}</code></td>
                 </tr>
                 {% endif %}
             </table>

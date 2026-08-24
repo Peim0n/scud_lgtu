@@ -357,14 +357,16 @@ class CertificateManager:
             "due_for_rotation": total_lifetime > 0 and remaining <= total_lifetime * self._rotation_threshold,
         })
 
-        # SHA-256 fingerprint рабочего сертификата — чтобы было видно,
-        # поменялся ли сертификат после ротации/обмена.
+        # SHA-256 fingerprint и метаданные рабочего сертификата — чтобы было
+        # видно, поменялся ли сертификат после ротации/обмена.
         try:
             with open(self._working_cert_path, "rb") as f:
                 cert = x509.load_pem_x509_certificate(f.read())
             fingerprint = cert.fingerprint(hashes.SHA256()).hex()
             status["fingerprint_sha256"] = fingerprint
             status["subject"] = cert.subject.rfc4514_string()
+            status["issuer"] = cert.issuer.rfc4514_string()
+            status["serial_number"] = format(cert.serial_number, 'x')
         except Exception:
             pass
 
