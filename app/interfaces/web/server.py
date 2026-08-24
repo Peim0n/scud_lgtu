@@ -321,7 +321,7 @@ def cert_rotate() -> Any:
 
 
 def cert_reset() -> Any:
-    """Удалить рабочий и первичный сертификаты (полный сброс)."""
+    """Удалить рабочий сертификат (полный сброс)."""
     cfg_path = _config_path(current_app)
     config = load_config(cfg_path)
     base_dir = os.path.dirname(os.path.abspath(cfg_path))
@@ -329,7 +329,7 @@ def cert_reset() -> Any:
     cert_dir = os.path.join(base_dir, cert_cfg.get("cert_dir", "infrastructure/certs"))
 
     removed = []
-    for name in ("working_cert.pem", "working_key.pem", "initial_cert.pem", "initial_key.pem"):
+    for name in ("working_cert.pem", "working_key.pem"):
         path = os.path.join(cert_dir, name)
         if os.path.exists(path):
             os.remove(path)

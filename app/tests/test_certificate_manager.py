@@ -110,9 +110,9 @@ def test_ensure_bootstrapped_exchanges_initial_for_working_certificate(tmp_path,
     manager.ensure_bootstrapped()
 
     assert manager.has_working_certificate
-    # Первичный сертификат должен быть удалён с контроллера (п. 5.4.1).
-    assert not os.path.exists(initial_cert_path)
-    assert not os.path.exists(initial_key_path)
+    # Первичный сертификат очищен из памяти после обмена (п. 5.4.1).
+    assert manager._initial_cert_pem is None
+    assert manager._initial_key_pem is None
     # cert/get был вызван один раз, и клиент переключился на рабочий сертификат.
     assert len(rest.calls) == 1
     assert rest.active_cert == (manager._working_cert_path, manager._working_key_path)

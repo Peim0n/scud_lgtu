@@ -98,13 +98,19 @@ class CertificateManager:
         self._rest_client = rest_client
         self._cert_dir = cert_dir
         self._subject = subject
-        self._initial_cert_path = initial_cert_path
-        self._initial_key_path = initial_key_path
         # Первичный сертификат хранится в памяти (не на диске) — он живёт
         # только до обмена на рабочий. Temp-файлы для mTLS создаются в
         # /dev/shm (RAM) только на момент обмена.
         self._initial_cert_pem: Optional[str] = None
         self._initial_key_pem: Optional[str] = None
+        # Если переданы пути к файлам — читаем в память (для тестов и
+        # обратной совместимости с CLI, который может передать файлы).
+        if initial_cert_path and os.path.exists(initial_cert_path):
+            with open(initial_cert_path, "r", encoding="utf-8") as f:
+                self._initial_cert_pem = f.read()
+        if initial_key_path and os.path.exists(initial_key_path):
+            with open(initial_key_path, "r", encoding="utf-8") as f:
+                self._initial_key_pem = f.read()
         # Доля оставшегося срока действия сертификата, после которой начинаем
         # пробовать ротацию (0.5 — как только осталось меньше половины).
         self._rotation_threshold = rotation_threshold_fraction
@@ -160,15 +166,8 @@ class CertificateManager:
 
     @property
     def has_initial_certificate(self) -> bool:
-        """Первичный сертификат есть — в памяти или (legacy) на диске."""
-        if self._initial_cert_pem and self._initial_key_pem:
-            return True
-        # Legacy: файлы на диске от старой версии
-        return bool(
-            self._initial_cert_path and self._initial_key_path
-            and os.path.exists(self._initial_cert_path)
-            and os.path.exists(self._initial_key_path)
-        )
+        """Первичный сертификат есть (в памяти)."""
+        return bool(self._initial_cert_pem and self._initial_key_pem)
 
     def import_initial_certificate(self, cert_pem: str, key_pem: str) -> None:
         """
@@ -222,15 +221,6 @@ class CertificateManager:
                 )
                 return
 
-        # Если первичный сертификат на диске (legacy) — читаем в память
-        if self._initial_cert_pem is None:
-            if self._initial_cert_path and os.path.exists(self._initial_cert_path):
-                with open(self._initial_cert_path, "r", encoding="utf-8") as f:
-                    self._initial_cert_pem = f.read()
-            if self._initial_key_path and os.path.exists(self._initial_key_path):
-                with open(self._initial_key_path, "r", encoding="utf-8") as f:
-                    self._initial_key_pem = f.read()
-
         logger.info("CertificateManager: первичный обмен сертификата...")
         # Создаём temp-файлы в RAM (/dev/shm) для mTLS-аутентификации
         # первичным сертификатом — только на момент обмена.
@@ -240,8 +230,6 @@ class CertificateManager:
         # Первичный сертификат больше не нужен — очищаем память
         self._initial_cert_pem = None
         self._initial_key_pem = None
-        # Legacy: удаляем файлы от старой версии, если были на диске
-        self._delete_initial_certificate_files()
 
     def tick(self, now: float) -> None:
         """Совместимость с интерфейсом периодических сервисов (см. LGTUApplication)."""
@@ -407,10 +395,10 @@ class CertificateManager:
             private_key_pem, csr_pem = self._generate_keypair_and_csr_from_cert(
                 self._working_cert_path
             )
-        elif self._initial_cert_path and os.path.exists(self._initial_cert_path):
-            # Первичный обмен — Subject из первичного сертификата
-            private_key_pem, csr_pem = self._generate_keypair_and_csr_from_cert(
-                self._initial_cert_path
+        elif self._initial_cert_pem:
+            # Первичный обмен — Subject из первичного сертификата (в памяти)
+            private_key_pem, csr_pem = self._generate_keypair_and_csr_from_pem(
+                self._initial_cert_pem
             )
         else:
             # Fallback — Subject из конфига
@@ -475,20 +463,29 @@ class CertificateManager:
         return private_key_pem, csr_pem
 
     def _generate_keypair_and_csr_from_cert(self, cert_path: str) -> tuple[str, str]:
-        """Сгенерировать ключ+CSR с Subject из указанного сертификата.
+        """Сгенерировать ключ+CSR с Subject из указанного сертификата (файл)."""
+        try:
+            with open(cert_path, "rb") as f:
+                cert_pem = f.read()
+        except Exception:
+            logger.warning("CertificateManager: не удалось прочитать %s — используем конфиг", cert_path)
+            return self._generate_keypair_and_csr()
+        return self._generate_keypair_and_csr_from_pem(cert_pem.decode("utf-8"))
+
+    def _generate_keypair_and_csr_from_pem(self, cert_pem: str) -> tuple[str, str]:
+        """Сгенерировать ключ+CSR с Subject из сертификата (PEM в памяти).
 
         Бэкенд проверяет, что Subject CSR совпадает с Subject предъявленного
         клиентского сертификата. Используется для первичного обмена (Subject
-        из initial_cert) и для ротации (Subject из working_cert).
+        из initial_cert в памяти) и для ротации (Subject из working_cert).
         Если прочитать сертификат не удалось — fallback на Subject из конфига.
         """
         subject = None
         try:
-            with open(cert_path, "rb") as f:
-                cert = x509.load_pem_x509_certificate(f.read())
+            cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
             subject = cert.subject
         except Exception:
-            logger.warning("CertificateManager: не удалось прочитать Subject из %s — используем конфиг", cert_path)
+            logger.warning("CertificateManager: не удалось прочитать Subject из сертификата — используем конфиг")
 
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=self._rsa_key_size)
 
@@ -623,16 +620,6 @@ class CertificateManager:
 
         logger.info("CertificateManager: первичный сертификат получен от KMS (в памяти)")
         return True
-
-    def _delete_initial_certificate_files(self) -> None:
-        """Удалить файлы первичного сертификата с диска (legacy cleanup)."""
-        for path in (self._initial_cert_path, self._initial_key_path):
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
-        logger.info("CertificateManager: первичный сертификат очищен")
 
     def _read_working_cert_validity(self) -> tuple[float, float]:
         """Прочитать реальный ``notBefore``/``notAfter`` рабочего сертификата (epoch, UTC)."""

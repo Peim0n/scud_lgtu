@@ -79,7 +79,9 @@ def test_certificate_bootstrap_over_real_mtls(server, ca_bundle_path, tmp_path):
     manager.ensure_bootstrapped()
 
     assert manager.has_working_certificate
-    assert not os.path.exists(initial_cert_path)  # первичный сертификат удалён
+    # Первичный сертификат очищен из памяти после обмена
+    assert manager._initial_cert_pem is None
+    assert manager._initial_key_pem is None
     assert len(server.cert_requests) == 1
     # is_online() должен стать True сразу после bootstrap, даже без
     # собственного вызова BackendClient (см. on_exchange_success/mark_online).
