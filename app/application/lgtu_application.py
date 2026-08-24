@@ -317,21 +317,28 @@ class LGTUApplication:
         return None
 
     def _check_access(self, event) -> Any | None:
-        """Проверить учётные данные и вернуть AccessGranted/AccessDenied."""
-        decision = self._access_policy.check(event.credential)
+        """Проверить учётные данные и вернуть AccessGranted/AccessDenied.
+
+        Для QR-кода может быть несколько credentials (max_id + phone) —
+        проверяем каждый, доступ разрешён если хотя бы один прошёл.
+        """
+        credentials = getattr(event, "_all_credentials", None) or [event.credential]
         reader_config = self._devices.get("readers", {}).get(event.reader_id, {})
         direction = reader_config.get("direction", "entry")
-        # Тип токена берём из самого credential (а не угадываем по классу
-        # события), чтобы корректно различать, например, cardid_partial_h.
+
+        for credential in credentials:
+            decision = self._access_policy.check(credential)
+            if decision.allowed:
+                token_prefix = credential.token_type.value
+                token = f"{token_prefix}:{credential.value}"
+                direction_enum = DirectionEnum.IN if direction == "entry" else DirectionEnum.OUT
+                session = AuthSession(token=token, direction=direction_enum, user_id=decision.user_id)
+                self._passage_tracker.track(session)
+                return AccessGranted(direction=direction, token=token, user_id=decision.user_id)
+
+        # Все credentials проверены, ни один не прошёл
         token_prefix = event.credential.token_type.value
         token = f"{token_prefix}:{event.credential.value}"
-
-        if decision.allowed:
-            direction_enum = DirectionEnum.IN if direction == "entry" else DirectionEnum.OUT
-            session = AuthSession(token=token, direction=direction_enum, user_id=decision.user_id)
-            self._passage_tracker.track(session)
-            return AccessGranted(direction=direction, token=token, user_id=decision.user_id)
-
         return AccessDenied(direction=direction)
 
     def _map_button_event(self, event: ButtonPressed) -> Any | None:
@@ -426,8 +433,8 @@ class LGTUApplication:
         reader_names = self._config.get("mappings", {})
         return reader_names.get(reader, reader)
 
-    def _decode_qr_credential(self, data: str) -> Credential:
-        """Декодировать QR код в Credential.
+    def _decode_qr_credential(self, data: str) -> list[Credential]:
+        """Декодировать QR код в список Credential (max_id + phone если есть).
 
         При любой ошибке декодирования возвращает Credential с самим QR-данными,
         чтобы доступ был явно запрещён через access_policy, а не игнорировался.
@@ -435,35 +442,48 @@ class LGTUApplication:
         if self._qr_decoder is not None:
             try:
                 qr_fields = self._qr_decoder.decode_url(data)
+                credentials: list[Credential] = []
+
                 max_id = qr_fields.get("max_id")
-                if max_id is None:
-                    logger.error(f"QR код не содержит max_id: {data}")
-                    return Credential(
+                if max_id is not None:
+                    credentials.append(Credential(
+                        token_type=TokenTypeEnum.MAXID,
+                        value=str(max_id),
+                        encrypted=False
+                    ))
+
+                phone = qr_fields.get("phone")
+                if phone is not None:
+                    credentials.append(Credential(
+                        token_type=TokenTypeEnum.PHONE,
+                        value=str(phone),
+                        encrypted=False
+                    ))
+
+                if not credentials:
+                    logger.error(f"QR код не содержит max_id/phone: {data}")
+                    return [Credential(
                         token_type=TokenTypeEnum.MAXID,
                         value=str(data),
                         encrypted=False
-                    )
+                    )]
 
-                return Credential(
-                    token_type=TokenTypeEnum.MAXID,
-                    value=str(max_id),
-                    encrypted=False
-                )
+                return credentials
             except Exception as e:  # noqa: BLE001
                 logger.exception("Ошибка декодирования QR кода: %s", e)
-                return Credential(
+                return [Credential(
                     token_type=TokenTypeEnum.MAXID,
                     value=str(data),
                     encrypted=False
-                )
+                )]
         else:
             # Если decoder недоступен, используем URL как есть
             logger.warning("QR decoder недоступен, используется URL как credential value")
-            return Credential(
+            return [Credential(
                 token_type=TokenTypeEnum.MAXID,
                 value=str(data),
                 encrypted=False
-            )
+            )]
 
     def _convert_scud_event_to_domain(self, scud_event) -> Optional:
         """Преобразовать ScudEvent в доменное событие."""
@@ -529,14 +549,17 @@ class LGTUApplication:
             # Обработка данных из serial порта (QR-код)
             data = scud_event.payload.get("data", "")
             if data:
-                credential = self._decode_qr_credential(data)
+                credentials = self._decode_qr_credential(data)
 
                 reader = scud_event.payload.get("reader", "unknown")
                 reader_id = self._get_reader_id(reader)
+                # QrRead.credential — первый credential (max_id),
+                # остальные (phone) проверяются в _check_access
                 event = QrRead(
-                    credential=credential,
+                    credential=credentials[0],
                     reader_id=reader_id
                 )
+                event._all_credentials = credentials  # type: ignore[attr-defined]
                 logger.info(f"Serial QR Read event: {event}")
                 return event
         elif event_type == "input_signal":
