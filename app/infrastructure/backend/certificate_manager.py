@@ -248,6 +248,9 @@ class CertificateManager:
         if not self.has_working_certificate:
             return False
 
+        # Убедиться, что RestClient использует рабочий сертификат для mTLS.
+        self._rest_client.set_client_cert(self._working_cert_path, self._working_key_path)
+
         now = now if now is not None else self._clock()
 
         try:
@@ -304,6 +307,10 @@ class CertificateManager:
                 "сначала нужен ensure_bootstrapped()"
             )
             return False
+        # Убедиться, что RestClient использует рабочий сертификат для mTLS.
+        # При создании через build_backend_client(ensure_bootstrap=False)
+        # клиентский сертификат мог быть не установлен.
+        self._rest_client.set_client_cert(self._working_cert_path, self._working_key_path)
         try:
             self._exchange_and_activate()
         except Exception:
