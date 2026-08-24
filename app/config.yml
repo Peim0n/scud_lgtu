@@ -211,7 +211,7 @@ qr_decoder:
 # ── Бэкенд (§5.4, §6 ТЗ) ──
 backend:
   # Публичный IP:порт controller'а, доступный с устройства (временно через NAT).
-  base_url: "https://195.34.235.89:8448"
+  base_url: "https://controller-skud-dev.admlr.lipetsk.ru:8448"
   api_path_prefix: "/controller/v1"
   # KMS-сервер для получения первичных сертификатов (/bootstrap).
   # Временно открытый, потом будет доступен только из внутренней сети.

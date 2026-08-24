@@ -16,6 +16,12 @@ app/infrastructure/certs/
 app/infrastructure/persistence/events.json
 app/infrastructure/cache/local_access.json
 
+# Рантайм-конфиги, редактируемые через веб-интерфейс или CLI на контроллере.
+# Не должны перезаписываться при git checkout/deploy.
+app/object_config.yml
+app/network_config.yml
+app/web_auth.yml
+
 # Диагностические скрипты ручной проверки backend (scripts/backend_check/):
 # рабочие mTLS-сертификаты/ключи и сохранённые ответы бэкенда — секреты и
 # рантайм-артефакты, не должны попадать в репозиторий.
