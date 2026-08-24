@@ -259,7 +259,17 @@ def cmd_web(
 
     logging.basicConfig(level=logging.INFO)
     app = create_app(config_path)
-    app.run(host=actual_host, port=actual_port, debug=debug)
+
+    # SSL: авто-поиск сертификата в infrastructure/certs/web/
+    import os
+    ssl_context = None
+    base_dir = os.path.dirname(os.path.abspath(resolved))
+    cert = os.path.join(base_dir, "infrastructure", "certs", "web", "cert.pem")
+    key = os.path.join(base_dir, "infrastructure", "certs", "web", "key.pem")
+    if os.path.exists(cert) and os.path.exists(key):
+        ssl_context = (cert, key)
+
+    app.run(host=actual_host, port=actual_port, debug=debug, ssl_context=ssl_context)
     return 0
 
 
