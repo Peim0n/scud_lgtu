@@ -1,7 +1,8 @@
 """Загрузка и сохранение сетевого конфига контроллера.
 
-Конфиг хранится рядом с config.yml в файле ``network_config.yml``
-(либо по пути из переменной окружения ``LGTU_NETWORK_CONFIG``).
+Конфиг хранится в ``/etc/scud_lgtu/network_config.yml`` (или рядом с
+config.yml в dev-окружении). Путь можно переопределить через
+переменную окружения ``LGTU_NETWORK_CONFIG``.
 """
 from __future__ import annotations
 
@@ -11,18 +12,27 @@ from typing import Any
 
 import yaml
 
+# Каталог для рантайм-конфигов: /etc/scud_lgtu на проде, рядом с
+# config.yml — в dev (если /etc/scud_lgtu не существует).
+_RUNTIME_DIR = "/etc/scud_lgtu"
+
+
+def _runtime_dir(config_path: str | None = None) -> str:
+    """Вернуть каталог для рантайм-конфигов."""
+    if os.path.isdir(_RUNTIME_DIR):
+        return _RUNTIME_DIR
+    if config_path:
+        return os.path.dirname(os.path.abspath(config_path))
+    from app.infrastructure.config.config_loader import resolve_config_path
+    return os.path.dirname(resolve_config_path())
+
 
 def _network_config_path(config_path: str | None = None) -> str:
     """Вернуть путь к network_config.yml."""
     env_path = os.environ.get("LGTU_NETWORK_CONFIG")
     if env_path:
         return os.path.abspath(env_path)
-    if config_path:
-        config_path = os.path.abspath(config_path)
-    else:
-        from app.infrastructure.config.config_loader import resolve_config_path
-        config_path = resolve_config_path()
-    return os.path.join(os.path.dirname(config_path), "network_config.yml")
+    return os.path.join(_runtime_dir(config_path), "network_config.yml")
 
 
 def load(config_path: str | None = None) -> dict[str, Any]:

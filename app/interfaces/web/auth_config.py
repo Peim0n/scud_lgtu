@@ -19,7 +19,10 @@ import yaml
 
 
 def _auth_config_path(config_path: str | None = None) -> str:
-    """Вернуть путь к web_auth.yml."""
+    """Вернуть путь к web_auth.yml: /etc/scud_lgtu/ или рядом с config.yml."""
+    runtime_dir = "/etc/scud_lgtu"
+    if os.path.isdir(runtime_dir):
+        return os.path.join(runtime_dir, "web_auth.yml")
     if config_path is None:
         from app.infrastructure.config.config_loader import resolve_config_path
         config_path = resolve_config_path()

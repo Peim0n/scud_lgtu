@@ -283,7 +283,13 @@ def _build_backend_client(
             organizational_units=subject_cfg.get("organizational_units", []),
             common_name=subject_cfg.get("common_name", ""),
         )
-        cert_dir = os.path.join(base_dir, cert_cfg.get("cert_dir", "infrastructure/certs"))
+        # Сертификаты хранятся в /etc/scud_lgtu/certs/ на проде (read-write),
+        # в dev — рядом с config.yml.
+        runtime_dir = "/etc/scud_lgtu"
+        if os.path.isdir(runtime_dir):
+            cert_dir = os.path.join(runtime_dir, "certs")
+        else:
+            cert_dir = os.path.join(base_dir, cert_cfg.get("cert_dir", "infrastructure/certs"))
         initial_cert_path = cert_cfg.get("initial_cert_path")
         initial_key_path = cert_cfg.get("initial_key_path")
         if initial_cert_path:

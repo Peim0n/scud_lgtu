@@ -326,7 +326,12 @@ def cert_reset() -> Any:
     config = load_config(cfg_path)
     base_dir = os.path.dirname(os.path.abspath(cfg_path))
     cert_cfg = config.get("backend", {}).get("cert", {})
-    cert_dir = os.path.join(base_dir, cert_cfg.get("cert_dir", "infrastructure/certs"))
+    # Сертификаты в /etc/scud_lgtu/certs/ на проде, рядом с config.yml — в dev
+    runtime_dir = "/etc/scud_lgtu"
+    if os.path.isdir(runtime_dir):
+        cert_dir = os.path.join(runtime_dir, "certs")
+    else:
+        cert_dir = os.path.join(base_dir, cert_cfg.get("cert_dir", "infrastructure/certs"))
 
     removed = []
     for name in ("working_cert.pem", "working_key.pem"):
