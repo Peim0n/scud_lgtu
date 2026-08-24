@@ -94,7 +94,7 @@
     <div id="wifi_settings" {% if not cfg.network.wifi.enabled %}style="display:none"{% endif %}>
         <label>Интерфейс <input type="text" name="wifi_interface" value="{{ cfg.network.wifi.interface }}" readonly class="readonly"></label>
         <label>SSID <input type="text" name="wifi_ssid" value="{{ cfg.network.wifi.ssid }}"></label>
-        <label>Пароль <input type="password" name="wifi_password" value="{{ cfg.network.wifi.password }}"></label>
+        <label>Пароль <input type="password" name="wifi_password" placeholder="••••••••"></label>
         <label>Метод
             <select name="wifi_method" id="wifi_method" onchange="toggleStaticFields('wifi')">
                 <option value="dhcp" {% if cfg.network.wifi.method == 'dhcp' %}selected{% endif %}>DHCP</option>

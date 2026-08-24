@@ -68,6 +68,38 @@ def require_auth(view: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _load_or_create_secret_key(config_path: str) -> str:
+    """Загрузить SECRET_KEY из файла или сгенерировать новый.
+
+    Файл: /etc/scud_lgtu/web_secret.key (на проде) или рядом с config.yml.
+    При первом запуске генерируется случайный ключ и сохраняется.
+    """
+    runtime_dir = "/etc/scud_lgtu"
+    if os.path.isdir(runtime_dir):
+        secret_path = os.path.join(runtime_dir, "web_secret.key")
+    else:
+        secret_path = os.path.join(os.path.dirname(os.path.abspath(config_path)), "web_secret.key")
+
+    if os.path.exists(secret_path):
+        with open(secret_path, "r", encoding="utf-8") as f:
+            key = f.read().strip()
+            if key:
+                return key
+
+    # Генерируем новый ключ
+    import secrets as _secrets
+    key = _secrets.token_hex(32)
+    try:
+        with open(secret_path, "w", encoding="utf-8") as f:
+            f.write(key)
+        os.chmod(secret_path, 0o600)
+    except OSError:
+        # Read-only ФС или нет прав — используем сгенерированный ключ в памяти
+        # (будет новый при каждом перезапуске, flash-сообщения не переживут)
+        pass
+    return key
+
+
 def create_app(config_path: str | None = None) -> Flask:
     """Создать Flask-приложение."""
     app = Flask(
@@ -75,8 +107,10 @@ def create_app(config_path: str | None = None) -> Flask:
         template_folder=os.path.join(os.path.dirname(__file__), "templates"),
         static_folder=os.path.join(os.path.dirname(__file__), "static"),
     )
-    app.config["config_path"] = resolve_config_path(config_path)
-    app.config["SECRET_KEY"] = os.environ.get("LGTU_WEB_SECRET", "change-me")
+    resolved = resolve_config_path(config_path)
+    app.config["config_path"] = resolved
+    # SECRET_KEY: из env (продакшн override) или из файла (генерится при первом запуске)
+    app.config["SECRET_KEY"] = os.environ.get("LGTU_WEB_SECRET") or _load_or_create_secret_key(resolved)
 
     _register_routes(app)
     return app
@@ -165,6 +199,13 @@ def network_save() -> Any:
     """Сохранить сетевой конфиг из формы."""
     cfg_path = _config_path(current_app)
     updates = _parse_network_form(request.form)
+    # Если пароль Wi-Fi пустой — не затираем существующий
+    wifi_password = updates.get("network", {}).get("wifi", {}).get("password", "")
+    if not wifi_password:
+        existing = load_network(cfg_path) or {}
+        existing_pwd = existing.get("network", {}).get("wifi", {}).get("password", "")
+        if existing_pwd:
+            updates["network"]["wifi"]["password"] = existing_pwd
     load_network(cfg_path)  # гарантируем, что файл существует/не мешает
     save_network(updates, cfg_path)
     flash("Сетевые настройки сохранены.", "success")
