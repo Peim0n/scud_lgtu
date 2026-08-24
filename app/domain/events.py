@@ -16,6 +16,10 @@ class QrRead:
     """Событие считывания QR-кода."""
     credential: Credential
     reader_id: str
+    # Все поля из расшифрованного QR (max_id, phone, timestamp, age_category и т.д.)
+    qr_fields: dict | None = None
+    # Unix timestamp генерации QR (поле типа 0 из payload) — для проверки возраста
+    timestamp: int | None = None
 
 
 @dataclass

@@ -321,10 +321,24 @@ class LGTUApplication:
 
         Для QR-кода может быть несколько credentials (max_id + phone) —
         проверяем каждый, доступ разрешён если хотя бы один прошёл.
+        Также проверяется возраст QR-кода (timestamp) если задан qr_max_age_s.
         """
         credentials = getattr(event, "_all_credentials", None) or [event.credential]
         reader_config = self._devices.get("readers", {}).get(event.reader_id, {})
         direction = reader_config.get("direction", "entry")
+
+        # Проверка возраста QR-кода
+        if isinstance(event, QrRead) and event.timestamp is not None:
+            max_age = self._config.get("access", {}).get("qr_max_age_s", 0)
+            if max_age > 0:
+                now = int(time.time())
+                age = now - event.timestamp
+                if age > max_age:
+                    logger.warning(
+                        "QR код отклонён: возраст %ds превышает максимум %ds",
+                        age, max_age,
+                    )
+                    return AccessDenied(direction=direction)
 
         for credential in credentials:
             decision = self._access_policy.check(credential)
@@ -433,11 +447,17 @@ class LGTUApplication:
         reader_names = self._config.get("mappings", {})
         return reader_names.get(reader, reader)
 
-    def _decode_qr_credential(self, data: str) -> list[Credential]:
-        """Декодировать QR код в список Credential (max_id + phone если есть).
+    def _decode_qr(self, data: str) -> tuple[list[Credential], dict, int | None]:
+        """Декодировать QR код.
 
-        При любой ошибке декодирования возвращает Credential с самим QR-данными,
-        чтобы доступ был явно запрещён через access_policy, а не игнорировался.
+        Returns
+        -------
+        credentials : list[Credential]
+            Список учётных данных (max_id, phone) для проверки доступа.
+        qr_fields : dict
+            Все поля из расшифрованного QR (max_id, phone, timestamp, age_category и т.д.).
+        timestamp : int | None
+            Unix timestamp генерации QR (для проверки возраста).
         """
         if self._qr_decoder is not None:
             try:
@@ -462,28 +482,28 @@ class LGTUApplication:
 
                 if not credentials:
                     logger.error(f"QR код не содержит max_id/phone: {data}")
-                    return [Credential(
+                    return ([Credential(
                         token_type=TokenTypeEnum.MAXID,
                         value=str(data),
                         encrypted=False
-                    )]
+                    )], {}, None)
 
-                return credentials
+                ts = qr_fields.get("timestamp")
+                return credentials, qr_fields, ts
             except Exception as e:  # noqa: BLE001
                 logger.exception("Ошибка декодирования QR кода: %s", e)
-                return [Credential(
+                return ([Credential(
                     token_type=TokenTypeEnum.MAXID,
                     value=str(data),
                     encrypted=False
-                )]
+                )], {}, None)
         else:
-            # Если decoder недоступен, используем URL как есть
             logger.warning("QR decoder недоступен, используется URL как credential value")
-            return [Credential(
+            return ([Credential(
                 token_type=TokenTypeEnum.MAXID,
                 value=str(data),
                 encrypted=False
-            )]
+            )], {}, None)
 
     def _convert_scud_event_to_domain(self, scud_event) -> Optional:
         """Преобразовать ScudEvent в доменное событие."""
@@ -549,15 +569,15 @@ class LGTUApplication:
             # Обработка данных из serial порта (QR-код)
             data = scud_event.payload.get("data", "")
             if data:
-                credentials = self._decode_qr_credential(data)
+                credentials, qr_fields, qr_timestamp = self._decode_qr(data)
 
                 reader = scud_event.payload.get("reader", "unknown")
                 reader_id = self._get_reader_id(reader)
-                # QrRead.credential — первый credential (max_id),
-                # остальные (phone) проверяются в _check_access
                 event = QrRead(
                     credential=credentials[0],
-                    reader_id=reader_id
+                    reader_id=reader_id,
+                    qr_fields=qr_fields,
+                    timestamp=qr_timestamp,
                 )
                 event._all_credentials = credentials  # type: ignore[attr-defined]
                 logger.info(f"Serial QR Read event: {event}")
