@@ -6,12 +6,11 @@ STATIC_KEY = "0123456789abcdef0123456789abcdef"
 DYNAMIC_KEY = "fedcba9876543210fedcba9876543210"
 
 
-def test_raw_type_from_backend_is_hashed_and_matched():
+def test_raw_type_from_backend_is_matched_directly():
     """
-    Реальный dev-backend отдаёт "phone"/"maxid" в сыром виде (без суффикса
-    "_h", см. access/get). Кэш должен захешировать их при загрузке, иначе
-    is_allowed() (который всегда хеширует входящий токен для не-"_h" типов)
-    никогда не найдёт совпадение.
+    QR-считыватель отдаёт maxid/phone в открытом виде, бэкенд тоже.
+    Хеширование (hash_identifier) нужно только для PAN (cardid),
+    maxid/phone сравниваются напрямую без хеширования.
     """
     cache = LocalAccessCache(static_key=STATIC_KEY, dynamic_key=DYNAMIC_KEY)
     cache.update({

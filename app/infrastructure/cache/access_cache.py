@@ -64,6 +64,11 @@ class LocalAccessCache:
         # В кэше бэкенда хранятся хеши вида *_h; raw типы хешируем здесь
         if id_type.endswith("_h"):
             return value
+        # maxid и phone из QR-считывателя приходят в открытом виде —
+        # бэкенд тоже отдаёт их открытыми. Хеширование (hash_identifier)
+        # нужно только для PAN номеров карт (cardid).
+        if id_type in ("maxid", "phone"):
+            return value
         return hash_identifier(value, self._static_key, self._dynamic_key)
 
     def update(self, data: dict[str, Any]) -> None:
