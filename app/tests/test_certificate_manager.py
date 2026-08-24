@@ -332,9 +332,9 @@ def test_kms_bootstrap_fetches_initial_cert_when_missing(tmp_path, subject):
     # Первичный сертификат получен → обмен на рабочий через cert/get.
     assert manager.has_working_certificate
     assert len(rest.calls) == 1
-    # Первичный сертификат удалён после обмена (как при ручной загрузке).
-    assert not os.path.exists(manager._initial_cert_path)
-    assert not os.path.exists(manager._initial_key_path)
+    # Первичный сертификат хранится в памяти и очищен после обмена.
+    assert manager._initial_cert_pem is None
+    assert manager._initial_key_pem is None
     # CA от KMS сохранён и установлен в RestClient для проверки controller.
     ca_path = os.path.join(cert_dir, "ca.pem")
     assert os.path.exists(ca_path)
