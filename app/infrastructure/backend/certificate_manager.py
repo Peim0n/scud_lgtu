@@ -523,8 +523,11 @@ class CertificateManager:
                 # Не используем прокси из env — KMS доступен напрямую,
                 # а прокси может сбрасывать соединение.
                 session.trust_env = False
-                if self._ca_bundle is not None:
-                    session.verify = self._ca_bundle
+                # KMS использует публичный сертификат (Let's Encrypt и т.п.) —
+                # проверяем через системное хранилище, а не через ca_bundle
+                # от бэкенда (он для внутреннего mTLS CA и не содержит
+                # публичных CA).
+                # session.verify по умолчанию = True (системное хранилище).
             else:
                 logger.error("CertificateManager: KMS bootstrap невозможен — модуль requests не установлен")
                 return False
