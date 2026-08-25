@@ -148,6 +148,7 @@ class NetworkManagerAdapter:
                     result.append({
                         "name": name,
                         "state": iface.get("operstate"),
+                        "mac": iface.get("address", ""),
                         "addresses": [a.get("local") for a in addr_info],
                         "address": primary.get("local", ""),
                         "netmask": _prefix_to_netmask(primary.get("prefixlen", 0)),
@@ -169,11 +170,15 @@ class NetworkManagerAdapter:
             if m:
                 if current:
                     interfaces.append(current)
-                current = {"name": m.group(1).strip(), "state": m.group(2), "addresses": []}
-            elif current and "inet " in line:
-                am = re.search(r"inet\s+([\d.]+)", line)
-                if am:
-                    current["addresses"].append(am.group(1))
+                current = {"name": m.group(1).strip(), "state": m.group(2), "addresses": [], "mac": ""}
+            elif current:
+                mm = re.search(r"link/ether\s+([\da-f:]+)", line)
+                if mm:
+                    current["mac"] = mm.group(1)
+                elif "inet " in line:
+                    am = re.search(r"inet\s+([\d.]+)", line)
+                    if am:
+                        current["addresses"].append(am.group(1))
         if current:
             interfaces.append(current)
         return interfaces

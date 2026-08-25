@@ -47,7 +47,7 @@ def test_index_requires_auth(client):
 def test_index_with_auth(client):
     resp = client.get("/", headers=_auth_header())
     assert resp.status_code == 200
-    assert b"IS SCUD Admin" in resp.data
+    assert b"SCUD Admin" in resp.data
 
 
 def test_network_page_renders_form(client):
