@@ -15,7 +15,20 @@
     {% if cfg.network.timezone and current.timezone and cfg.network.timezone != current.timezone %}
     <p class="field-description">⚠ Сохранённый часовой пояс ({{ cfg.network.timezone }}) отличается от системного. Нажмите «Применить к системе».</p>
     {% endif %}
-    <h2>Интерфейсы</h2>
+    {% if current.ntp and current.ntp.ok %}
+    <table>
+        <tr><th>NTP</th><td>
+            {% set ntp = current.ntp.status %}
+            Синхронизация: {% if ntp.NTPSynchronized == 'yes' %}✓ да{% else %}✗ нет{% endif %}
+            {% if ntp.ServerName %}<br>Сервер: {{ ntp.ServerName }}{% endif %}
+            {% if ntp.ServerAddress %}<br>Адрес: {{ ntp.ServerAddress }}{% endif %}
+        </td></tr>
+    </table>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Сеть</h2>
     <table>
         <thead>
             <tr><th>Интерфейс</th><th>MAC</th><th>Состояние</th><th>Адреса</th></tr>
@@ -31,16 +44,6 @@
             {% endfor %}
         </tbody>
     </table>
-    {% if current.ntp and current.ntp.ok %}
-    <table>
-        <tr><th>NTP</th><td>
-            {% set ntp = current.ntp.status %}
-            Синхронизация: {% if ntp.NTPSynchronized == 'yes' %}✓ да{% else %}✗ нет{% endif %}
-            {% if ntp.ServerName %}<br>Сервер: {{ ntp.ServerName }}{% endif %}
-            {% if ntp.ServerAddress %}<br>Адрес: {{ ntp.ServerAddress }}{% endif %}
-        </td></tr>
-    </table>
-    {% endif %}
 </section>
 
 <form method="post" action="{{ url_for('network_save') }}">
