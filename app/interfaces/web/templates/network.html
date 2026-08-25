@@ -15,14 +15,16 @@
     {% if cfg.network.timezone and current.timezone and cfg.network.timezone != current.timezone %}
     <p class="field-description">⚠ Сохранённый часовой пояс ({{ cfg.network.timezone }}) отличается от системного. Нажмите «Применить к системе».</p>
     {% endif %}
+    <h2>Интерфейсы</h2>
     <table>
         <thead>
-            <tr><th>Интерфейс</th><th>Состояние</th><th>Адреса</th></tr>
+            <tr><th>Интерфейс</th><th>MAC</th><th>Состояние</th><th>Адреса</th></tr>
         </thead>
         <tbody>
-            {% for iface in current.interfaces %}
+            {% for iface in status.interfaces %}
             <tr>
                 <td>{{ iface.name }}</td>
+                <td><code>{{ iface.mac or '—' }}</code></td>
                 <td>{{ iface.state }}</td>
                 <td>{{ iface.addresses | join(', ') }}</td>
             </tr>
