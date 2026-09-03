@@ -121,7 +121,7 @@ class BackendClient:
         return self._call("event", "get")
 
     def put_event(self, event: PassageEvent) -> dict[str, Any]:
-        """Отправить одно событие на бэкенд."""
+        """Отправить одно событие на бэкенд (§6.5, таблица log из §5.5)."""
         payload = {
             "event_id": event.event_id,
             "stime": _iso(event.stime),
@@ -131,11 +131,11 @@ class BackendClient:
             "token": event.token,
             "result": event.result,
             "severity": event.severity,
+            # description — обязательное поле в event/put по ТЗ (§6.5)
+            "description": event.description or "",
         }
         if event.ftime is not None:
             payload["ftime"] = _iso(event.ftime)
-        if event.description:
-            payload["description"] = event.description
         return self._call("event", "put", payload)
 
     def send_events(self, events: list[PassageEvent]) -> bool:

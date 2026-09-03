@@ -14,17 +14,28 @@ class EventLogAdapter:
 
     def append(self, passage: Passage) -> None:
         """Добавить событие прохода в журнал."""
-        # Преобразовать доменный Passage в инфраструктурный PassageEvent
+        # description — обязательное поле в event/put по ТЗ (§6.5).
+        # Для события прохода формируем человекочитаемое описание.
+        direction = passage.direction.value
+        result = passage.result.value
+        token_type = passage.token_type or ""
+        token = passage.token or ""
+        if token_type and token:
+            description = f"Проход {direction}: {token_type}:{token} — {result}"
+        else:
+            description = f"Проход {direction} — {result}"
+
         event = PassageEvent(
-            direction=passage.direction.value,
-            result=passage.result.value,
+            direction=direction,
+            result=result,
             zone=passage.zone,
             duration=passage.duration,
-            token=passage.token or "",
+            token=token,
             token_type=passage.token_type or PassageEvent.token_type,
             severity=passage.severity,
             user_id=passage.user_id,
             stime=time.time(),
+            description=description,
         )
         self._store.append(event)
 
@@ -56,7 +67,8 @@ class EventLogAdapter:
             direction=direction,
             result=result,
             zone=zone,
-            duration=duration
+            duration=duration,
+            description=f"Проход {direction} — {result}",
         )
         self._store.append(event)
 
