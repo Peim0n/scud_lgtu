@@ -348,11 +348,13 @@ class LGTUApplication:
                 direction_enum = DirectionEnum.IN if direction == "entry" else DirectionEnum.OUT
                 session = AuthSession(token=token, direction=direction_enum, user_id=decision.user_id)
                 self._passage_tracker.track(session)
+                logger.info("Доступ разрешён: %s (user_id=%s)", token, decision.user_id)
                 return AccessGranted(direction=direction, token=token, user_id=decision.user_id)
 
         # Все credentials проверены, ни один не прошёл
         token_prefix = event.credential.token_type.value
         token = f"{token_prefix}:{event.credential.value}"
+        logger.info("Доступ отказан: %s", token)
         return AccessDenied(direction=direction)
 
     def _map_button_event(self, event: ButtonPressed) -> Any | None:
