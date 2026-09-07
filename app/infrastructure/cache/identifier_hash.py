@@ -10,6 +10,7 @@ DYNAMIC_KEY — меняется ежедневно, передаётся кон
 
 import hashlib
 import hmac
+from typing import Any
 
 
 def _to_bytes(value: str | bytes) -> bytes:
@@ -106,8 +107,8 @@ def hash_partial_identifier(
     return hmac.new(dynamic_b, partial_b, hashlib.sha256).hexdigest()
 
 
-def normalize(value: str | bytes) -> str:
+def normalize(value: Any) -> str:
     """Нормализовать идентификатор для хеширования."""
     if isinstance(value, bytes):
         value = value.decode("utf-8")
-    return value.strip()
+    return str(value).strip()
