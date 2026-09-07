@@ -24,7 +24,6 @@ class AccessDevice(ABC):
         self._resolver = resolver
         self._locked = False
         self.current_token: str | None = None
-        self.current_user_id: int | None = None
         self._load_config(timings)
 
     @property

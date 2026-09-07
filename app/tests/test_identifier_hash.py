@@ -63,13 +63,11 @@ def test_local_access_cache_accepts_card_from_wiegand():
         "id": [
             {"type": "cardid_h", "quantity": 1, "list": [cardid_h]},
         ],
-        "users": {"42": {"cardid_h": cardid_h}},
     })
 
-    allowed, user_id = cache.is_allowed("cardid_partial_h", str(card_data))
+    allowed = cache.is_allowed("cardid_partial_h", str(card_data))
 
     assert allowed is True
-    assert user_id == 42
 
 
 def test_local_access_cache_rejects_unknown_card():
@@ -80,10 +78,9 @@ def test_local_access_cache_rejects_unknown_card():
     cache = LocalAccessCache(static_key=STATIC_KEY, dynamic_key=DYNAMIC_KEY)
     cache.update({"id": [{"type": "cardid_h", "quantity": 1, "list": [other_cardid_h]}]})
 
-    allowed, user_id = cache.is_allowed("cardid_partial_h", str(card_data))
+    allowed = cache.is_allowed("cardid_partial_h", str(card_data))
 
     assert allowed is False
-    assert user_id is None
 
 
 def test_old_full_hash_scheme_would_not_match():

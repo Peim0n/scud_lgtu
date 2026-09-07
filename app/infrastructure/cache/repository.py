@@ -12,15 +12,14 @@ class AccessRepositoryAdapter:
 
     def is_allowed(self, credential: Credential) -> AccessDecision:
         """Проверить, разрешена ли учётная запись."""
-        allowed, user_id = self._cache.is_allowed(
+        allowed = self._cache.is_allowed(
             credential.token_type.value,
             credential.value
         )
 
         if allowed:
-            return AccessDecision(allowed=True, user_id=user_id)
-        else:
-            return AccessDecision(allowed=False, reason="Credential not in cache")
+            return AccessDecision(allowed=True)
+        return AccessDecision(allowed=False, reason="Credential not in cache")
 
     def update(self, data: dict) -> None:
         """Обновить разрешённые идентификаторы из данных бэкенда."""

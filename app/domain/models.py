@@ -11,7 +11,7 @@
 Классы
 -------
 - Credential: учётные данные с типом токена, значением и флагом шифрования
-- AccessDecision: результат проверки доступа с разрешением, user_id и причиной
+- AccessDecision: результат проверки доступа с разрешением и причиной
 - AuthSession: сессия авторизации с токеном, направлением, временем создания и статусом использования
 - Passage: событие прохода с направлением, зоной, длительностью и результатом
 - OutputCommand: команда для управления выходом с именем, состоянием и длительностью
@@ -37,7 +37,6 @@ class Credential:
 @dataclass
 class AccessDecision:
     allowed: bool
-    user_id: int | None = None
     reason: str = ""
 
 
@@ -47,7 +46,6 @@ class AuthSession:
     direction: DirectionEnum
     created_at: float = field(default_factory=time)
     used: bool = False
-    user_id: int | None = None
 
     def is_expired(self, timeout: float) -> bool:
         return (time() - self.created_at) > timeout
@@ -63,7 +61,6 @@ class Passage:
     duration: float
     result: ResultEnum
     token: str | None = None
-    user_id: int | None = None
     token_type: str | None = None
     """Тип идентификатора для журнала событий (п. 5.5 ТЗ): phone | phone_h |
     maxid | maxid_h | cardid | cardid_h. Внутренние типы (например,

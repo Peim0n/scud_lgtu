@@ -44,7 +44,6 @@ class TurnstileDevice(AccessDevice):
         self._mode = "idle"
         self._alarm = False
         self.current_token: str | None = None
-        self.current_user_id: int | None = None
         self._auth_timeout = auth_timeout
 
     def _load_config(self, timings: dict) -> None:
@@ -150,7 +149,6 @@ class TurnstileDevice(AccessDevice):
 
     def _on_access_granted(self, event: AccessGranted) -> Command | None:
         self.current_token = event.token
-        self.current_user_id = event.user_id
         if event.direction == "entry":
             if self._mode == "entry_open":
                 # Уже открыто на вход, просто обновляем таймер
@@ -159,7 +157,7 @@ class TurnstileDevice(AccessDevice):
                 # Уже разблокирован на вход, игнорируем
                 return None
             self._mode = "entry_open"
-            logger.info(f"[TurnstileDevice] mode={self._mode}, token={event.token}, user_id={event.user_id}")
+            logger.info(f"[TurnstileDevice] mode={self._mode}, token={event.token}")
             return OpenEntryCommand(self, self._relay_timeout)
         if self._mode == "exit_open":
             # Уже открыто на выход, просто обновляем таймер
@@ -168,7 +166,7 @@ class TurnstileDevice(AccessDevice):
             # Уже разблокирован на выход, игнорируем
             return None
         self._mode = "exit_open"
-        logger.info(f"[TurnstileDevice] mode={self._mode}, token={event.token}, user_id={event.user_id}")
+        logger.info(f"[TurnstileDevice] mode={self._mode}, token={event.token}")
         return OpenExitCommand(self, self._relay_timeout)
 
     def _on_access_denied(self, event: AccessDenied) -> Command:

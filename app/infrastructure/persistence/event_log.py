@@ -36,7 +36,6 @@ class EventLogAdapter:
             token=token,
             token_type=passage.token_type or PassageEvent.token_type,
             severity=passage.severity,
-            user_id=passage.user_id,
             stime=time.time(),
             description=description,
         )

@@ -33,7 +33,7 @@ class AccessPolicy:
         Returns
         -------
         AccessDecision
-            Решение о доступе (разрешено/запрещено) с причиной и user_id
+            Решение о доступе (разрешено/запрещено) с причиной
         """
         if self._repository is None:
             return AccessDecision(allowed=False, reason="No repository configured")

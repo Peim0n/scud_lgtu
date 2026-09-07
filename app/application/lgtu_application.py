@@ -351,10 +351,10 @@ class LGTUApplication:
             if decision.allowed:
                 token_prefix = credential.token_type.value
                 token = f"{token_prefix}:{credential.value}"
-                session = AuthSession(token=token, direction=direction_enum, user_id=decision.user_id)
+                session = AuthSession(token=token, direction=direction_enum)
                 self._passage_tracker.track(session)
-                logger.info("Доступ разрешён: %s (user_id=%s)", token, decision.user_id)
-                return AccessGranted(direction=direction, token=token, user_id=decision.user_id)
+                logger.info("Доступ разрешён: %s", token)
+                return AccessGranted(direction=direction, token=token)
 
         # Все credentials проверены, ни один не прошёл
         _log_denied(event.credential, "нет в списке доступа")
@@ -416,7 +416,6 @@ class LGTUApplication:
             duration=event.duration,
             result=ResultEnum.PASS,
             token=token_value,
-            user_id=event.user_id,
             token_type=_to_wire_token_type(token_type) if token_type else None,
         )
         self._passage_service.log_passage(passage)
@@ -614,9 +613,8 @@ class LGTUApplication:
                         zone=zone,
                         duration=0.0,  # Мультиплексор не измеряет длительность
                         token=self._device.current_token,
-                        user_id=self._device.current_user_id
                     )
-                    logger.info(f"[PassageDetected] direction={direction}, zone={zone}, token={self._device.current_token}, user_id={self._device.current_user_id}")
+                    logger.info(f"[PassageDetected] direction={direction}, zone={zone}, token={self._device.current_token}")
                     return event
 
         elif event_type == "error":

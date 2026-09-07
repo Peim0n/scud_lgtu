@@ -147,13 +147,7 @@ Content-Type: application/json
       "quantity": 3,
       "list": ["<hash>", "..."]
     }
-  ],
-  "users": {
-    "123": {
-      "phone_h": "<hash>",
-      "cardid_h": "<hash>"
-    }
-  }
+  ]
 }
 ```
 
@@ -167,7 +161,7 @@ Content-Type: application/json
 ```
 
 - `dynamic_key` — дневной ключ HMAC-SHA256 для финального хеширования идентификаторов.
-- Допустимые `type` в `id[]`/`users`: `phone`, `phone_h`, `maxid`, `maxid_h`, `cardid`, `cardid_h`.
+- Допустимые `type` в `id[]`: `phone`, `phone_h`, `maxid`, `maxid_h`, `cardid`, `cardid_h`.
 - Синхронизация выполняется каждые 10 минут (`backend_sync_interval_s = 600`).
 - Контроллер хранит список в оперативной памяти; при отсутствии сети работает по последнему полученному кэшу.
 

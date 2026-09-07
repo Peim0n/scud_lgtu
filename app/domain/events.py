@@ -44,7 +44,6 @@ class PassageDetected:
     zone: str
     duration: float
     token: str | None = None
-    user_id: int | None = None
 
 
 @dataclass
@@ -52,7 +51,6 @@ class AccessGranted:
     """Событие разрешённого доступа."""
     direction: str
     token: str | None = None
-    user_id: int | None = None
 
 
 @dataclass

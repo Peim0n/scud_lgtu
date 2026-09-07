@@ -143,7 +143,6 @@ class PassageEvent:
     direction: str = DirectionEnum.IN.value  # in | out
     stime: float = 0.0                       # timestamptz
     ftime: float | None = None            # timestamptz
-    user_id: int | None = None            # bigint
     token_type: str = TokenTypeEnum.MAXID.value  # phone | phone_h | maxid | maxid_h | cardid | cardid_h
     token: str = ""
     result: str = ResultEnum.DENIED.value    # pass | timeout | denied | oncoming | double | forced

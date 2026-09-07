@@ -18,10 +18,9 @@ def test_raw_type_from_backend_is_matched_directly():
         "id": [{"type": "phone", "quantity": 1, "list": ["+79006008913"]}],
     })
 
-    allowed, user_id = cache.is_allowed("phone", "+79006008913")
+    allowed = cache.is_allowed("phone", "+79006008913")
 
     assert allowed is True
-    assert user_id is None
 
 
 def test_raw_type_rejects_unknown_value():
@@ -31,7 +30,7 @@ def test_raw_type_rejects_unknown_value():
         "id": [{"type": "maxid", "quantity": 1, "list": ["1234567"]}],
     })
 
-    allowed, _ = cache.is_allowed("maxid", "7654321")
+    allowed = cache.is_allowed("maxid", "7654321")
 
     assert allowed is False
 
@@ -45,7 +44,7 @@ def test_already_hashed_type_from_backend_is_stored_as_is():
         "id": [{"type": "maxid_h", "quantity": 1, "list": [precomputed_hash]}],
     })
 
-    allowed, _ = cache.is_allowed("maxid_h", precomputed_hash)
+    allowed = cache.is_allowed("maxid_h", precomputed_hash)
 
     assert allowed is True
 
@@ -58,6 +57,6 @@ def test_update_without_keys_falls_back_to_raw_comparison():
         "id": [{"type": "phone", "quantity": 1, "list": ["+79006008913"]}],
     })
 
-    allowed, _ = cache.is_allowed("phone", "+79006008913")
+    allowed = cache.is_allowed("phone", "+79006008913")
 
     assert allowed is True

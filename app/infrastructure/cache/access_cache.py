@@ -47,8 +47,6 @@ class LocalAccessCache:
         dynamic_key: str | None = None,
     ) -> None:
         self._allowed: dict[str, set[str]] = {}
-        self._user_by_token: dict[str, int] = {}
-        self._users: dict[int, dict[str, str]] = {}
         self._static_key = static_key
         self._dynamic_key = dynamic_key
 
@@ -82,8 +80,6 @@ class LocalAccessCache:
         if "id" not in data:
             return
         self._allowed.clear()
-        self._user_by_token.clear()
-        self._users.clear()
         for item in data["id"]:
             id_type = item.get("type")
             if not id_type:
@@ -96,22 +92,9 @@ class LocalAccessCache:
             self._allowed[id_type] = {
                 self._hash(id_type, normalize(value)) for value in item.get("list", [])
             }
-        for user_id, user in data.get("users", {}).items():
-            try:
-                uid = int(user_id)
-            except (ValueError, TypeError):
-                logger.warning("Некорректный user_id в ответе бэкенда: %s", user_id)
-                continue
-            self._users[uid] = {}
-            for id_type, value in user.items():
-                if id_type == "user_id":
-                    continue
-                h = self._hash(id_type, normalize(value))
-                self._user_by_token[h] = uid
-                self._users[uid][id_type] = value
         logger.info("LocalAccessCache обновлён: %s", {k: len(v) for k, v in self._allowed.items()})
 
-    def is_allowed(self, id_type: str, token: str) -> tuple[bool, int | None]:
+    def is_allowed(self, id_type: str, token: str) -> bool:
         # Значение может быть уже частично хешировано считывателем (int/decimal
         # строка от Wiegand) — normalize() тут не подходит, т.к. предназначен
         # для строковых идентификаторов вида телефона/MaxID.
@@ -119,7 +102,6 @@ class LocalAccessCache:
         h = self._hash(id_type, raw_value)
         lookup_type = PARTIAL_HASH_LOOKUP_TARGET.get(id_type, id_type)
         allowed = h in self._allowed.get(lookup_type, set())
-        matched_hash = h
 
         # Если backend прислал идентификатор в виде *_h, а считыватель/QR
         # отдаёт raw phone/maxid — ищем хешированное значение.
@@ -130,19 +112,13 @@ class LocalAccessCache:
                     h_hashed = hash_identifier(raw_value, self._static_key, self._dynamic_key)
                     if h_hashed in hashed_set:
                         allowed = True
-                        matched_hash = h_hashed
-            elif lookup_type in hashed_set:
+            elif h in hashed_set:
                 # Для cardid _hash() уже вернул полный хеш (raw PAN
                 # хешируется здесь, поэтому ищем тот же h в *_h).
                 allowed = True
 
-        user_id = self._user_by_token.get(matched_hash) if allowed else None
-        return allowed, user_id
+        return allowed
 
-    def add(self, id_type: str, token: str, user_id: int | None = None) -> None:
+    def add(self, id_type: str, token: str) -> None:
         h = self._hash(id_type, normalize(token))
         self._allowed.setdefault(id_type, set()).add(h)
-        if user_id is not None:
-            uid = int(user_id)
-            self._user_by_token[h] = uid
-            self._users.setdefault(uid, {})[id_type] = token

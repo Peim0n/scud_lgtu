@@ -38,7 +38,7 @@ class OpenEntryCommand(_RelayCommand):
         self._skip_relay = skip_relay
 
     async def run(self, executor) -> None:
-        logger.info(f"[OpenEntryCommand] открытие входа на {self._duration}с, token={self._device.current_token}, user_id={self._device.current_user_id}")
+        logger.info(f"[OpenEntryCommand] открытие входа на {self._duration}с, token={self._device.current_token}")
         try:
             if not self._skip_relay:
                 await executor.apply([
@@ -61,16 +61,16 @@ class OpenEntryCommand(_RelayCommand):
                 if self._refresh_requested:
                     self._refresh_requested = False
                     continue  # Продолжаем ждать
-                logger.info(f"[OpenEntryCommand] закрытие по таймеру, token={self._device.current_token}, user_id={self._device.current_user_id}")
+                logger.info(f"[OpenEntryCommand] закрытие по таймеру, token={self._device.current_token}")
                 break  # Таймер истёк
         finally:
             saved_token = self._device.current_token
-            saved_user_id = self._device.current_user_id
+
             self._device.current_token = None
-            self._device.current_user_id = None
+
             if not self._skip_cleanup:
                 if stopped_by_interrupt:
-                    logger.info(f"[OpenEntryCommand] прерван, token={saved_token}, user_id={saved_user_id}")
+                    logger.info(f"[OpenEntryCommand] прерван, token={saved_token}")
                 await executor.apply([
                     OutputCommand(name=self._device.entry_relay, state=False),
                     OutputCommand(name=self._device.entry_green, state=False),
@@ -82,7 +82,7 @@ class OpenEntryCommand(_RelayCommand):
 
     def cleanup(self) -> list[OutputCommand]:
         self._device.current_token = None
-        self._device.current_user_id = None
+
         return [
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.entry_green, state=False),
@@ -107,7 +107,7 @@ class OpenExitCommand(_RelayCommand):
         self._skip_relay = skip_relay
 
     async def run(self, executor) -> None:
-        logger.info(f"[OpenExitCommand] открытие выхода на {self._duration}с, token={self._device.current_token}, user_id={self._device.current_user_id}")
+        logger.info(f"[OpenExitCommand] открытие выхода на {self._duration}с, token={self._device.current_token}")
         try:
             if not self._skip_relay:
                 await executor.apply([
@@ -130,16 +130,16 @@ class OpenExitCommand(_RelayCommand):
                 if self._refresh_requested:
                     self._refresh_requested = False
                     continue  # Продолжаем ждать
-                logger.info(f"[OpenExitCommand] закрытие по таймеру, token={self._device.current_token}, user_id={self._device.current_user_id}")
+                logger.info(f"[OpenExitCommand] закрытие по таймеру, token={self._device.current_token}")
                 break  # Таймер истёк
         finally:
             saved_token = self._device.current_token
-            saved_user_id = self._device.current_user_id
+
             self._device.current_token = None
-            self._device.current_user_id = None
+
             if not self._skip_cleanup:
                 if stopped_by_interrupt:
-                    logger.info(f"[OpenExitCommand] прерван, token={saved_token}, user_id={saved_user_id}")
+                    logger.info(f"[OpenExitCommand] прерван, token={saved_token}")
                 await executor.apply([
                     OutputCommand(name=self._device.exit_relay, state=False),
                     OutputCommand(name=self._device.exit_green, state=False),
@@ -151,7 +151,7 @@ class OpenExitCommand(_RelayCommand):
 
     def cleanup(self) -> list[OutputCommand]:
         self._device.current_token = None
-        self._device.current_user_id = None
+
         return [
             OutputCommand(name=self._device.exit_relay, state=False),
             OutputCommand(name=self._device.exit_green, state=False),
@@ -172,7 +172,7 @@ class UnlockEntryCommand(_RelayCommand):
         super().__init__(device)
 
     async def run(self, executor) -> None:
-        logger.info(f"[UnlockEntryCommand] разблокирован вход, token={self._device.current_token}, user_id={self._device.current_user_id}")
+        logger.info(f"[UnlockEntryCommand] разблокирован вход, token={self._device.current_token}")
         await executor.apply([
             OutputCommand(name=self._device.exit_relay, state=False),
             OutputCommand(name=self._device.entry_relay, state=True),
@@ -207,7 +207,7 @@ class UnlockExitCommand(_RelayCommand):
         super().__init__(device)
 
     async def run(self, executor) -> None:
-        logger.info(f"[UnlockExitCommand] разблокирован выход, token={self._device.current_token}, user_id={self._device.current_user_id}")
+        logger.info(f"[UnlockExitCommand] разблокирован выход, token={self._device.current_token}")
         await executor.apply([
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.exit_relay, state=True),
@@ -240,7 +240,7 @@ class CloseCommand(_RelayCommand):
     async def run(self, executor) -> None:
         logger.info("[CloseCommand] закрытие")
         self._device.current_token = None
-        self._device.current_user_id = None
+
         await executor.apply([
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.exit_relay, state=False),
@@ -291,7 +291,7 @@ class LockCommand(_RelayCommand):
         try:
             self._device.locked = True
             self._device.current_token = None
-            self._device.current_user_id = None
+
             await executor.apply([
                 OutputCommand(name=self._device.entry_relay, state=False),
                 OutputCommand(name=self._device.exit_relay, state=False),
@@ -349,7 +349,7 @@ class AlarmCommand(_RelayCommand):
     async def run(self, executor) -> None:
         logger.info("AlarmCommand: тревога")
         self._device.current_token = None
-        self._device.current_user_id = None
+
         try:
             await executor.apply([
                 OutputCommand(name=self._device.entry_relay, state=False),
@@ -399,7 +399,7 @@ class ClearAlarmCommand(_RelayCommand):
         )
 
     async def run(self, executor) -> None:
-        logger.info(f"ClearAlarmCommand: сброс тревоги, token={self._device.current_token}, user_id={self._device.current_user_id}")
+        logger.info(f"ClearAlarmCommand: сброс тревоги, token={self._device.current_token}")
         commands = [
             OutputCommand(name=self._device.entry_relay, state=False),
             OutputCommand(name=self._device.exit_relay, state=False),
