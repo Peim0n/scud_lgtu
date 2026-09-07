@@ -251,7 +251,7 @@ class NetworkManagerAdapter:
         if not servers:
             return _ok("ntp серверы не заданы")
         # Включаем NTP через timedatectl
-        rc, out, err = _run(["timedatectl", "set-ntp", "true"])
+        rc, _, err = _run(["timedatectl", "set-ntp", "true"])
         if rc != 0:
             return _err(err)
         # Пытаемся прописать серверы в timesyncd, если он используется
@@ -259,7 +259,7 @@ class NetworkManagerAdapter:
             lines = ["[Time]", f"NTP={', '.join(servers)}"]
             with open("/etc/systemd/timesyncd.conf", "w", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
-            rc, out, err = _run(["systemctl", "restart", "systemd-timesyncd"])
+            rc, _, err = _run(["systemctl", "restart", "systemd-timesyncd"])
             if rc != 0:
                 return _err(err)
         except PermissionError:
@@ -282,6 +282,8 @@ class NetworkManagerAdapter:
             return _ok("wifi не задан")
         if not wifi_cfg.get("enabled"):
             return _ok("wifi выключен")
+        if not wifi_cfg.get("ssid", "").strip():
+            return _err("Wi-Fi включён, но не указан SSID")
         if self._has_netplan():
             return self._apply_via_netplan("wifi", wifi_cfg)
         if self._has_nmcli():
@@ -329,6 +331,18 @@ class NetworkManagerAdapter:
             if "ethernets" not in netplan_cfg["network"]:
                 netplan_cfg["network"]["ethernets"] = {}
             netplan_cfg["network"]["ethernets"][interface] = eth_section
+            # Стираем stale wifis-конфиг, иначе networkd ругается на match в wifis
+            netplan_cfg["network"].pop("wifis", None)
+
+        # Отключаем Armbian DHCP-конфиг "все e* интерфейсы", иначе end0
+        # оказывается в двух секциях и/или получает DHCP вместо static.
+        armbian_dhcp = os.path.join(self._NETPLAN_DIR, "10-dhcp-all-interfaces.yaml")
+        armbian_bak = armbian_dhcp + ".bak"
+        if os.path.exists(armbian_dhcp) and not os.path.exists(armbian_bak):
+            try:
+                os.rename(armbian_dhcp, armbian_bak)
+            except OSError:
+                pass
 
         # Записываем
         try:
@@ -358,15 +372,18 @@ class NetworkManagerAdapter:
             with open(self._NETPLAN_FILE, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             return data if data else {}
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {}
 
     def _build_netplan_ethernet(self, interface: str, cfg: dict[str, Any]) -> dict[str, Any]:
-        """Построить секцию ethernets для netplan."""
+        """Построить секцию ethernets для netplan.
+
+        Используем имя интерфейса как ключ секции, без match: — networkd
+        корректно работает с exact interface name, а match: вызывает
+        конфликты с другими конфигами (например, Armbian all-eth).
+        """
         method = cfg.get("method", "dhcp")
-        section: dict[str, Any] = {
-            "match": {"name": interface},
-        }
+        section: dict[str, Any] = {}
         if method == "static":
             address = cfg.get("address", "")
             netmask = cfg.get("netmask", "")
@@ -504,7 +521,7 @@ class NetworkManagerAdapter:
         """Преобразовать маску вида 255.255.255.0 в префикс."""
         try:
             octets = [int(o) for o in netmask.split(".")]
-            bits = sum(bin(o).count("1") for o in octets)
+            bits = sum(o.bit_count() for o in octets)
             return bits
         except (ValueError, AttributeError):
             return 24
