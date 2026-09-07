@@ -119,9 +119,24 @@ class LocalAccessCache:
         h = self._hash(id_type, raw_value)
         lookup_type = PARTIAL_HASH_LOOKUP_TARGET.get(id_type, id_type)
         allowed = h in self._allowed.get(lookup_type, set())
+        matched_hash = h
+
+        # Если backend прислал идентификатор в виде *_h, а считыватель/QR
+        # отдаёт raw phone/maxid — ищем хешированное значение.
         if not allowed and not lookup_type.endswith("_h"):
-            allowed = h in self._allowed.get(lookup_type + "_h", set())
-        user_id = self._user_by_token.get(h) if allowed else None
+            hashed_set = self._allowed.get(lookup_type + "_h", set())
+            if lookup_type in ("phone", "maxid"):
+                if self._static_key is not None and self._dynamic_key is not None:
+                    h_hashed = hash_identifier(raw_value, self._static_key, self._dynamic_key)
+                    if h_hashed in hashed_set:
+                        allowed = True
+                        matched_hash = h_hashed
+            elif lookup_type in hashed_set:
+                # Для cardid _hash() уже вернул полный хеш (raw PAN
+                # хешируется здесь, поэтому ищем тот же h в *_h).
+                allowed = True
+
+        user_id = self._user_by_token.get(matched_hash) if allowed else None
         return allowed, user_id
 
     def add(self, id_type: str, token: str, user_id: int | None = None) -> None:
