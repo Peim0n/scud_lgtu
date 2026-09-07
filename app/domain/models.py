@@ -69,6 +69,8 @@ class Passage:
     maxid | maxid_h | cardid | cardid_h. Внутренние типы (например,
     cardid_partial_h) должны приводиться к типу с проводного протокола
     перед записью в журнал/отправкой на бэкенд."""
+    raw_input: str | None = None
+    """Сырой QR URL или данные карты, которыми пытались зайти — для аудита."""
     severity: str = SeverityEnum.INFO.value
 
 

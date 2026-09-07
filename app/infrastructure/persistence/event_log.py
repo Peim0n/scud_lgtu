@@ -25,6 +25,9 @@ class EventLogAdapter:
         else:
             description = f"Проход {direction} — {result}"
 
+        if passage.raw_input:
+            description += f" (raw: {passage.raw_input})"
+
         event = PassageEvent(
             direction=direction,
             result=result,

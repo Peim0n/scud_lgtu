@@ -1,4 +1,4 @@
-"""Базовый класс для устройств контроля доступа (турникет, калитка, дверь и т.д.).
+"""Базовый класс для устройств контроля доступа (турникет, калитка, дверь и т.п.).
 
 Этот модуль предоставляет общий интерфейс и логику для всех устройств доступа,
 независимо от конкретной реализации оборудования.
@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+
+from app.domain.commands import Command
 
 
 class AccessDevice(ABC):
@@ -21,6 +23,8 @@ class AccessDevice(ABC):
         self._device_id = device_id
         self._resolver = resolver
         self._locked = False
+        self.current_token: str | None = None
+        self.current_user_id: int | None = None
         self._load_config(timings)
 
     @property
@@ -38,6 +42,11 @@ class AccessDevice(ABC):
         """Активна ли пожарная тревога."""
 
     @property
+    @abstractmethod
+    def output_names(self) -> tuple[str, ...]:
+        """Имена всех управляемых выходов устройства."""
+
+    @property
     def locked(self) -> bool:
         """Заблокировано ли устройство админом."""
         return self._locked
@@ -47,8 +56,17 @@ class AccessDevice(ABC):
         self._locked = value
 
     @abstractmethod
-    def handle(self, event) -> Any | None:
+    def handle(self, event) -> Command | None:
         """Обработать доменное событие и вернуть команду."""
+
+    @abstractmethod
+    def is_equivalent_state(self, old_state: str, new_state: str) -> bool:
+        """Вернуть True, если переход old_state -> new_state не требует cleanup.
+
+        Используется исполнителем команд для оптимизации: при переходе между
+        эквивалентными состояниями (например, entry_open и unlocked_entry)
+        не нужно выключать и снова включать одно и то же реле.
+        """
 
     def _load_config(self, timings: dict) -> None:
         """Загрузить тайминги устройства и маппинги IO."""

@@ -1,12 +1,13 @@
 """Адаптер исполнительных механизмов GPIO (Shift Register)."""
+from typing import Any
+
 from app.domain.models import OutputCommand
-from app.infrastructure.engine import ScudEngine
 
 
 class ShiftRegisterActuator:
     """Исполнительный механизм для выходов сдвигового регистра."""
 
-    def __init__(self, engine: ScudEngine):
+    def __init__(self, engine: Any):
         """Инициализировать актуатор с движком."""
         self._engine = engine
 

@@ -134,6 +134,7 @@ def build_application(config_path: str | None = None) -> LGTUApplication:
     base_dir = os.path.dirname(config_path)
 
     # Создать программные компоненты напрямую
+    engine: Any
     if config.get("mode") == "mock":
         from app.tests.mocks.mock_engine import MockEngine
         engine = MockEngine(config=config, timings=timings)
@@ -175,9 +176,6 @@ def build_application(config_path: str | None = None) -> LGTUApplication:
     # Инициализация ModuleResolver для новой архитектуры
     # ModuleResolver реализует интерфейс ConfigResolver из domain слоя
     resolver: Any = ModuleResolver(config)
-
-    # Доменные компоненты
-    auth_timeout = resolver.get_timing("business", "auth_timeout_s")
 
     device_logic = create_device(config, timings=timings, resolver=resolver)
     access_policy = AccessPolicy(repository=access_repository)

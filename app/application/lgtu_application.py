@@ -2,7 +2,7 @@
 Основное приложение LGTU системы СКУД.
 
 Этот модуль реализует основную логику приложения, связывающую инфраструктуру (ScudEngine)
-с доменной логикой (TurnstileDevice, AccessPolicy, PassageTracker).
+с доменной логикой (AccessDevice, AccessPolicy, PassageTracker).
 Приложение получает события от ScudEngine, преобразует их в доменные события
 и передаёт устройству, которое возвращает команды. Команды выполняются асинхронно
 через встроенный _CommandRunner.
@@ -28,12 +28,14 @@ import queue
 import threading
 import time
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from app.application.services.passage_service import PassageService
 from app.application.services.sync_service import SyncService
 from app.domain.access import AccessPolicy, PassageTracker
-from app.domain.enums import DirectionEnum, ResultEnum, TokenTypeEnum
+from app.domain.access_device import AccessDevice
+from app.domain.commands import Command
+from app.domain.enums import DirectionEnum, ResultEnum, SeverityEnum, TokenTypeEnum
 from app.domain.events import (
     AccessDenied,
     AccessGranted,
@@ -46,8 +48,6 @@ from app.domain.events import (
     QrRead,
 )
 from app.domain.models import AuthSession, Credential, OutputCommand, Passage
-from app.infrastructure.devices.turnstile.commands import Command
-from app.infrastructure.devices.turnstile.turnstile_device import TurnstileDevice
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,9 @@ def _to_wire_token_type(token_type: str) -> str:
 class _CommandRunner:
     """Асинхронный запускатель команд устройства с приоритетами и явной остановкой."""
 
-    def __init__(self, actuator: Any, event_source: Any = None, sound_output: Any = None, command_stop_timeout: float = 0.5):
+    def __init__(self, actuator: Any, device: AccessDevice, event_source: Any = None, sound_output: Any = None, command_stop_timeout: float = 0.5):
         self._actuator = actuator
+        self._device = device
         self._event_source = event_source
         self._sound_output = sound_output
         self._command_stop_timeout = command_stop_timeout
@@ -76,15 +77,9 @@ class _CommandRunner:
         self._tasks: dict[str, asyncio.Task] = {}
         self._commands: dict[str, Command] = {}
         self._state_label: str = "idle"
-        self._entry_relay: str = "entry_relay"
-        self._exit_relay: str = "exit_relay"
 
     def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
-
-    def set_relay_names(self, entry_relay: str, exit_relay: str) -> None:
-        self._entry_relay = entry_relay
-        self._exit_relay = exit_relay
 
     @property
     def state_label(self) -> str:
@@ -102,19 +97,19 @@ class _CommandRunner:
         asyncio.run_coroutine_threadsafe(self._schedule(command), self._loop)
 
     async def _schedule(self, command: Command) -> None:
+        if self._loop is None:
+            logger.warning("CommandRunner: event loop не инициализирован, команда отброшена")
+            return
         meta = command.meta
         for name in meta.conflicts:
-            # Пропускаем cleanup при переходе между состояниями с тем же направлением
+            # Пропускаем cleanup при переходе между эквивалентными состояниями
             skip_cleanup = False
             old_command = self._commands.get(name)
-            if old_command is not None and (
-                meta.state_label == "unlocked_entry" and old_command.meta.state_label == "entry_open"
-                or meta.state_label == "unlocked_exit" and old_command.meta.state_label == "exit_open"
-                or meta.state_label == "entry_open" and old_command.meta.state_label == "unlocked_entry"
-                or meta.state_label == "exit_open" and old_command.meta.state_label == "unlocked_exit"
-                or old_command.meta.state_label == meta.state_label
-            ):
-                skip_cleanup = True
+            if old_command is not None:
+                old_label = old_command.meta.state_label
+                new_label = meta.state_label
+                if old_label is not None and new_label is not None and self._device.is_equivalent_state(old_label, new_label):
+                    skip_cleanup = True
             await self._stop_and_wait(name, skip_cleanup=skip_cleanup)
         # Если команда с таким же именем уже выполняется, обновляем её вместо остановки
         old_command = self._commands.get(meta.name)
@@ -177,8 +172,8 @@ class _CommandRunner:
             masks = {cmd.name: cmd.state for cmd in commands}
             try:
                 self._actuator._engine.set_output_mask(masks)
-            except Exception as e:  # noqa: BLE001
-                logger.exception("Error applying commands %s: %s", masks, e)
+            except Exception:
+                logger.exception("Error applying commands %s", masks)
 
     async def stop_all(self) -> None:
         for command in list(self._commands.values()):
@@ -189,12 +184,11 @@ class _CommandRunner:
         self._tasks.clear()
         self._commands.clear()
         if self._actuator is not None:
-            for name in (self._entry_relay, self._exit_relay, "entry_green", "exit_green",
-                         "entry_red", "exit_red", "main_buzzer"):
+            for name in self._device.output_names:
                 try:
                     self._actuator.apply(OutputCommand(name=name, state=False))
-                except Exception as e:  # noqa: BLE001
-                    logger.exception("Error applying safe state %s: %s", name, e)
+                except Exception:
+                    logger.exception("Error applying safe state %s", name)
 
 
 class LGTUApplication:
@@ -203,7 +197,7 @@ class LGTUApplication:
     def __init__(
         self,
         event_source: Any,
-        device_logic: TurnstileDevice,
+        device_logic: AccessDevice,
         access_policy: AccessPolicy,
         passage_tracker: PassageTracker,
         passage_service: PassageService,
@@ -222,7 +216,7 @@ class LGTUApplication:
         ----------
         event_source : Any
             Источник событий и управления оборудованием (ScudEngine)
-        device_logic : TurnstileDevice
+        device_logic : AccessDevice
             Событийно-управляемая логика устройства (турникет/ворота/дверь)
         access_policy : AccessPolicy
             Политика доступа
@@ -246,10 +240,10 @@ class LGTUApplication:
             обновление/ротация mTLS-сертификата и т.п.).
         """
         self._event_source = event_source
-        self._config = config
-        self._timings = config["timings"]
-        self._devices = devices or {}
-        self._passage_zones = devices.get("passage_zones", [])
+        self._config: dict[str, Any] = config or {}
+        self._timings: dict[str, Any] = self._config.get("timings", {})
+        self._devices: dict[str, Any] = devices or {}
+        self._passage_zones: list[Any] = self._devices.get("passage_zones", [])
         self._running = False
         self._qr_decoder = qr_decoder
         self._device = device_logic
@@ -263,18 +257,17 @@ class LGTUApplication:
 
         # Исполнитель команд: отвечает за приоритеты, отмену и применение выходов
         self._executor = _CommandRunner(
-            actuator, event_source, self._sound_output,
+            actuator, device_logic, event_source, self._sound_output,
             command_stop_timeout=float(self._timings.get("command_stop_timeout_s", 0.5)),
         )
-        self._executor.set_relay_names(device_logic.entry_relay, device_logic.exit_relay)
 
         # Состояние кнопки-модификатора Shift (оркестрация, не логика устройства)
         self._shift_pressed = False
         self._shift_used = False
 
         # Цикл событий для асинхронных операций
-        self._loop = None
-        self._loop_thread = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._loop_thread: threading.Thread | None = None
 
     def _process_domain_event(self, event) -> None:
         """Превратить доменное событие в команду для устройства и отправить исполнителю."""
@@ -326,6 +319,22 @@ class LGTUApplication:
         credentials = getattr(event, "_all_credentials", None) or [event.credential]
         reader_config = self._devices.get("readers", {}).get(event.reader_id, {})
         direction = reader_config.get("direction", "entry")
+        direction_enum = DirectionEnum.IN if direction == "entry" else DirectionEnum.OUT
+        raw_input = getattr(event, "raw_data", None)
+
+        def _log_denied(credential: Credential, reason: str) -> None:
+            token_type = _to_wire_token_type(credential.token_type.value)
+            self._passage_service.log_access_attempt(Passage(
+                direction=direction_enum,
+                zone="",
+                duration=0.0,
+                result=ResultEnum.DENIED,
+                token=credential.value,
+                token_type=token_type,
+                raw_input=raw_input,
+                severity=SeverityEnum.NOTICE.value,
+            ))
+            logger.info("Доступ отказан: %s:%s — %s", token_type, credential.value, reason)
 
         # Проверка возраста QR-кода
         if isinstance(event, QrRead) and event.timestamp is not None:
@@ -334,10 +343,7 @@ class LGTUApplication:
                 now = int(time.time())
                 age = now - event.timestamp
                 if age > max_age:
-                    logger.warning(
-                        "QR код отклонён: возраст %ds превышает максимум %ds",
-                        age, max_age,
-                    )
+                    _log_denied(event.credential, f"возраст QR {age}s > {max_age}s")
                     return AccessDenied(direction=direction)
 
         for credential in credentials:
@@ -345,16 +351,13 @@ class LGTUApplication:
             if decision.allowed:
                 token_prefix = credential.token_type.value
                 token = f"{token_prefix}:{credential.value}"
-                direction_enum = DirectionEnum.IN if direction == "entry" else DirectionEnum.OUT
                 session = AuthSession(token=token, direction=direction_enum, user_id=decision.user_id)
                 self._passage_tracker.track(session)
                 logger.info("Доступ разрешён: %s (user_id=%s)", token, decision.user_id)
                 return AccessGranted(direction=direction, token=token, user_id=decision.user_id)
 
         # Все credentials проверены, ни один не прошёл
-        token_prefix = event.credential.token_type.value
-        token = f"{token_prefix}:{event.credential.value}"
-        logger.info("Доступ отказан: %s", token)
+        _log_denied(event.credential, "нет в списке доступа")
         return AccessDenied(direction=direction)
 
     def _map_button_event(self, event: ButtonPressed) -> Any | None:
@@ -434,14 +437,15 @@ class LGTUApplication:
             self._executor.set_loop(self._loop)
             self._loop.run_forever()
 
-        self._loop_thread = threading.Thread(target=run_loop, daemon=True)
-        self._loop_thread.start()
+        thread = threading.Thread(target=run_loop, daemon=True)
+        self._loop_thread = thread
+        thread.start()
 
     def _stop_event_loop(self) -> None:
         """Остановить цикл событий asyncio."""
-        if self._loop and self._loop.is_running():
+        if self._loop is not None and self._loop.is_running():
             self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._loop_thread and self._loop_thread.is_alive():
+        if self._loop_thread is not None and self._loop_thread.is_alive():
             self._loop_thread.join(timeout=self._timings["thread_join_timeout_s"])
 
     def _get_reader_id(self, reader: str) -> str:
@@ -492,8 +496,8 @@ class LGTUApplication:
 
                 ts = qr_fields.get("timestamp")
                 return credentials, qr_fields, ts
-            except Exception as e:  # noqa: BLE001
-                logger.exception("Ошибка декодирования QR кода: %s", e)
+            except Exception:
+                logger.exception("Ошибка декодирования QR кода")
                 return ([Credential(
                     token_type=TokenTypeEnum.MAXID,
                     value=str(data),
@@ -507,13 +511,15 @@ class LGTUApplication:
                 encrypted=False
             )], {}, None)
 
-    def _convert_scud_event_to_domain(self, scud_event) -> Optional:
+    def _convert_scud_event_to_domain(self, scud_event) -> Any | None:
         """Преобразовать ScudEvent в доменное событие."""
         logger.debug(f"Converting ScudEvent: type={scud_event.type}, source={scud_event.source}, payload={scud_event.payload}")
 
         event_type = scud_event.type
         if isinstance(event_type, Enum):
             event_type = event_type.value
+
+        event: Any | None = None
 
         if event_type == "qr_read":
             credential = Credential(
@@ -525,7 +531,8 @@ class LGTUApplication:
             reader_id = self._get_reader_id(reader)
             event = QrRead(
                 credential=credential,
-                reader_id=reader_id
+                reader_id=reader_id,
+                raw_data=scud_event.payload.get("data"),
             )
             logger.info(f"QR Read event: {event}")
             return event
@@ -580,6 +587,7 @@ class LGTUApplication:
                     reader_id=reader_id,
                     qr_fields=qr_fields,
                     timestamp=qr_timestamp,
+                    raw_data=data,
                 )
                 event._all_credentials = credentials  # type: ignore[attr-defined]
                 logger.info(f"Serial QR Read event: {event}")
@@ -640,8 +648,8 @@ class LGTUApplication:
             masks = {name: False for name in pins_cfg}
             self._actuator._engine.set_output_mask(masks)
             logger.debug(f"Initialized outputs to safe state: {list(pins_cfg)}")
-        except Exception as e:  # noqa: BLE001
-            logger.exception("Error initializing outputs: %s", e)
+        except Exception:
+            logger.exception("Error initializing outputs")
 
     def run(self) -> None:
         """Запустить главный цикл приложения."""
@@ -675,8 +683,8 @@ class LGTUApplication:
                 except queue.Empty:
                     # Нормальное поведение - очередь пуста
                     pass
-                except Exception as e:  # noqa: BLE001
-                    logger.exception("Error processing event: %s", e)
+                except Exception:
+                    logger.exception("Error processing event")
 
                 # Периодический вызов сервисов синхронизации с бэкендом
                 now = time.time()
@@ -684,7 +692,7 @@ class LGTUApplication:
                 for service in self._periodic_services:
                     try:
                         service.tick(now)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         logger.exception("LGTUApplication: ошибка периодического сервиса %s", service)
 
         except KeyboardInterrupt:

@@ -20,6 +20,8 @@ class QrRead:
     qr_fields: dict | None = None
     # Unix timestamp генерации QR (поле типа 0 из payload) — для проверки возраста
     timestamp: int | None = None
+    # Исходный QR URL/строка, полученная от считывателя — для журналирования отказов
+    raw_data: str | None = None
 
 
 @dataclass

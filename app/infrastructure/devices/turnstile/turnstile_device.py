@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from app.domain.access_device import AccessDevice
+from app.domain.commands import Command
 from app.domain.events import (
     AccessDenied,
     AccessGranted,
@@ -18,7 +19,6 @@ from app.infrastructure.devices.turnstile.commands import (
     AlarmCommand,
     ClearAlarmCommand,
     CloseCommand,
-    Command,
     DelayedCloseCommand,
     DenyCommand,
     LockCommand,
@@ -100,6 +100,29 @@ class TurnstileDevice(AccessDevice):
     def open_beep_duration(self) -> float:
         return self._open_beep_duration
 
+    @property
+    def output_names(self) -> tuple[str, ...]:
+        return (
+            self.entry_relay,
+            self.exit_relay,
+            self.main_buzzer,
+            self.entry_green,
+            self.entry_red,
+            self.exit_green,
+            self.exit_red,
+        )
+
+    def is_equivalent_state(self, old_state: str, new_state: str) -> bool:
+        if old_state == new_state:
+            return True
+        equivalents = {
+            "entry_open": {"unlocked_entry"},
+            "unlocked_entry": {"entry_open"},
+            "exit_open": {"unlocked_exit"},
+            "unlocked_exit": {"exit_open"},
+        }
+        return new_state in equivalents.get(old_state, set())
+
     def handle(self, event) -> Command | None:
         """Обработать доменное событие и вернуть команду для исполнителя."""
         # Если установлена админская блокировка, сначала переводим в blocked,
@@ -125,7 +148,7 @@ class TurnstileDevice(AccessDevice):
             return self._on_passage_detected(event)
         return None
 
-    def _on_access_granted(self, event: AccessGranted) -> Command:
+    def _on_access_granted(self, event: AccessGranted) -> Command | None:
         self.current_token = event.token
         self.current_user_id = event.user_id
         if event.direction == "entry":
@@ -311,7 +334,7 @@ class TurnstileDevice(AccessDevice):
         logger.info(f"[TurnstileDevice] mode={self._mode} (from alarm)")
         return ClearAlarmCommand(self)
 
-    def _on_passage_detected(self, event: PassageDetected) -> Command:
+    def _on_passage_detected(self, event: PassageDetected) -> Command | None:
         # Закрываем только в режимах одноразового прохода
         if self._mode in ("entry_open", "exit_open"):
             old_mode = self._mode

@@ -30,6 +30,10 @@ class PassageService:
         if self._passage_tracker is not None and passage.token:
             self._passage_tracker.mark_completed(passage.token)
 
+    def log_access_attempt(self, passage: Passage) -> None:
+        """Записать факт предъявления идентификатора (в т.ч. отказ) без обновления трекера проходов."""
+        self._event_log.append(passage)
+
     def flush_events(self) -> list[Passage]:
         return self._event_log.flush()
 
