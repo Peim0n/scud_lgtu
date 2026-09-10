@@ -310,7 +310,6 @@ Content-Type: application/json
 {
   "event_id": 123,
   "stime": "2025-09-07T12:34:56.123456+03:00",
-  "ftime": null,
   "event_type": "access",
   "direction": "in",
   "token_type": "phone",
@@ -337,7 +336,22 @@ Content-Type: application/json
 | `description` | да | Человекочитаемое описание | строка |
 
 \* Для `event_type=access` поля `direction`, `token_type`, `token`, `result`
-заполняются. Для системных событий они могут отсутствовать или быть пустыми.
+заполняются. Для системных событий контроллер полностью исключает эти поля из
+JSON, чтобы не передавать фиктивные сведения о направлении, идентификаторе и
+результате доступа. Поле `ftime` также отсутствует, пока время завершения не
+известно; значение `null` не отправляется.
+
+Пример системного события:
+
+```json
+{
+  "event_id": 124,
+  "stime": "2025-09-07T12:35:00.123456+03:00",
+  "event_type": "system",
+  "severity": "critical",
+  "description": "[watchdog] Serial reader thread died"
+}
+```
 
 #### Форматы значений
 

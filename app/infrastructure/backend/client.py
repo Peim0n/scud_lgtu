@@ -12,9 +12,9 @@
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from app.infrastructure.backend.rest_client import RestClient, BackendApiError
+from app.infrastructure.backend.rest_client import BackendApiError, RestClient
 from app.infrastructure.persistence.event_store import PassageEvent
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,12 @@ logger = logging.getLogger(__name__)
 class BackendClient:
     """Клиент REST API бэкенда для контроллера турникета."""
 
-    def __init__(self, base_url: str = None, rest_client: Optional[RestClient] = None, **rest_client_kwargs) -> None:
+    def __init__(
+        self,
+        base_url: str | None = None,
+        rest_client: RestClient | None = None,
+        **rest_client_kwargs,
+    ) -> None:
         """
         Parameters
         ----------
@@ -110,7 +115,9 @@ class BackendClient:
 
     def patch_accesspoint(self, mac: str, ip: str, cpuid: str) -> dict[str, Any]:
         """Отправить инвентаризационные данные контроллера."""
-        return self._call("accesspoint", "patch", {"mac": mac, "ip": ip, "cpuid": cpuid})
+        return self._call(
+            "accesspoint", "patch", {"mac": mac, "ip": ip, "cpuid": cpuid}
+        )
 
     # ------------------------------------------------------------------
     # Ресурс event (п. 6.5, идемпотентность передачи, п. 3)
@@ -126,14 +133,19 @@ class BackendClient:
             "event_id": event.event_id,
             "stime": _iso(event.stime),
             "event_type": event.event_type,
-            "direction": event.direction,
-            "token_type": event.token_type,
-            "token": event.token,
-            "result": event.result,
             "severity": event.severity,
             # description — обязательное поле в event/put по ТЗ (§6.5)
             "description": event.description or "",
         }
+        optional_fields = {
+            "direction": event.direction,
+            "token_type": event.token_type,
+            "token": event.token,
+            "result": event.result,
+        }
+        payload.update(
+            {key: value for key, value in optional_fields.items() if value is not None}
+        )
         if event.ftime is not None:
             payload["ftime"] = _iso(event.ftime)
         return self._call("event", "put", payload)
@@ -150,7 +162,11 @@ class BackendClient:
             try:
                 self.put_event(event)
             except BackendApiError as exc:
-                logger.warning("BackendClient.send_events: не удалось отправить событие %s: %s", event.event_id, exc)
+                logger.warning(
+                    "BackendClient.send_events: не удалось отправить событие %s: %s",
+                    event.event_id,
+                    exc,
+                )
                 return False
         return True
 
@@ -158,7 +174,9 @@ class BackendClient:
     # Внутреннее
     # ------------------------------------------------------------------
 
-    def _call(self, resource: str, action: str, payload: Optional[dict] = None) -> dict[str, Any]:
+    def _call(
+        self, resource: str, action: str, payload: dict | None = None
+    ) -> dict[str, Any]:
         try:
             result = self._rest.call(resource, action, payload)
         except BackendApiError:
@@ -171,4 +189,5 @@ class BackendClient:
 def _iso(timestamp: float) -> str:
     """Преобразовать unix timestamp в ISO 8601 строку с временной зоной."""
     import datetime
+
     return datetime.datetime.fromtimestamp(timestamp).astimezone().isoformat()

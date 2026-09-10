@@ -1,8 +1,9 @@
 """Тесты BackendClient — ресурсы ветви controller (п. 6.5 ТЗ) без реальной сети."""
-import pytest
+
+import json
 
 from app.infrastructure.backend.client import BackendClient
-from app.infrastructure.backend.rest_client import RestClient, BackendApiError
+from app.infrastructure.backend.rest_client import RestClient
 from app.infrastructure.persistence.event_store import PassageEvent
 
 
@@ -37,10 +38,23 @@ def _backend_with_session(session: FakeSession) -> BackendClient:
 
 
 def test_get_keys_returns_key_list():
-    session = FakeSession(default_response=FakeResponse(200, {
-        "status": "ok", "quantity": 1,
-        "keys": [{"num": 1, "public": "aa" * 32, "shared": "bb" * 16, "dynamic": "cc" * 32}],
-    }))
+    session = FakeSession(
+        default_response=FakeResponse(
+            200,
+            {
+                "status": "ok",
+                "quantity": 1,
+                "keys": [
+                    {
+                        "num": 1,
+                        "public": "aa" * 32,
+                        "shared": "bb" * 16,
+                        "dynamic": "cc" * 32,
+                    }
+                ],
+            },
+        )
+    )
     backend = _backend_with_session(session)
 
     keys = backend.get_keys()
@@ -51,7 +65,9 @@ def test_get_keys_returns_key_list():
 
 
 def test_get_access_list_passes_update_flag():
-    session = FakeSession(default_response=FakeResponse(200, {"status": "ok", "update": 0, "id": []}))
+    session = FakeSession(
+        default_response=FakeResponse(200, {"status": "ok", "update": 0, "id": []})
+    )
     backend = _backend_with_session(session)
 
     backend.get_access_list(update=0)
@@ -75,8 +91,14 @@ def test_put_event_sends_required_fields():
     session = FakeSession(default_response=FakeResponse(200, {"status": "ok"}))
     backend = _backend_with_session(session)
     event = PassageEvent(
-        event_id=42, stime=1_700_000_000.0, event_type="access", direction="in",
-        token_type="maxid", token="1234567", result="pass", severity="info",
+        event_id=42,
+        stime=1_700_000_000.0,
+        event_type="access",
+        direction="in",
+        token_type="maxid",
+        token="1234567",
+        result="pass",
+        severity="info",
     )
 
     backend.put_event(event)
@@ -86,16 +108,59 @@ def test_put_event_sends_required_fields():
     assert '"token": "1234567"' in body
 
 
+def test_put_system_event_omits_access_fields():
+    session = FakeSession(default_response=FakeResponse(200, {"status": "ok"}))
+    backend = _backend_with_session(session)
+    event = PassageEvent(
+        event_id=43,
+        stime=1_700_000_000.0,
+        event_type="system",
+        severity="critical",
+        description="Watchdog: поток остановлен",
+    )
+
+    backend.put_event(event)
+
+    body = json.loads(session.calls[0]["data"].decode("utf-8"))
+    assert body == {
+        "event_id": 43,
+        "stime": body["stime"],
+        "event_type": "system",
+        "severity": "critical",
+        "description": "Watchdog: поток остановлен",
+    }
+
+
 def test_send_events_stops_on_first_failure_and_returns_false():
-    session = FakeSession(responses=[
-        FakeResponse(200, {"status": "ok"}),
-        FakeResponse(500, {"status": "error", "description": "db down"}),
-    ])
+    session = FakeSession(
+        responses=[
+            FakeResponse(200, {"status": "ok"}),
+            FakeResponse(500, {"status": "error", "description": "db down"}),
+        ]
+    )
     backend = _backend_with_session(session)
     events = [
-        PassageEvent(event_id=1, event_type="access", token_type="maxid", token="1", result="pass"),
-        PassageEvent(event_id=2, event_type="access", token_type="maxid", token="2", result="pass"),
-        PassageEvent(event_id=3, event_type="access", token_type="maxid", token="3", result="pass"),
+        PassageEvent(
+            event_id=1,
+            event_type="access",
+            token_type="maxid",
+            token="1",
+            result="pass",
+        ),
+        PassageEvent(
+            event_id=2,
+            event_type="access",
+            token_type="maxid",
+            token="2",
+            result="pass",
+        ),
+        PassageEvent(
+            event_id=3,
+            event_type="access",
+            token_type="maxid",
+            token="3",
+            result="pass",
+        ),
     ]
 
     result = backend.send_events(events)

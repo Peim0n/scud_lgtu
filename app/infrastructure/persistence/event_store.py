@@ -38,8 +38,10 @@ from typing import Any
 # Событийная модель ScudEngine
 # ============================================================================
 
+
 class EventType(str, Enum):
     """Типы событий от hardware-модулей."""
+
     BUTTON_PRESSED = "button_pressed"
     ALARM_CHANGED = "alarm_changed"
     SHIFT_DONE = "shift_done"
@@ -55,6 +57,7 @@ class EventType(str, Enum):
 
 class EventSource(str, Enum):
     """Источники событий."""
+
     MUX = "mux"
     SHIFT = "shift"
     WIEGAND = "wiegand"
@@ -66,6 +69,7 @@ class EventSource(str, Enum):
 @dataclass(slots=True)
 class ScudEvent:
     """Событие от hardware-модуля."""
+
     type: EventType | str
     source: EventSource | str
     payload: dict[str, Any] = field(default_factory=dict)
@@ -83,8 +87,10 @@ class ScudEvent:
 # Модели данных бизнес-логики
 # ============================================================================
 
+
 class EventTypeEnum(str, Enum):
     """Типы событий в таблице log (п. 5.5 ТЗ)."""
+
     ACCESS = "access"
     SYSTEM = "system"
     FIRMWARE = "firmware"
@@ -94,12 +100,14 @@ class EventTypeEnum(str, Enum):
 
 class DirectionEnum(str, Enum):
     """Направление прохода (п. 5.5 ТЗ)."""
+
     IN = "in"
     OUT = "out"
 
 
 class TokenTypeEnum(str, Enum):
     """Тип идентификатора (п. 5.5 ТЗ)."""
+
     PHONE = "phone"
     PHONE_H = "phone_h"
     MAXID = "maxid"
@@ -110,6 +118,7 @@ class TokenTypeEnum(str, Enum):
 
 class ResultEnum(str, Enum):
     """Результат прохода (п. 5.5 ТЗ)."""
+
     PASS = "pass"
     TIMEOUT = "timeout"
     DENIED = "denied"
@@ -120,6 +129,7 @@ class ResultEnum(str, Enum):
 
 class SeverityEnum(str, Enum):
     """Важность события (п. 5.5 ТЗ)."""
+
     FATAL = "fatal"
     CRITICAL = "critical"
     ERROR = "error"
@@ -136,25 +146,33 @@ class PassageEvent:
 
     Соответствует таблице log из п. 5.5 ТЗ.
     """
-    id: int | None = None                 # bigint, ID записи в БД
-    accesspoint_id: int | None = None     # bigint
-    event_id: int = 0                        # uint64, порядковый номер на контроллере
-    event_type: str = EventTypeEnum.ACCESS.value  # access | system | firmware | security | connection
-    direction: str = DirectionEnum.IN.value  # in | out
-    stime: float = 0.0                       # timestamptz
-    ftime: float | None = None            # timestamptz
-    token_type: str = TokenTypeEnum.MAXID.value  # phone | phone_h | maxid | maxid_h | cardid | cardid_h
-    token: str = ""
-    result: str = ResultEnum.DENIED.value    # pass | timeout | denied | oncoming | double | forced
-    severity: str = SeverityEnum.INFO.value  # fatal | critical | error | warning | notice | info | debug
+
+    id: int | None = None  # bigint, ID записи в БД
+    accesspoint_id: int | None = None  # bigint
+    event_id: int = 0  # uint64, порядковый номер на контроллере
+    event_type: str = (
+        EventTypeEnum.ACCESS.value
+    )  # access | system | firmware | security | connection
+    direction: str | None = None  # in | out; только для событий доступа
+    stime: float = 0.0  # timestamptz
+    ftime: float | None = None  # timestamptz
+    token_type: str | None = (
+        None  # phone | phone_h | maxid | maxid_h | cardid | cardid_h
+    )
+    token: str | None = None
+    result: str | None = None  # pass | timeout | denied | oncoming | double | forced
+    severity: str = (
+        SeverityEnum.INFO.value
+    )  # fatal | critical | error | warning | notice | info | debug
     description: str = ""
-    zone: str | None = None               # зона прохода
-    duration: float | None = None         # длительность прохода
+    zone: str | None = None  # зона прохода
+    duration: float | None = None  # длительность прохода
 
 
 # ============================================================================
 # Хранилище событий
 # ============================================================================
+
 
 class EventStore:
     """
@@ -213,5 +231,3 @@ class EventStore:
         """
         with self._lock:
             return self._events[0].event_id if self._events else None
-
-
