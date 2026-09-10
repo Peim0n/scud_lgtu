@@ -1,23 +1,29 @@
 # Взаимодействие контроллера LGTU с backend
 
-Этот документ описывает, **что и в каком формате контроллер отправляет бэкенду**, а также какие ответы ожидает. Основа — техническое задание и реализация в `app/infrastructure/backend/`.
+Этот документ — спецификация исходящего трафика контроллера к backend'у.
+Описаны все endpoint'ы ветви `controller`, форматы JSON-запросов и ответов,
+правила формирования событий, хеширования идентификаторов и поведение при
+сбоях. Основа — техническое задание v4 (разделы 5.4–6.5) и реализация в
+`app/infrastructure/backend/`.
 
-## 1. Общие настройки транспорта
+## 1. Общий транспорт
 
-- **Протокол**: `HTTPS` + **mTLS** (клиентский сертификат контроллера + CA для проверки сервера).
-- **Метод**: только `POST` (кроме bootstrap KMS — см. п. 2).
-- **Content-Type**: `application/json; charset=utf-8`.
-- **Accept**: `application/json`.
-- **User-Agent**: `LGTU-SCUD-Controller/1.0` (задаётся в `config.yml`).
-- **Префикс URL**: `/controller/v1`.
-- **Полный URL**: `{base_url}/controller/v1/{resource}/{action}`.
-- **TCP keepalive** (п. 6.4 ТЗ): `time=300`, `probes=3`, `interval=20`.
-- **Timeout запроса**: `10` секунд.
-- Прокси из окружения **не используется** (`trust_env=False`).
+| Параметр | Значение |
+|----------|----------|
+| Протокол | `HTTPS` + **mTLS** |
+| Метод ветви `controller` | `POST` |
+| Content-Type | `application/json; charset=utf-8` |
+| Accept | `application/json` |
+| User-Agent | задаётся в `config.yml`, по умолчанию `LGTU-SCUD-Controller/1.0` |
+| URL | `https://{base_url}/controller/v1/{resource}/{action}` |
+| Таймаут запроса | `10` секунд (`backend.request_timeout_s`) |
+| TCP keepalive | `time=300`, `probes=3`, `interval=20` |
+| Прокси из env | **не используется** (`trust_env=False`) |
 
-Код формирования запроса: `app/infrastructure/backend/rest_client.py`.
+Код: `app/infrastructure/backend/rest_client.py`,
+`app/infrastructure/backend/client.py`.
 
-## 2. Жизненный цикл сертификатов
+## 2. Жизненный цикл mTLS-сертификатов
 
 ### 2.1 Получение первичного сертификата (KMS bootstrap)
 
@@ -43,12 +49,14 @@ User-Agent: LGTU-SCUD-Controller/1.0
 }
 ```
 
-- Первичный сертификат/ключ хранятся **только в оперативной памяти** и удаляются сразу после успешного обмена на рабочий.
-- CA сохраняется в `infrastructure/certs/ca.pem` для дальнейших mTLS-вызовов к бэкенду.
+- Первичный сертификат/ключ хранятся **только в оперативной памяти** и
+  удаляются сразу после успешного обмена на рабочий.
+- CA сохраняется в `infrastructure/certs/ca.pem` для последующих mTLS-вызовов.
+- Поддерживается также старый «плоский» формат `{"cert":..., "key":...}`.
 
 Реализация: `app/infrastructure/backend/certificate_manager.py::_fetch_initial_from_kms`.
 
-### 2.2 Обмен первичного на рабочий (и дальнейшая ротация)
+### 2.2 Обмен первичного/рабочего сертификата
 
 ```http
 POST https://{base_url}/controller/v1/cert/get
@@ -67,13 +75,30 @@ Content-Type: application/json
 ```
 
 - Контроллер генерирует новую RSA-2048 ключевую пару и CSR.
-- Subject CSR совпадает с Subject сертификата, которым аутентифицируется запрос (O, OU, CN).
-- Полученный рабочий сертификат атомарно записывается в `infrastructure/certs/working_cert.pem` / `working_key.pem`.
-- Ротация запускается, когда остаток срока действия рабочего сертификата становится меньше `rotation_threshold_fraction` (по умолчанию 0.5 от 90 дней = ~45 дней). Повторные попытки не чаще `rotation_retry_interval_days` (по умолчанию 1 день).
+- Subject CSR совпадает с Subject текущего сертификата (initial или working).
+- Рабочий сертификат атомарно записывается в `working_cert.pem` / `working_key.pem`.
+- Срок действия рабочего сертификата — 90 суток.
+- Ротация запускается, когда остаток срока становится меньше
+  `rotation_threshold_fraction` (по умолчанию 0.5 от 90 дней ≈ 45 дней).
+- Повторные попытки ротации не чаще `rotation_retry_interval_days`
+  (по умолчанию 1 сутки).
 
-Реализация: `app/infrastructure/backend/certificate_manager.py::_exchange_and_activate` и `maybe_rotate`.
+Реализация: `app/infrastructure/backend/certificate_manager.py::_exchange_and_activate`,
+`maybe_rotate`.
 
-## 3. Ключи QR / карт «МИР»
+## 3. Сводка endpoint'ов ветви `controller`
+
+| Ресурс | Действие | Тело запроса | Назначение |
+|--------|----------|--------------|------------|
+| `keys` | `get` | `null` | Получить ключи QR/карт «МИР» |
+| `cert` | `get` | `{"csr": "..."}` | Обменять CSR на рабочий сертификат |
+| `access` | `get` | `{"update": 0\|1}` | Получить список доступа |
+| `accesspoint` | `get` | `null` | Запросить данные точки доступа |
+| `accesspoint` | `patch` | `{"mac", "ip", "cpuid"}` | Отправить инвентаризацию |
+| `event` | `get` | `null` | Получить последнее подтверждённое событие |
+| `event` | `put` | объект события | Отправить одно событие |
+
+## 4. Ключи QR / карт «МИР» — `keys/get`
 
 ### Запрос
 
@@ -93,23 +118,26 @@ null
   "keys": [
     {
       "num": 145,
-      "public": "<ed25519 public key, hex>",
-      "shared": "<aes128 shared key, hex>",
+      "public": "<ed25519 public key, hex 64 chars>",
+      "shared": "<aes128 shared key, hex 32 chars>",
       "dynamic": "<hmac key, hex>"
     }
   ]
 }
 ```
 
-- Контроллер хранит до **31 набора** ключей в памяти.
-- `public` используется для проверки Ed25519-подписи QR.
-- `shared` используется как AES-128 ключ для расшифровки QR.
+- `public` — публичный ключ Ed25519 для проверки подписи QR.
+- `shared` — общий ключ AES-128 для расшифровки QR.
 - `num` — ID набора ключей (1 байт в фрейме QR).
-- Синхронизация выполняется раз в сутки (`key_sync_interval_s = 86400`), но при старте — сразу.
+- `dynamic` — динамический ключ HMAC, передаётся бэкендом, но для QR/cards
+  используется в основном на стороне backend/мобильного приложения.
+- Контроллер хранит до **31 набора** ключей в оперативной памяти.
+- Синхронизация выполняется раз в сутки, при старте — сразу.
 
-Реализация: `app/infrastructure/backend/client.py::get_keys`, `app/application/services/key_sync_service.py`.
+Реализация: `app/infrastructure/backend/client.py::get_keys`,
+`app/application/services/key_sync_service.py`.
 
-## 4. Список доступа
+## 5. Список доступа — `access/get`
 
 ### Запрос
 
@@ -127,15 +155,17 @@ Content-Type: application/json
 ```
 
 - `update: 0` — принудительно запросить полный список.
-- `update: 1` — вернуть список, только если были изменения с прошлого запроса (по ТЗ п. 5.4.3).
+- `update: 1` — вернуть список, только если были изменения с прошлого запроса
+  (п. 5.4.3 ТЗ).
+- Первый запрос после старта контроллера всегда выполняется с `update: 0`.
 
-### Ответ (полный или изменённый)
+### Ответ (полный список)
 
 ```json
 {
   "status": "ok",
   "update": 0,
-  "dynamic_key": "<32 bytes hex>",
+  "dynamic_key": "0123456789abcdef0123456789abcdef",
   "id": [
     {
       "type": "phone_h",
@@ -151,7 +181,7 @@ Content-Type: application/json
 }
 ```
 
-Если изменений нет:
+### Ответ (изменений нет)
 
 ```json
 {
@@ -160,30 +190,41 @@ Content-Type: application/json
 }
 ```
 
-- `dynamic_key` — дневной ключ HMAC-SHA256 для финального хеширования идентификаторов.
-- Допустимые `type` в `id[]`: `phone`, `phone_h`, `maxid`, `maxid_h`, `cardid`, `cardid_h`.
-- Синхронизация выполняется каждые 10 минут (`backend_sync_interval_s = 600`).
-- Контроллер хранит список в оперативной памяти; при отсутствии сети работает по последнему полученному кэшу.
+- `dynamic_key` — дневной ключ HMAC-SHA256 для финального хеширования
+  идентификаторов (hex, 32 байта).
+- Допустимые `type` в `id[]`: `phone`, `phone_h`, `maxid`, `maxid_h`,
+  `cardid`, `cardid_h`.
+- Синхронизация выполняется каждые 10 минут
+  (`backend_sync_interval_s = 600`).
+- Контроллер хранит список в оперативной памяти; при отсутствии сети работает
+  по последнему полученному кэшу.
+- **Контроллер не получает и не отправляет `user_id`.** Соответствие
+  идентификатора и пользователя хранится только на backend'е.
 
-Реализация: `app/infrastructure/backend/client.py::get_access_list`, `app/application/services/sync_service.py`, `app/infrastructure/cache/access_cache.py`.
+Реализация: `app/infrastructure/backend/client.py::get_access_list`,
+`app/application/services/sync_service.py`,
+`app/infrastructure/cache/access_cache.py`.
 
 ### Хеширование идентификаторов
 
-Формула для raw-идентификаторов (phone, maxid, PAN карты):
+Для raw-идентификаторов (phone, maxid, PAN карты):
 
 ```text
 HMAC_SHA256(HMAC_SHA256(SHA256(value), STATIC_KEY), DYNAMIC_KEY)
 ```
 
-- `STATIC_KEY` — уникален для точки доступа, задаётся в `config.yml` (`access.static_key`) и прописывается в Wiegand-считыватели.
+- `STATIC_KEY` — уникален для точки доступа, задаётся в `config.yml`
+  (`access.static_key`) и прописывается в Wiegand-считыватели.
 - `DYNAMIC_KEY` — ежедневно новый, приходит в `access/get`.
-- Для карт «МИР» Wiegand-ридер сам выполняет `SHA256(PAN) + HMAC(STATIC_KEY)` и обрезает до 8 байт; контроллер довычисляет только `HMAC(DYNAMIC_KEY)`.
+- Для карт «МИР» Wiegand-ридер сам выполняет `SHA256(PAN) + HMAC(STATIC_KEY)`
+  и обрезает до 8 байт; контроллер довычисляет только финальный
+  `HMAC(DYNAMIC_KEY)`.
 
 Реализация: `app/infrastructure/cache/identifier_hash.py`.
 
-## 5. Инвентаризация контроллера
+## 6. Инвентаризация контроллера — `accesspoint`
 
-### 5.1 Отправка (accesspoint/patch)
+### 6.1 `accesspoint/patch`
 
 ```http
 POST https://{base_url}/controller/v1/accesspoint/patch
@@ -197,14 +238,16 @@ Content-Type: application/json
 ```
 
 - `mac` — MAC-адрес сетевого интерфейса, нижний регистр, через `:`.
-- `ip` — локальный IPv4, определяется маршрутом к `8.8.8.8:80` (UDP, без реальной отправки).
-- `cpuid` — серийный номер CPU из `/sys/firmware/devicetree/base/serial-number` или `/proc/cpuinfo`, fallback на MAC.
+- `ip` — локальный IPv4, определяется маршрутом к `8.8.8.8:80`
+  (UDP, без реальной отправки).
+- `cpuid` — серийный номер CPU из `/sys/firmware/devicetree/base/serial-number`
+  или `/proc/cpuinfo`, fallback на MAC.
 
-Отправляется сразу после старта и далее раз в сутки (`accesspoint_sync_interval_s = 86400`).
+Отправляется **сразу после первого успешного онлайн-подключения** и далее
+раз в сутки (`accesspoint_sync_interval_s = 86400`). Если backend недоступен,
+запрос пропускается до следующего цикла.
 
-Реализация: `app/application/services/accesspoint_inventory_service.py`.
-
-### 5.2 Запрос (accesspoint/get)
+### 6.2 `accesspoint/get`
 
 ```http
 POST https://{base_url}/controller/v1/accesspoint/get
@@ -224,11 +267,13 @@ null
 }
 ```
 
-Реализация: `app/infrastructure/backend/client.py::get_accesspoint` / `patch_accesspoint`.
+Реализация: `app/infrastructure/backend/client.py::get_accesspoint` /
+`patch_accesspoint`,
+`app/application/services/accesspoint_inventory_service.py`.
 
-## 6. События проходов
+## 7. События проходов — `event`
 
-### 6.1 Запрос последнего подтверждённого события
+### 7.1 `event/get`
 
 ```http
 POST https://{base_url}/controller/v1/event/get
@@ -248,9 +293,13 @@ null
 }
 ```
 
-Используется для сверки локального счётчика `event_id` при первой синхронизации.
+Используется при первой синхронизации для раннего обнаружения разрыва
+локального счётчика `event_id`.
 
-### 6.2 Отправка события (event/put)
+Реализация: `app/infrastructure/backend/client.py::get_last_event`,
+`app/application/services/sync_service.py::_reconcile_events`.
+
+### 7.2 `event/put`
 
 Каждое событие отправляется **отдельным запросом** (не batch).
 
@@ -268,65 +317,101 @@ Content-Type: application/json
   "token": "+79876543210",
   "result": "pass",
   "severity": "info",
-  "description": "Проход in: phone:+79876543210 — pass (raw: https://pass.lipetsk.ru/?...)"
+  "description": "Проход in: phone:+79876543210 — pass"
 }
 ```
 
-Поле `ftime` отсутствует, если проход ещё не завершён; при завершении добавляется `ftime`.
+#### Поля события
 
-**Возможные значения полей:**
+| Поле | Обязательное | Описание | Допустимые значения |
+|------|--------------|----------|---------------------|
+| `event_id` | да | uint64, монотонно возрастающий счётчик на контроллере, начинается с 1 | `1..2^64-1` |
+| `stime` | да | Время начала события, ISO 8601 с timezone | например `2025-09-07T12:34:56.123456+03:00` |
+| `ftime` | нет | Время окончания события, ISO 8601 с timezone | добавляется при завершении прохода |
+| `event_type` | да | Тип события | `access`, `system`, `firmware`, `security`, `connection` |
+| `direction` | нет* | Запрошенное направление прохода | `in`, `out` |
+| `token_type` | нет* | Тип идентификатора | `phone`, `phone_h`, `maxid`, `maxid_h`, `cardid`, `cardid_h` |
+| `token` | нет* | Значение идентификатора | строка |
+| `result` | нет* | Результат прохода | `pass`, `timeout`, `denied`, `oncoming`, `double`, `forced` |
+| `severity` | да | Важность | `fatal`, `critical`, `error`, `warning`, `notice`, `info`, `debug` |
+| `description` | да | Человекочитаемое описание | строка |
 
-| Поле | Значения |
-|------|----------|
-| `event_type` | `access`, `system`, `firmware`, `security`, `connection` |
-| `direction` | `in`, `out` |
-| `token_type` | `phone`, `phone_h`, `maxid`, `maxid_h`, `cardid`, `cardid_h` |
-| `result` | `pass`, `timeout`, `denied`, `oncoming`, `double`, `forced` |
-| `severity` | `fatal`, `critical`, `error`, `warning`, `notice`, `info`, `debug` |
+\* Для `event_type=access` поля `direction`, `token_type`, `token`, `result`
+заполняются. Для системных событий они могут отсутствовать или быть пустыми.
 
-- `event_id` — монотонно возрастающий `uint64` на стороне контроллера, начинается с 1. Обеспечивает идемпотентность: повторная отправка не создаёт дубль.
-- При ошибках/офлайне события накапливаются в памяти и отправляются в порядке `event_id`.
-- `description` — обязательное поле. Для отказов в description добавляется сырой QR URL или данные карты.
+#### Форматы значений
 
-Реализация: `app/infrastructure/backend/client.py::put_event` / `send_events`, `app/infrastructure/persistence/event_store.py`, `app/infrastructure/persistence/event_log.py`.
+- `event_id` — идемпотентность: повторная отправка того же `event_id`
+  не создаёт дубль на backend'е.
+- `stime`/`ftime` формируются через
+  `datetime.fromtimestamp(t).astimezone().isoformat()`:
+  содержат дату, время, микросекунды и локальный offset.
+- При ошибках/офлайне события накапливаются в памяти и отправляются в порядке
+  `event_id`.
 
-## 7. Обработка ошибок
+#### Примеры `description`
 
-### 7.1 Со стороны бэкенда
+- Успешный проход:
+  `Проход in: maxid:103295689 — pass`
+- Отказ (неизвестный QR):
+  `Доступ out: maxid:103295689 — denied (raw: https://pass.lipetsk.ru/?...)`
+- Системное событие watchdog:
+  `[watchdog] Serial reader thread died`
 
-Если HTTP-код не 200 или `status == "error"`, `RestClient` поднимает `BackendApiError`:
+### 7.3 Как события попадают в `event/put`
+
+| Источник в контроллере | `event_type` | `result` | Примечание |
+|------------------------|--------------|----------|------------|
+| QR от Serial-ридера | `access` | `denied` / `pass` | `description` содержит сырой QR URL при отказе |
+| Карта от Wiegand | `access` | `denied` / `pass` | `token_type=cardid_h` |
+| Сенсор прохода | `access` | `pass` | `ftime` добавляется при завершении |
+| Тревога / пожар | `system`/`security` | — | если журналируется |
+| Ошибка watchdog | `system` | — | `severity=critical` |
+
+Реализация: `app/infrastructure/backend/client.py::put_event` / `send_events`,
+`app/infrastructure/persistence/event_store.py`,
+`app/infrastructure/persistence/event_log.py`,
+`app/application/lgtu_application.py`.
+
+## 8. Обработка ошибок
+
+### 8.1 Ответы backend'а
+
+Если HTTP-код не 200 или `status == "error"`, `RestClient` поднимает
+`BackendApiError`:
 
 - `400` — невалидный запрос;
 - `401` / `403` — проблема с mTLS/сертификатом;
 - `404` — ресурс/экшен не найден;
-- `500` — внутренняя ошибка бэкенда.
+- `405` — метод не разрешён;
+- `500` — внутренняя ошибка backend'а.
 
-Тело ответа, не являющееся JSON, трактуется как `{"status":"error","description":"<текст ответа>"}`.
+Тело ответа, не являющееся JSON, трактуется как
+`{"status":"error","description":"<текст ответа>"}` (п. 6.1 ТЗ).
 
-### 7.2 Офлайн / недоступность сети
+### 8.2 Офлайн / недоступность сети
 
 - События не теряются: возвращаются в локальную очередь (`EventStore.requeue`).
 - `BackendClient.is_online()` отражает результат последнего вызова.
-- `CertificateManager` и `KeySyncService` повторяют попытки с заданными интервалами.
-- Список доступа и ключи остаются в памяти; контроллер продолжает пускать по последнему актуальному кэшу.
-
-## 8. Типы событий и их источники внутри контроллера
-
-| Событие | Источник | Что журналируется |
-|---------|----------|-------------------|
-| QR от Serial-ридера | `SERIAL_DATA` → `QrRead` | `token_type` + `token` + сырой QR URL (`raw_input`) |
-| Карта от Wiegand | `CARD_READ` | `token_type=cardid_h` + `card_data` |
-| Проход (сенсор) | `INPUT_SIGNAL` → `PassageDetected` | `result=pass`, `ftime` при завершении |
-| Отказ в доступе | `AccessDenied` | `result=denied` + сырой QR/карта |
-| Тревога / пожар | `ALARM_CHANGED` | `system`/`security` событие |
-| Ошибка watchdog | `ERROR` | `system` событие |
+- `CertificateManager` и `KeySyncService` повторяют попытки с заданными
+  интервалами.
+- Список доступа и ключи остаются в памяти; контроллер продолжает пускать по
+  последнему актуальному кэшу.
+- Инвентаризация `accesspoint/patch` пропускается, пока backend недоступен.
 
 ## 9. Примечания по production
 
-- `config.yml` содержит `backend.verify_hostname: false` — это **только для dev/тестов по IP**. Для production должно быть `true`.
-- Диагностические скрипты `scripts/backend_check/` используют `verify=False` вручную; production-код не делает этого.
-- Все криптографические ключи и списки доступа хранятся в оперативной памяти, как требуется ТЗ.
-- Рабочий сертификат и CA хранятся на диске (`infrastructure/certs/`); первичный сертификат — только в RAM.
+- `config.yml` содержит `backend.verify_hostname: false` — это **только для
+  dev/тестов по IP**. Для production должно быть `true`.
+- Диагностические скрипты `scripts/backend_check/` используют `verify=False`
+  вручную; production-код не делает этого.
+- Все криптографические ключи и списки доступа хранятся в оперативной памяти,
+  как требуется ТЗ.
+- Рабочий сертификат и CA хранятся на диске (`infrastructure/certs/`);
+  первичный сертификат — только в RAM.
+- Контроллер **не отправляет `user_id`** в событиях: `access/get` по ТЗ не
+  возвращает `user_id`, поэтому это поле отсутствует во всех исходящих
+  запросах.
 
 ## 10. Ссылки на код
 
@@ -336,5 +421,9 @@ Content-Type: application/json
 - Синхронизация ключей: `app/application/services/key_sync_service.py`
 - Синхронизация списков доступа: `app/application/services/sync_service.py`
 - Инвентаризация: `app/application/services/accesspoint_inventory_service.py`
-- Хранение событий: `app/infrastructure/persistence/event_store.py`, `app/infrastructure/persistence/event_log.py`
-- Кэш и хеширование идентификаторов: `app/infrastructure/cache/access_cache.py`, `app/infrastructure/cache/identifier_hash.py`
+- Хранение событий: `app/infrastructure/persistence/event_store.py`,
+  `app/infrastructure/persistence/event_log.py`
+- Кэш и хеширование идентификаторов: `app/infrastructure/cache/access_cache.py`,
+  `app/infrastructure/cache/identifier_hash.py`
+- Преобразование событий устройства в backend-события:
+  `app/application/lgtu_application.py`
